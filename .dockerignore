@@ -1,0 +1,7 @@
+# The build context is only what the compiler needs. Everything else is
+# excluded so that editing documentation does not invalidate the build cache.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/

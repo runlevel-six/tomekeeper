@@ -1,0 +1,54 @@
+# golangci-lint v2 configuration.
+#
+# The set is deliberately modest. A linter that fires constantly on style
+# preferences gets disabled wholesale within a month; one that only fires on
+# real defects keeps getting run. Everything enabled here catches a class of
+# bug, not a class of taste.
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, and unused are on by default.
+  enable:
+    - bodyclose      # unclosed HTTP response bodies leak connections — this
+                     # service is mostly an HTTP client, so it matters
+    - contextcheck   # dropped contexts break cancellation and shutdown
+    - errorlint      # %v on errors and == comparisons break errors.Is/As
+    - gosec          # this fetches arbitrary URLs from the open internet
+    - misspell       # US locale: see the locale setting below
+    - nilerr         # `if err != nil { return nil }` — silent failure
+    - noctx          # HTTP requests without a context cannot be canceled
+    - revive         # replaces the deprecated golint
+    - rowserrcheck   # a missed rows.Err() silently truncates query results
+    - sqlclosecheck  # leaked rows/statements exhaust the connection pool
+    - unconvert      # unnecessary conversions
+    - wastedassign
+
+  settings:
+    misspell:
+      locale: US
+    gosec:
+      excludes:
+        # G104 duplicates errcheck.
+        - G104
+    revive:
+      rules:
+        - name: exported
+          disabled: true  # doc comments are reviewed by humans, not enforced
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Test code may hardcode credentials and skip error checks on setup.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true

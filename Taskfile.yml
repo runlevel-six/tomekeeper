@@ -1,0 +1,101 @@
+# Task (https://taskfile.dev) is the build runner for this project, chosen over
+# make because none of this is file-dependency work — it is a list of named
+# commands, which is what Task is good at and what make only tolerates.
+#
+#   task            list the tasks
+#   task check      everything CI runs
+version: '3'
+
+vars:
+  BINARY: tome
+  PACKAGE: github.com/runlevel-six/tomekeeper
+  IMAGE: '{{.IMAGE | default "tomekeeper"}}'
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LDFLAGS: >-
+    -s -w
+    -X {{.PACKAGE}}/internal/version.Version={{.VERSION}}
+    -X {{.PACKAGE}}/internal/version.Commit={{.COMMIT}}
+    -X {{.PACKAGE}}/internal/version.Date={{.DATE}}
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the tome binary into bin/
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} ./cmd/{{.BINARY}}
+
+  run:
+    desc: Run the server locally (needs TOME_DATABASE_URL)
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY}} serve
+
+  test:
+    desc: Run tests with the race detector
+    cmds:
+      - go test -race -cover ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  fmt:
+    desc: Format all Go source
+    cmds:
+      - gofmt -w -s .
+
+  fmt:check:
+    desc: Fail if any Go source is unformatted
+    cmds:
+      - |
+        unformatted=$(gofmt -l -s .)
+        if [ -n "$unformatted" ]; then
+          echo "These files are not gofmt'd:" >&2
+          echo "$unformatted" >&2
+          exit 1
+        fi
+
+  check:
+    desc: Everything CI runs — format, vet, lint, test, build
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test
+      - task: build
+
+  docker:build:
+    desc: Build the container image
+    cmds:
+      - >-
+        docker build
+        --build-arg VERSION={{.VERSION}}
+        --build-arg COMMIT={{.COMMIT}}
+        --build-arg DATE={{.DATE}}
+        -t {{.IMAGE}}:{{.VERSION}} -t {{.IMAGE}}:latest .
+
+  docker:smoke:
+    desc: Verify the M0 acceptance criteria against the container image
+    cmds:
+      - ./scripts/smoke.sh {{.IMAGE}}:smoke
+
+  clean:
+    desc: Remove build output
+    cmds:
+      - rm -rf bin/

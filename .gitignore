@@ -1,0 +1,23 @@
+# Build output
+/bin/
+/dist/
+
+# Local overrides for development. Never commit real credentials.
+.env
+.env.local
+
+# The blob archive root, if someone points it inside the work tree.
+/archive/
+/data/
+
+# Editor and OS noise
+.DS_Store
+*.swp
+
+# Per-developer tool settings. The shared ones, if any, are committed
+# explicitly.
+/.claude/settings.local.json
+
+# The implementation plan is a working document, not a shipped artifact.
+# Remove this line if it should be published with the repository.
+/docs/plan.md
