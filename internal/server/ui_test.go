@@ -2,6 +2,8 @@ package server
 
 import (
 	"html/template"
+	"io/fs"
+	"path"
 	"strings"
 	"testing"
 
@@ -129,5 +131,52 @@ func TestReadingTimeAndSince(t *testing.T) {
 	}
 	if got := readingTime(440); got != "2 minutes read" {
 		t.Errorf("readingTime(440) = %q, want %q", got, "2 minutes read")
+	}
+}
+
+// A template that fails to parse does not fail loudly: New logs the error and
+// mounts the health endpoints only, so the whole web interface becomes 404s. The
+// symptom is every handler test failing to sign in, which reads like a broken
+// session rather than a broken template.
+//
+// This is the test that names the real problem. It exists because `{{else with}}`
+// — which is not valid Go template syntax, though `{{else if}} is — took the
+// entire UI down and the failure it produced pointed somewhere else entirely.
+func TestEveryPageTemplateParses(t *testing.T) {
+	if _, err := newUI(); err != nil {
+		t.Fatalf("newUI() = %v\n\nthe whole web interface would serve 404s with this error", err)
+	}
+}
+
+// Every page listed must exist, and every page that exists must be listed. A page
+// template added without being listed is silently never served.
+func TestPageNamesMatchTheTemplateFiles(t *testing.T) {
+	files, err := fs.Glob(assets, "templates/*.html")
+	if err != nil {
+		t.Fatalf("globbing the templates: %v", err)
+	}
+
+	// base and partials are included by every page rather than being pages.
+	shared := map[string]bool{"base": true, "partials": true}
+
+	onDisk := make(map[string]bool)
+	for _, f := range files {
+		name := strings.TrimSuffix(path.Base(f), ".html")
+		if !shared[name] {
+			onDisk[name] = true
+		}
+	}
+
+	listed := make(map[string]bool, len(pageNames))
+	for _, name := range pageNames {
+		listed[name] = true
+		if !onDisk[name] {
+			t.Errorf("pageNames lists %q but templates/%s.html does not exist", name, name)
+		}
+	}
+	for name := range onDisk {
+		if !listed[name] {
+			t.Errorf("templates/%s.html exists but is not in pageNames, so it is never served", name)
+		}
 	}
 }

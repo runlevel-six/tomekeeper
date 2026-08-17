@@ -90,29 +90,18 @@ func importOPML(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	var created, updated int
-	for _, sub := range subs {
-		_, isNew, err := s.UpsertFeed(ctx, userID, store.FeedParams{
-			FeedURL:  sub.FeedURL,
-			SiteURL:  sub.SiteURL,
-			Title:    sub.Title,
-			Category: sub.Category,
-		})
-		if err != nil {
-			// One bad subscription must not cost the other four hundred.
-			fmt.Fprintf(stderr, "  ! %s: %v\n", sub.FeedURL, err)
-			continue
-		}
-		if isNew {
-			created++
-			continue
-		}
-		updated++
+	// Shared with the web upload, so the two cannot disagree about what an
+	// import means — in particular that one bad subscription does not cost the
+	// rest, and that re-running is safe.
+	result := feed.Import(ctx, s, userID, subs)
+
+	for _, f := range result.Failures {
+		fmt.Fprintf(stderr, "  ! %s: %v\n", f.FeedURL, f.Err)
 	}
 
-	fmt.Fprintf(stdout, "%s: %d added, %d already subscribed\n", path, created, updated)
-	if created+updated < len(subs) {
-		fmt.Fprintf(stdout, "%d subscriptions failed; see the errors above\n", len(subs)-created-updated)
+	fmt.Fprintf(stdout, "%s: %d added, %d already subscribed\n", path, result.Added, result.Existing)
+	if len(result.Failures) > 0 {
+		fmt.Fprintf(stdout, "%d subscriptions failed; see the errors above\n", len(result.Failures))
 		return exitFailure
 	}
 	return exitOK

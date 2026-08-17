@@ -318,6 +318,58 @@ kbd {
 .tag-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tag-list .count { font-size: 0.75rem; }
 
+/* Import: the result of an upload, and the form that starts one. Same left-rule
+   treatment as .warn-banner, so the three states read as one family. */
+.import-result {
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1.25rem;
+  border-left: 3px solid var(--rule);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 0.9rem;
+}
+.import-result p { margin: 0 0 0.4rem; }
+.import-result p:last-child { margin-bottom: 0; }
+.import-result.ok   { border-left-color: var(--accent); }
+.import-result.warn { border-left-color: var(--accent); }
+.import-result.bad  { border-left-color: var(--error); }
+.import-result .note { color: var(--ink-soft); font-size: 0.85rem; }
+.import-failures {
+  margin: 0 0 0.4rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.import-failures code { word-break: break-all; }
+
+.import {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+.import h2 { margin-top: 0; }
+.import p { color: var(--ink-soft); font-size: 0.9rem; }
+.import form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.import label {
+  flex-basis: 100%;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.import input[type="file"] { font: inherit; font-size: 0.85rem; color: var(--ink-soft); flex: 1 1 14rem; }
+.import input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+  margin-right: 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
 @media (max-width: 34rem) {
   .chrome { gap: 0.6rem; font-size: 0.82rem; }
   .chrome nav { gap: 0.65rem; flex-wrap: wrap; }

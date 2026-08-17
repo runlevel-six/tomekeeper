@@ -58,7 +58,63 @@ Three keys, three different jobs:
 - **`password`** — what you sign in with, for the user named by `TOME_USERNAME`
   (`tome` by default). Choose it yourself.
 
-## 3. Apply
+## 3. Get an image the cluster can pull
+
+Nothing in `deploy/` builds anything. The manifests reference
+`ghcr.io/runlevel-six/tomekeeper`, and that image has to exist and be pullable
+before the first apply.
+
+**From CI.** Pushing to the default branch runs the whole pipeline and, if every
+job passes, publishes `:latest` and a `sha-<commit>` tag. The run summary prints
+the digest.
+
+The trap on a first publish: a container package created by a workflow is
+normally **private, even on a public repository** — repository visibility governs
+who can push, not who can pull. Check it after the first successful run, because
+the symptom reads like a broken tag rather than a permissions problem:
+`ImagePullBackOff` with `unauthorized`. Fix it once, either way round:
+
+- Make the package public — GitHub → your packages → `tomekeeper` → Package
+  settings → Change visibility. Right for an open-source project, and then no
+  cluster needs credentials.
+- Or keep it private and give the namespace a pull secret:
+
+  ```bash
+  kubectl -n tomekeeper create secret docker-registry ghcr \
+    --docker-server=ghcr.io \
+    --docker-username="$GITHUB_USER" \
+    --docker-password="$GITHUB_TOKEN"   # a PAT with read:packages
+  ```
+
+  then add `imagePullSecrets` to your overlay:
+
+  ```yaml
+  patches:
+    - target: {kind: Deployment}
+      patch: |
+        - op: add
+          path: /spec/template/spec/imagePullSecrets
+          value: [{name: ghcr}]
+    - target: {kind: Job, name: tomekeeper-migrate}
+      patch: |
+        - op: add
+          path: /spec/template/spec/imagePullSecrets
+          value: [{name: ghcr}]
+  ```
+
+**By hand**, if you would rather not wait for a pipeline or are not using this
+repository's CI:
+
+```bash
+docker build -t ghcr.io/runlevel-six/tomekeeper:latest .
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+docker push ghcr.io/runlevel-six/tomekeeper:latest
+```
+
+Point the `images:` block in your overlay at your own registry if it is not this
+one.
+
+## 4. Apply
 
 ```bash
 kubectl apply -k deploy/overlays/local
@@ -83,9 +139,16 @@ kubectl -n tomekeeper rollout status deploy/tomekeeper-worker
 
 Then open the host from your overlay and sign in as `tome`.
 
-## 4. Add feeds
+## 5. Add feeds
 
-Nothing polls until something is subscribed. From an OPML export:
+Nothing polls until something is subscribed.
+
+The simplest way is the web interface: **Feeds → Import subscriptions**, and choose
+the OPML file your previous reader exported. No cluster access needed, and the
+page reports what it added, what was already there, and anything it could not
+store.
+
+From the command line, if you would rather not use a browser:
 
 ```bash
 kubectl -n tomekeeper exec -i deploy/tomekeeper-worker -- \
@@ -94,10 +157,11 @@ kubectl -n tomekeeper exec -i deploy/tomekeeper-worker -- \
 
 Piped rather than copied in: the runtime image is distroless, so it has no shell
 and no `tar`, and `kubectl cp` needs `tar` in the container. Reading the file on
-stdin sidesteps that, and re-running an import is safe — subscriptions are keyed
-by feed URL, so a second run updates titles and creates nothing.
+stdin sidesteps that.
 
-Or add them one at a time in the web interface.
+Either route is idempotent — subscriptions are keyed by feed URL, so importing
+the same file twice updates titles and creates nothing. That is what makes
+re-running the safe way to recover from an import that stopped halfway.
 
 ## Upgrading
 

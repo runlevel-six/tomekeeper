@@ -124,6 +124,10 @@ the Fever API key changed with it; mobile clients will need reconnecting
 
 Adds subscriptions from an OPML file exported by another feed reader.
 
+The web interface does the same thing under **Feeds → Import subscriptions**,
+sharing this command's import logic rather than reimplementing it. Use this one
+when the file is somewhere a browser is not, or when you want `--dry-run`.
+
 ```
 tome import-opml [--dry-run] <file.opml>
 ```

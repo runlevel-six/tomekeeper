@@ -134,6 +134,9 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /starred", s.requireUser(s.handleStarred))
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
+	// Registered before the {id} pattern for readability only: they differ by
+	// method, so ServeMux never has to choose between them.
+	mux.HandleFunc("POST /feeds/import", s.requireUser(s.handleImportOPML))
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))

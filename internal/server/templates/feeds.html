@@ -4,6 +4,34 @@
 <div class="feeds">
   <h1>Feeds</h1>
 
+  {{with .Imported}}
+    {{if .Problem}}
+      <p class="import-result bad">
+        {{if .Filename}}<strong>{{.Filename}}</strong> was not imported. {{end}}{{.Problem}}
+      </p>
+    {{else}}{{with .Result}}
+      <div class="import-result{{if .Failures}} warn{{else}} ok{{end}}">
+        <p>
+          {{if .Added}}Subscribed to {{plural .Added "feed"}}.{{end}}
+          {{if .Existing}}{{plural .Existing "feed"}} {{if eq .Existing 1}}was{{else}}were{{end}} already subscribed.{{end}}
+          {{if and (not .Added) (not .Existing)}}Nothing was imported.{{end}}
+        </p>
+        {{if .Failures}}
+          <p>{{plural (len .Failures) "subscription"}} could not be stored:</p>
+          <ul class="import-failures">
+            {{range .Failures}}
+              <li><code>{{.FeedURL}}</code> — {{.Err}}</li>
+            {{end}}
+          </ul>
+        {{end}}
+        {{if .Added}}
+          <p class="note">Nothing is fetched yet. The worker polls each feed on its own
+          schedule, and the first articles appear as it works through them.</p>
+        {{end}}
+      </div>
+    {{end}}{{end}}
+  {{end}}
+
   {{if .Broken}}
     <p class="warn-banner">
       {{plural .Broken "feed"}} {{if eq .Broken 1}}is{{else}}are{{end}} failing.
@@ -46,10 +74,23 @@
     </table>
   {{else}}
     <p class="placeholder">
-      No subscriptions yet. Import an OPML file with
-      <code>tome import-opml</code>.
+      No subscriptions yet. Import the OPML file your previous reader exported.
     </p>
   {{end}}
+
+  <section class="import">
+    <h2>Import subscriptions</h2>
+    <p>
+      An OPML file from another reader. Most call the export “subscriptions”,
+      “OPML” or “feeds”. Importing the same file twice is safe — feeds already
+      subscribed to are left alone.
+    </p>
+    <form method="post" action="/feeds/import" enctype="multipart/form-data">
+      <label for="opml">OPML file</label>
+      <input type="file" id="opml" name="opml" accept=".opml,.xml,text/xml,application/xml" required>
+      <button type="submit">Import</button>
+    </form>
+  </section>
 
   {{if .Tags}}
     <h2>Tags</h2>

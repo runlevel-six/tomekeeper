@@ -292,6 +292,9 @@ type feedsPage struct {
 	Feeds  []feedRow
 	Tags   []store.Tag
 	Broken int
+
+	// Imported is set only on the page rendered straight after an upload.
+	Imported *importOutcome
 }
 
 type feedRow struct {
@@ -300,6 +303,16 @@ type feedRow struct {
 }
 
 func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
+	s.renderFeeds(w, r, http.StatusOK, nil)
+}
+
+// renderFeeds draws the feed list, optionally reporting on an import that just
+// happened.
+//
+// Shared by GET /feeds and POST /feeds/import so that the page after an upload is
+// the same page, freshly counted — an import that subscribed to seventy feeds
+// should show seventy feeds, not a summary line above a stale list.
+func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int, imported *importOutcome) {
 	userID := signedInUser(r)
 
 	feeds, err := s.store.ListFeeds(r.Context(), userID)
@@ -321,7 +334,7 @@ func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := feedsPage{pageData: s.pageData(r, "feeds"), Tags: tags}
+	page := feedsPage{pageData: s.pageData(r, "feeds"), Tags: tags, Imported: imported}
 	page.Unread = counts.Total
 
 	for _, f := range feeds {
@@ -331,7 +344,7 @@ func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
 		page.Feeds = append(page.Feeds, feedRow{Feed: f, Unread: counts.ByFeed[f.ID]})
 	}
 
-	s.render(w, http.StatusOK, "feeds", page)
+	s.render(w, status, "feeds", page)
 }
 
 // attentionPage is the failed-fetch queue.

@@ -130,6 +130,10 @@ my-feeds.opml: 1 added, 0 already subscribed
 If you already use another feed reader, export its subscriptions as OPML and
 import that file instead. A few hundred feeds import in a second or two.
 
+The command line is used here because you are already in a terminal and have not
+started the server yet. Once it is running, **Feeds → Import subscriptions** in
+the web interface does the same thing with the same code.
+
 ## Step 6: Start the worker
 
 ```sh
