@@ -87,7 +87,7 @@ func TestInsertContentDemotesRatherThanDeletes(t *testing.T) {
 	}
 }
 
-// §2.3: an imported body may be the only surviving copy of a dead URL, so a
+// The imported-content-is-immutable principle: an imported body may be the only surviving copy of a dead URL, so a
 // later fetch is stored beside it rather than over it.
 func TestImmutableContentIsNeverReplaced(t *testing.T) {
 	pool, s, _ := dbtest.SetupWithUser(t)

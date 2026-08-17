@@ -1,0 +1,63 @@
+{{define "title"}}Feeds — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="feeds">
+  <h1>Feeds</h1>
+
+  {{if .Broken}}
+    <p class="warn-banner">
+      {{plural .Broken "feed"}} {{if eq .Broken 1}}is{{else}}are{{end}} failing.
+      A feed is never dropped silently — the error it last gave is below.
+    </p>
+  {{end}}
+
+  {{if .Feeds}}
+    <table class="feed-table">
+      <thead>
+        <tr>
+          <th scope="col">Feed</th>
+          <th scope="col">Category</th>
+          <th scope="col" class="num">Unread</th>
+          <th scope="col">Last success</th>
+          <th scope="col">Health</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Feeds}}
+        <tr{{if .Disabled}} class="is-disabled"{{else if .ConsecutiveFailures}} class="is-failing"{{end}}>
+          <th scope="row"><a href="/feeds/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.FeedURL}}{{end}}</a></th>
+          <td>{{.Category}}</td>
+          <td class="num">{{if .Unread}}{{.Unread}}{{end}}</td>
+          <td>{{with .LastSuccessAt}}<time datetime="{{.Format "2006-01-02T15:04:05Z07:00"}}">{{since .}}</time>{{else}}never{{end}}</td>
+          <td>
+            {{if .Disabled}}
+              <span class="badge bad">disabled</span>
+              <span class="reason">after {{plural .ConsecutiveFailures "failure"}}</span>
+            {{else if .ConsecutiveFailures}}
+              <span class="badge warn">{{plural .ConsecutiveFailures "failure"}}</span>
+              {{if .LastError}}<span class="reason">{{.LastError}}</span>{{end}}
+            {{else}}
+              <span class="badge ok">ok</span>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="placeholder">
+      No subscriptions yet. Import an OPML file with
+      <code>tome import-opml</code>.
+    </p>
+  {{end}}
+
+  {{if .Tags}}
+    <h2>Tags</h2>
+    <ul class="tag-list">
+      {{range .Tags}}
+        <li><a class="tag" href="/tags/{{.ID}}">{{.Name}}</a> <span class="count">{{.Count}}</span></li>
+      {{end}}
+    </ul>
+  {{end}}
+</div>
+{{end}}

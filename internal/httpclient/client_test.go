@@ -51,7 +51,7 @@ func TestUserAgent(t *testing.T) {
 	}
 }
 
-// §5.3: retry 429 and 503 honoring Retry-After, never a 4xx other than 408
+// The politeness rules: retry 429 and 503 honoring Retry-After, never a 4xx other than 408
 // and 429. A 404 will still be a 404 in ten seconds.
 func TestRetryPolicy(t *testing.T) {
 	tests := []struct {

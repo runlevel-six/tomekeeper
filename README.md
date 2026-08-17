@@ -9,11 +9,13 @@ item it ingests becomes an offline-readable article with its images, stored as
 files on disk that open in a browser with the service stopped and the database
 gone.
 
-**Status: early. Milestone 3 of 9.** It polls feeds, fetches the linked pages
+**Status: early. Milestone 4 of 9.** It polls feeds, fetches the linked pages
 politely, extracts readable bodies, localizes the images, and writes each
 article as a standalone page — open `index.html` from a file manager with this
 service stopped and the database gone, and the article renders with its images.
-There is no web interface yet (M4), so reading today means opening files.
+It also serves a web interface to read in: an unread stream, a reader, full-text
+search across the archive, feed health, and a queue of anything that did not come
+through cleanly. Keyboard-driven, no build step, no CDN.
 
 ## Quick start
 

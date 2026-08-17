@@ -192,7 +192,7 @@ func TestArticleUpsertFillsGapsWithoutClobbering(t *testing.T) {
 	}
 }
 
-// §2.8, enforced structurally rather than by convention. This is the M1
+// The scoping discipline, enforced structurally rather than by convention. This is the M1
 // portion of the isolation guarantee the M4 criteria will test in full.
 func TestUserScopingIsolatesFeedsAndItems(t *testing.T) {
 	pool, s, alice := dbtest.SetupWithUser(t)

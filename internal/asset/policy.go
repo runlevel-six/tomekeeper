@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-// Policy thresholds from §5.5.
+// Policy thresholds from the asset policy.
 const (
 	// MaxDimension is the longest edge kept. Beyond this is resolution no
 	// reader benefits from and every byte of which is stored forever.
@@ -62,7 +62,7 @@ func ShouldFetch(rawURL string) (bool, SkipReason) {
 	trimmed := strings.TrimSpace(rawURL)
 
 	if strings.HasPrefix(strings.ToLower(trimmed), "data:") {
-		// §5.5: data URIs are inlined as they are. The bytes are already in
+		// The asset policy: data URIs are inlined as they are. The bytes are already in
 		// the body, so fetching or rewriting them would achieve nothing.
 		return false, SkipDataURI
 	}
@@ -81,7 +81,7 @@ func tooSmallToKeep(byteSize, width, height int) bool {
 
 // SelectFromSrcset picks the best candidate from a srcset attribute.
 //
-// §5.5: pick the candidate nearest MaxDimension and drop the rest. A responsive
+// The asset policy: pick the candidate nearest MaxDimension and drop the rest. A responsive
 // image offers the same picture at six sizes; archiving all six would multiply
 // the storage cost of every article by six for no benefit, since the archive
 // renders at one size.

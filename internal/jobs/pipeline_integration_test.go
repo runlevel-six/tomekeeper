@@ -172,7 +172,7 @@ func TestFetchAndExtractPipeline(t *testing.T) {
 	}
 
 	// The raw page is on disk, gzipped, and recoverable. This is what makes
-	// `tome reextract` possible without re-fetching (§2.2).
+	// `tome reextract` possible without re-fetching.
 	if ok, err := blobs.Exists(ctx, article.RawBlobPath); err != nil || !ok {
 		t.Errorf("the raw page is not in the blob store at %s: %v", article.RawBlobPath, err)
 	}

@@ -23,7 +23,7 @@ type sanitizer struct {
 func newSanitizer() *sanitizer {
 	p := bluemonday.UGCPolicy()
 
-	// §5.4: the UGC policy plus modern figure and responsive-image markup,
+	// The extraction ladder: the UGC policy plus modern figure and responsive-image markup,
 	// without which every article loses its captions and its images.
 	p.AllowElements("figure", "figcaption", "picture")
 	p.AllowAttrs("srcset", "sizes", "media", "type").OnElements("source")
@@ -88,7 +88,7 @@ func resolveURLs(body string, base *url.URL) string {
 	resolve := func(raw string) (string, bool) {
 		raw = strings.TrimSpace(raw)
 		if raw == "" || strings.HasPrefix(raw, "data:") {
-			// Data URIs are already self-contained; §5.5 keeps them as they
+			// Data URIs are already self-contained; the asset policy keeps them as they
 			// are rather than treating them as fetchable assets.
 			return "", false
 		}

@@ -40,7 +40,7 @@ webfonts, no stylesheet links. Images resolve by relative path into a shared
 long gone and Postgres long gone, and you get the article.
 
 That property is enforced by a test that opens a generated page from a
-temporary directory and checks every image against the filesystem. §8 of the
+temporary directory and checks every image against the filesystem. The testing strategy of the
 plan calls that test non-negotiable, and it is the one that would tell us the
 archive had quietly become a cache.
 
@@ -98,7 +98,8 @@ way that matters here.
 
 ## What is deliberately not stored
 
-The plan's non-goals are non-goals partly because of this principle. Full-page
+Several of this project's non-goals are non-goals partly because of this
+principle. Full-page
 visual snapshots, WARC captures, and PDF renderings are all formats that need
 particular software to read. An HTML file in a folder needs a browser, and
 browsers will read HTML for as long as there is a web.

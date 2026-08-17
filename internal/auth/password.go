@@ -2,7 +2,7 @@
 // Fever API key that has to be written alongside it.
 //
 // The two live together because they are produced from the same cleartext at the
-// same moment and must never disagree. §5.8 is explicit about why: the Fever
+// same moment and must never disagree. The reason is the Fever
 // protocol's credential is MD5 of "username:password", and that cannot be
 // recovered from an argon2 hash afterwards. So a password change that forgets to
 // rewrite the key leaves every Fever client authenticating against a password
@@ -44,7 +44,7 @@ type Params struct {
 // DefaultParams is argon2id at 19 MiB, two iterations, one lane.
 //
 // Memory is the interesting parameter and here it is bounded by deployment
-// rather than by cryptography. §10 budgets the server at ~128Mi, and
+// rather than by cryptography. The server runs in about 128Mi, and
 // verification runs *in that process* on every login attempt, so the 64 MiB
 // setting some guides recommend would commit half the container's memory to a
 // single request and put two concurrent logins within reach of an OOM kill.
@@ -173,7 +173,7 @@ func parse(encoded string) (Params, []byte, []byte, error) {
 }
 
 // FeverAPIKey is MD5 of "username:password", which is the credential the Fever
-// protocol specifies (§5.8).
+// protocol specifies.
 //
 // MD5 is not a choice made here — it is the wire format every Fever client
 // implements, and deviating from it would mean implementing a different

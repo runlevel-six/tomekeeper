@@ -78,7 +78,7 @@ func TestSetPasswordRoundTrip(t *testing.T) {
 	}
 }
 
-// The invariant §5.8 turns on: the hash and the Fever key are derived from the
+// The invariant that matters: the hash and the Fever key are derived from the
 // same cleartext, so they must move together. If a rotation updated only the
 // hash, Fever clients would keep authenticating with the old password and
 // nothing would say so.

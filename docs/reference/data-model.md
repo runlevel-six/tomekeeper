@@ -244,3 +244,8 @@ domain_rules (global, unattached)
 Reading it: a user owns feeds; feeds carry items; items reference articles;
 articles are shared, and everything user-specific about one hangs off the user
 side of that boundary.
+
+## See also
+
+- [Scoping and access control](../explanation/scoping-and-access-control.md)
+  — which tables are per-user, which are shared, and why

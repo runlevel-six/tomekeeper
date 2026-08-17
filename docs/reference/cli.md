@@ -270,12 +270,63 @@ Served by `tome serve`. Both respond to `GET` and `HEAD`; any other method
 returns `405`. Both set `Cache-Control: no-store` and return
 `application/json; charset=utf-8`.
 
-The web interface is documented as pages rather than endpoints; the routes are
-`/` (unread), `/starred`, `/search`, `/feeds`, `GET` and `POST /login`,
-`POST /logout`, and `/static/`. HTML responses carry
-`Content-Security-Policy: default-src 'none'`, which permits the archive's own
-stylesheet and images and nothing else — no inline script and no third-party
-requests, which is all a localized archive needs.
+## Web interface
+
+Served by `tome serve`. Every route except `/login` and `/static/` requires a
+session.
+
+| Route | Page |
+|---|---|
+| `GET /` | Unread stream |
+| `GET /all` | Everything in the archive |
+| `GET /starred` | Starred articles |
+| `GET /articles/{id}` | The reader. Opening an article marks it read. |
+| `GET /search?q=` | Search results |
+| `GET /feeds` | Feed list, health, and tags |
+| `GET /feeds/{id}` | One feed's articles |
+| `GET /tags/{id}` | One tag's articles |
+| `GET /attention` | Articles that did not come through cleanly |
+| `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
+| `POST /articles/{id}/star` | Star or unstar. Same form field. |
+| `GET /assets/…` | Archived images, from `TOME_BLOB_ROOT` |
+| `GET /static/…` | Stylesheet, keyboard script, vendored htmx |
+
+The two `POST` routes take the state they should end in rather than toggling, so a
+repeated or retried request is idempotent instead of landing back where it started.
+They return the refreshed control alone, which is what htmx swaps in; without
+JavaScript the same forms submit normally and the page reloads.
+
+An article a reader cannot see is `404`, never `403`. A distinct "forbidden" would
+confirm the article exists, which is exactly what the scoping discipline says one reader must not be
+able to infer about another's archive.
+
+### Keyboard
+
+| Key | Action |
+|---|---|
+| `j` / `↓` | Next entry |
+| `k` / `↑` | Previous entry |
+| `o` / `Enter` | Open the selected entry |
+| `s` | Star or unstar |
+| `m` | Mark read or unread |
+| `/` | Search |
+| `g` then `u` `a` `s` `f` | Go to unread, everything, starred, feeds |
+
+### Response headers
+
+HTML responses carry
+`Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self';
+img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none';
+frame-ancestors 'none'`.
+
+Nothing is `unsafe-inline` and nothing is third-party. That is affordable precisely
+because the script is vendored and the images are localized — a page needing a CDN
+could not have a policy this tight.
+
+Archived images are served `Cache-Control: public, max-age=31536000, immutable`.
+They are content-addressed, so the bytes at a path genuinely never change; this is
+the one place in the application where an immutable cache is a fact rather than a
+hopeful guess.
 
 ### `GET /healthz` — liveness
 

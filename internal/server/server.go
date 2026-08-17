@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
@@ -38,6 +39,16 @@ type Deps struct {
 
 	// Sessions issues and reads the sign-in credential.
 	Sessions session.Store
+
+	// Search backs the search page. Nil falls back to Store's own
+	// implementation, which is what production uses; the field exists so a test
+	// or a future engine can substitute one.
+	Search store.SearchIndex
+
+	// Blobs serves archived images to the reader. Nil means images 404 — the
+	// pages still work, which is the right failure for a misconfigured blob root
+	// rather than refusing to start.
+	Blobs blob.Store
 }
 
 // Server wraps an http.Server with this application's routes, timeouts, and
@@ -49,6 +60,8 @@ type Server struct {
 	http     *http.Server
 	store    *store.Store
 	sessions session.Store
+	search   store.SearchIndex
+	blobs    blob.Store
 	ui       *ui
 }
 
@@ -60,7 +73,14 @@ type Server struct {
 // alive, and taking them down because a page is malformed turns a rendering bug
 // into a crash loop.
 func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Server {
-	s := &Server{log: log, cfg: cfg, checks: checks, store: deps.Store, sessions: deps.Sessions}
+	s := &Server{
+		log: log, cfg: cfg, checks: checks,
+		store: deps.Store, sessions: deps.Sessions,
+		search: deps.Search, blobs: deps.Blobs,
+	}
+	if s.search == nil && s.store != nil {
+		s.search = s.store.Search()
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -107,7 +127,24 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /login", s.handleLogin)
 	mux.HandleFunc("POST /logout", s.handleLogout)
 
-	mux.HandleFunc("GET /{$}", s.requireUser(s.handleIndex))
+	// Reading views. Every one of these goes through requireUser; that is the
+	// whole reason they are listed together.
+	mux.HandleFunc("GET /{$}", s.requireUser(s.handleStream))
+	mux.HandleFunc("GET /all", s.requireUser(s.handleAll))
+	mux.HandleFunc("GET /starred", s.requireUser(s.handleStarred))
+	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
+	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
+	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
+	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
+	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
+	mux.HandleFunc("GET /articles/{id}", s.requireUser(s.handleArticle))
+
+	mux.HandleFunc("POST /articles/{id}/read", s.requireUser(s.handleToggleRead))
+	mux.HandleFunc("POST /articles/{id}/star", s.requireUser(s.handleToggleStar))
+
+	// Archived images. Behind requireUser like everything else: the archive is
+	// one person's reading history, and its illustrations are part of it.
+	mux.HandleFunc("GET /assets/", s.requireUser(s.handleAsset))
 }
 
 // Handler exposes the routed handler for tests that do not want a live socket.

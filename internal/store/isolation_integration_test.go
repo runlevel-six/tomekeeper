@@ -7,10 +7,11 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
-// M4's acceptance criterion, and §2.8's whole reason for existing: two users with
+// M4's acceptance criterion, and the scoping discipline's whole reason for
+// existing: two users with
 // distinct feed sets, and neither can see, modify, or infer the other's articles.
 //
-// The plan is explicit that this must pass at M4, before any user management
+// This must pass before any user management
 // exists. That is the point — the discipline is cheap to keep now and a rewrite to
 // retrofit, so the test is written while there is only one real user.
 
@@ -23,7 +24,8 @@ type twoReaders struct {
 	aliceFeed, bobFeed store.FeedID
 
 	// aliceOnly and bobOnly are reachable by exactly one reader. shared is carried
-	// by both feeds and is one row in articles — the deduplication §2.1 buys.
+	// by both feeds and is one row in articles — the deduplication that treating
+	// the article as the root entity buys.
 	aliceOnly, bobOnly, shared store.ArticleID
 }
 
@@ -119,7 +121,7 @@ func TestStreamShowsOnlyYourOwnArticles(t *testing.T) {
 		t.Error("Alice cannot see the shared article")
 	}
 	if alice[tr.bobOnly] {
-		t.Error("Alice can see Bob's article, which is the leak §2.8 exists to prevent")
+		t.Error("Alice can see Bob's article, which is the leak the scoping discipline exists to prevent")
 	}
 
 	if !bob[tr.bobOnly] || !bob[tr.shared] {
@@ -196,7 +198,7 @@ func TestReadStateIsPerReader(t *testing.T) {
 }
 
 // Not found rather than forbidden. "Forbidden" would confirm the article exists,
-// which §2.8 says one reader must not be able to infer about another's archive.
+// which the scoping discipline says one reader must not be able to infer about another's archive.
 func TestReadingAnotherReadersArticleIsNotFound(t *testing.T) {
 	tr := setupTwoReaders(t)
 	ctx := t.Context()

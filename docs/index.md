@@ -7,13 +7,12 @@ stores the result as files on disk that outlive the application.
 
 The binary is `tome`.
 
-> **Status: M3 (assets and the filesystem archive).** The service polls feeds,
-> fetches the linked pages politely, extracts readable bodies, localizes the
-> images, and writes each article as a standalone page that opens in a browser
-> with nothing running. There is no web interface yet — that is M4 — so reading
-> today means opening files or querying Postgres. Sections of this documentation
-> appear as the milestones that introduce them land; nothing here describes
-> behavior that does not exist.
+> **Status: M4 (read and search).** The service polls feeds, fetches the linked
+> pages politely, extracts readable bodies, localizes the images, writes each
+> article as a standalone page that opens in a browser with nothing running — and
+> now serves a web interface to read it in, with full-text search across the whole
+> archive. Sections of this documentation appear as the milestones that introduce
+> them land; nothing here describes behavior that does not exist.
 
 ## The four kinds of document
 
@@ -59,6 +58,8 @@ rejected. Design rationale lives here and nowhere else.
 - [Extraction and versioning](explanation/extraction-and-versioning.md) — why
   bodies are regenerable and raw pages are kept
 - [Politeness and rate limiting](explanation/politeness-and-rate-limiting.md)
+- [Scoping and access control](explanation/scoping-and-access-control.md) —
+  one user today, several later, and what is kept true meanwhile
 - [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md)
 - [Dependencies](explanation/dependencies.md) — every dependency, and why
 

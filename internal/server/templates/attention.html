@@ -1,0 +1,54 @@
+{{define "title"}}Needs attention — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="attention">
+  <h1>Needs attention</h1>
+
+  <p class="hint">
+    Articles that did not come through cleanly. This is routine
+    maintenance rather than a crisis: most entries are a site that needs a
+    <code>tome domain-rule</code>, and some are pages that no extractor will ever
+    read. Nothing here is lost — the original link still works, and the stored page
+    can be re-extracted once a rule exists.
+  </p>
+
+  {{if .Items}}
+    <table class="attention-table">
+      <thead>
+        <tr>
+          <th scope="col">Article</th>
+          <th scope="col">Feed</th>
+          <th scope="col">Problem</th>
+          <th scope="col">Seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Items}}
+        <tr>
+          <th scope="row">
+            <a href="/articles/{{.ArticleID}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a>
+            <span class="url">{{.URLCanonical}}</span>
+          </th>
+          <td>{{.FeedTitle}}</td>
+          <td>
+            {{if eq .FetchStatus "skipped"}}
+              <span class="badge warn">skipped</span>
+              <span class="reason">{{if .FetchError}}{{.FetchError}}{{else}}withheld by robots.txt{{end}}</span>
+            {{else if eq .FetchStatus "failed"}}
+              <span class="badge bad">failed</span>
+              <span class="reason">{{.FetchError}}</span>
+            {{else if eq .AssetsStatus "partial"}}
+              <span class="badge warn">images incomplete</span>
+              <span class="reason">at least one image could not be archived</span>
+            {{end}}
+          </td>
+          <td><time datetime="{{.FirstSeenAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since .FirstSeenAt}}</time></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="placeholder">Everything came through cleanly.</p>
+  {{end}}
+</div>
+{{end}}

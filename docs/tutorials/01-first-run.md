@@ -8,8 +8,11 @@ It takes about 20 minutes. You will need Docker and Go 1.26 or later.
 > **What you will have at the end:** a running service that polls your feeds,
 > fetches each linked page, extracts the readable article, downloads its images,
 > and writes the result as a page you can open in a browser with everything
-> switched off. There is no web interface yet — that is M4 — so you will read the
-> first article by opening a file.
+> switched off — plus a web interface to read it in, with search across the whole
+> archive.
+>
+> You will read your first article twice: once as a file with the service stopped,
+> which is the point of the whole design, and once in the reader.
 
 ## Step 1: Start PostgreSQL
 
@@ -280,7 +283,14 @@ docker start tome-db
 
 ## Step 9: Run the server
 
-In another terminal, with the same environment variables:
+Give yourself a password first. `tome serve` never reads it — it checks against
+the stored hash — so setting it belongs to `migrate`.
+
+```sh
+TOME_PASSWORD='choose something' ./bin/tome migrate
+```
+
+Then, in another terminal with the same environment variables:
 
 ```sh
 ./bin/tome serve
@@ -296,10 +306,31 @@ curl -s localhost:8080/readyz
 {"status":"ready","checks":{"database":"ok"}}
 ```
 
-There is no web interface yet — that is M4. What is running is the health
-surface an orchestrator needs, and it is honest: stop the database and `/readyz`
-starts reporting `503` while `/healthz` keeps returning `200`, because the
-process is fine and only its dependency is not.
+That is the health surface an orchestrator needs, and it is honest: stop the
+database and `/readyz` starts reporting `503` while `/healthz` keeps returning
+`200`, because the process is fine and only its dependency is not.
+
+## Step 10: read it in the browser
+
+Open <http://localhost:8080> and sign in as `tome` with the password you just
+set.
+
+You should see the unread stream. Click an article to read it — the images are
+served from your own archive, not from the original site. Try `j` and `k` to move
+between entries, `o` to open one, and `s` to star it. Search for a word you
+remember from one of the articles.
+
+Two pages worth visiting once, because they are what makes the rest maintainable:
+
+- **Feeds** shows every subscription with the last error it gave. A feed is never
+  dropped silently.
+- **Attention** lists anything that did not come through cleanly — usually a site
+  that needs a [domain rule](../how-to/add-a-domain-rule.md), sometimes a page no
+  extractor will ever read. Nothing there is lost; the stored page can be
+  re-extracted once a rule exists.
+
+If signing in fails, the page says whether a password has been set at all. Every
+other rejection reads the same on purpose, and the reason is in the server's log.
 
 ## Clean up
 

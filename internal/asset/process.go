@@ -20,7 +20,7 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-// Encoded formats, in the order §5.5 prefers them.
+// Encoded formats, in the order the asset policy prefers them.
 const (
 	FormatAVIF     = "image/avif"
 	FormatWebP     = "image/webp"
@@ -188,7 +188,7 @@ func downscale(img image.Image) image.Image {
 
 // BlobPath returns where an asset lives in the blob store.
 //
-// §5.6: assets/sha256/a1/b2/a1b2c3….avif. The two levels of prefix directories
+// The blob layout: assets/sha256/a1/b2/a1b2c3….avif. The two levels of prefix directories
 // keep any single directory to a few thousand entries, which matters because
 // some filesystems degrade badly with hundreds of thousands of files in one
 // place — and because a human browsing the archive should be able to open a

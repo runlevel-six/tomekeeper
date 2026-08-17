@@ -112,7 +112,7 @@ the outside. No code decision fixes this.
 
 The response is an honest User-Agent, a respected `robots.txt`, an accepted
 list of failures, and blocked domains surfaced clearly. Circumvention is a
-non-goal, listed as such in the plan, and the failed-fetch queue exists partly
+non-goal, deliberately and permanently, and the failed-fetch queue exists partly
 so that "this domain does not work" is visible information rather than a
 mystery.
 

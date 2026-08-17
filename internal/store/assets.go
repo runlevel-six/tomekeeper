@@ -19,7 +19,7 @@ const (
 
 // Asset is a stored image.
 //
-// Assets are a global pool like articles (§2.8): an image used by ten articles
+// Assets are a global pool like articles: an image used by ten articles
 // is stored once and shared, which is both correct and the single largest
 // storage win in the archive, since images are roughly 80% of its bytes.
 type Asset struct {

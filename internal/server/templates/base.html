@@ -5,16 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Tomekeeper{{end}}</title>
   <link rel="stylesheet" href="/static/tome.css">
+  {{if .User}}
+    <script src="/static/vendor/htmx-2.0.9.min.js" defer></script>
+    <script src="/static/tome.js" defer></script>
+  {{end}}
 </head>
 <body>
 {{if .User}}
   <header class="chrome">
     <a class="brand" href="/">Tomekeeper</a>
     <nav>
-      <a href="/">Unread</a>
-      <a href="/starred">Starred</a>
-      <a href="/search">Search</a>
-      <a href="/feeds">Feeds</a>
+      <a href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>Unread{{if .Unread}} <span class="badge count">{{.Unread}}</span>{{end}}</a>
+      <a href="/all"{{if eq .Nav "all"}} aria-current="page"{{end}}>Everything</a>
+      <a href="/starred"{{if eq .Nav "starred"}} aria-current="page"{{end}}>Starred</a>
+      <a href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
+      <a href="/feeds"{{if eq .Nav "feeds"}} aria-current="page"{{end}}>Feeds</a>
+      <a href="/attention"{{if eq .Nav "attention"}} aria-current="page"{{end}}>Attention</a>
     </nav>
     <form class="signout" method="post" action="/logout">
       <button type="submit">Sign out</button>

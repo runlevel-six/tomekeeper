@@ -11,7 +11,7 @@ import (
 	"unicode"
 )
 
-// The archive layout (§5.6):
+// The archive layout:
 //
 //	<root>/
 //	  articles/2026/08/the-article-slug-a1b2c3/

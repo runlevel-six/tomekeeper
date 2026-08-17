@@ -15,7 +15,7 @@ import (
 //
 // Group-readable but not world-readable. The archive is a complete record of
 // what one person reads, which is worth keeping off a shared machine's
-// world-readable paths; group read is retained deliberately so the §10 backup
+// world-readable paths; group read is retained deliberately so a backup
 // job can replicate the tree without running as the worker's own user.
 //
 // Principle 2.4 is unaffected either way: opening index.html with the service

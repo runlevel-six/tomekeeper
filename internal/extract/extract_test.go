@@ -14,7 +14,7 @@ import (
 // corpusEnvVar names a directory of further corpus cases held outside the
 // repository.
 //
-// The corpus the plan asks for is ~30 pages from sites actually being read, and
+// The corpus worth having is ~30 pages from sites actually being read, and
 // those are third-party copyrighted content, so they are not committed here —
 // see the README in testdata/pages. Point this at a private checkout and the
 // same golden test covers them; leave it unset and only the synthetic fixtures

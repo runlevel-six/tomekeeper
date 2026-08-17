@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/runlevel-six/tomekeeper/internal/auth"
+	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/db"
 	"github.com/runlevel-six/tomekeeper/internal/logging"
@@ -49,10 +50,24 @@ func serve(args []string, stderr io.Writer) int {
 	// Readiness consults the database; liveness deliberately does not. A
 	// Postgres restart should take this instance out of the load balancer, not
 	// get every replica killed and restarted. See docs/reference/cli.md.
-	srv := server.New(cfg, log, server.Deps{
-		Store:    store.New(pool),
-		Sessions: sessions,
-	}, server.Check{
+	deps := server.Deps{Store: store.New(pool), Sessions: sessions}
+
+	// A blob root that cannot be opened costs the reader images, not the whole
+	// interface: the pages still work and the log says why, which beats refusing
+	// to start over a directory the worker may create on its next run.
+	//
+	// Assigned only on success, deliberately. A failed constructor returns a typed
+	// nil pointer, and putting that in an interface field yields an interface that
+	// is not nil while holding nothing — so the handler's nil check would pass and
+	// the first request would panic instead of returning a 404.
+	if blobs, err := blob.NewFilesystem(cfg.BlobRoot); err != nil {
+		log.Warn("the archive directory is unavailable, so stored images will not load",
+			"blob_root", cfg.BlobRoot, "error", err)
+	} else {
+		deps.Blobs = blobs
+	}
+
+	srv := server.New(cfg, log, deps, server.Check{
 		Name: "database",
 		Func: func(ctx context.Context) error { return db.Ping(ctx, pool) },
 	})
@@ -96,7 +111,7 @@ func newSessionStore(cfg *config.Config, log *slog.Logger) (*session.Cookie, err
 
 // migrate applies the schema and seeds the single v1 user.
 //
-// Migrations never run automatically at server start (§10). They run here, as
+// Migrations never run automatically at server start. They run here, as
 // their own command, so that a deployment can gate the rollout on them
 // completing and so that two replicas starting at once cannot race.
 func migrate(args []string, stdout, stderr io.Writer) int {
@@ -155,7 +170,7 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "password set for %q\n", cfg.Username)
-	// Stated every time, because it is surprising and because §5.8 makes it
+	// Stated every time, because it is surprising and because the Fever API design makes it
 	// unavoidable: the Fever credential is derived from the cleartext, so it
 	// necessarily changes with it.
 	fmt.Fprintln(stdout, "the Fever API key changed with it; mobile clients will need reconnecting")

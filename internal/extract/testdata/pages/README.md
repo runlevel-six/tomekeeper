@@ -30,7 +30,7 @@ The fixtures in this directory are hand-built to exercise specific structures â€
 one rung of the ladder each, plus one hostile page for the sanitizer. They are
 committed and published, and they are what a contributor runs.
 
-They are not a substitute for the real corpus the plan calls for: roughly thirty
+They are not a substitute for the real corpus this suite wants: roughly thirty
 pages from sites actually being read, which is what makes extraction quality
 measurable against reality rather than against what the fixtures' author
 imagined. **Those pages are not in this repository.** They are third-party

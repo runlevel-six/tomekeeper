@@ -24,7 +24,7 @@ import (
 // LocalizeAssetsArgs asks for one article's images to be brought into the
 // archive and its files written.
 //
-// The plan's job table calls this fetch_asset, in the singular. It is one job
+// Named for the article rather than the image, deliberately. It is one job
 // per *article* rather than per image because the last step — rewriting the
 // body so its references point at the archive — can only happen once every
 // image has been resolved. Splitting per image would need a fan-in step and a
@@ -124,7 +124,7 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 	case outcome.Found == 0:
 		status = store.AssetsNone
 	case outcome.Failed > 0:
-		// §5.5: asset failures are non-fatal. The article keeps the absolute
+		// The asset policy: asset failures are non-fatal. The article keeps the absolute
 		// URLs it could not localize, and is marked so the gap is visible
 		// rather than being discovered years later as a broken image.
 		status = store.AssetsPartial
@@ -273,7 +273,7 @@ func (w *LocalizeAssetsWorker) download(
 // fetch downloads one image through the shared, rate-limited client.
 func (w *LocalizeAssetsWorker) fetch(ctx context.Context, articleURL, sourceURL string) ([]byte, string, error) {
 	header := make(http.Header, 1)
-	// §5.5: send the article as Referer. Many hosts serve images only to
+	// The asset policy: send the article as Referer. Many hosts serve images only to
 	// requests that look like they came from the page, and this is honest —
 	// the request genuinely was made on behalf of that page.
 	header.Set("Referer", articleURL)

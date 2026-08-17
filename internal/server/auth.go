@@ -168,17 +168,3 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.sessions.Clear(w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
-
-// indexPage is the placeholder landing page for slice 2. The reading views
-// replace it.
-type indexPage struct {
-	User     store.UserID
-	Username string
-}
-
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, http.StatusOK, "index", indexPage{
-		User:     signedInUser(r),
-		Username: s.cfg.Username,
-	})
-}

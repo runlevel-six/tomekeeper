@@ -265,7 +265,7 @@ func TestDuplicateGUIDWithinOnePollIsIgnored(t *testing.T) {
 	}
 }
 
-// An entry with no GUID falls back to its canonical URL as the key (§5.2).
+// An entry with no GUID falls back to its canonical URL as the key.
 func TestMissingGUIDFallsBackToCanonicalURL(t *testing.T) {
 	const body = `<?xml version="1.0"?><rss version="2.0"><channel><title>NoGUID</title>
 	  <item><title>One</title><link>https://example.com/one</link></item>

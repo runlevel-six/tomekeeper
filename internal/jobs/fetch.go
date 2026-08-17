@@ -22,7 +22,7 @@ import (
 // FetchArticleArgs asks for one article's page to be fetched and stored.
 //
 // No UserID: articles are a global pool, and the page is the same page
-// whichever subscription led to it (§2.8).
+// whichever subscription led to it.
 type FetchArticleArgs struct {
 	ArticleID int64 `json:"article_id"`
 }

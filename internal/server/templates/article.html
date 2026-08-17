@@ -1,0 +1,37 @@
+{{define "title"}}{{if .Article.Title}}{{.Article.Title}}{{else}}Article{{end}} — Tomekeeper{{end}}
+
+{{define "content"}}
+<article class="reader">
+  <header>
+    <h1>{{if .Article.Title}}{{.Article.Title}}{{else}}(untitled){{end}}</h1>
+
+    <p class="meta">
+      {{if .Article.SiteName}}<span class="source">{{.Article.SiteName}}</span>{{end}}
+      {{if .Article.Author}}<span class="byline">{{.Article.Author}}</span>{{end}}
+      {{with .Article.PublishedAt}}<time datetime="{{.Format "2006-01-02"}}">{{.Format "2 January 2006"}}</time>{{end}}
+      {{with readingTime .Words}}<span class="length">{{.}}</span>{{end}}
+    </p>
+
+    <p class="origin">
+      {{/*
+        rel=noreferrer as well as noopener: following a link out of a private
+        archive should not tell the destination which page it came from.
+      */}}
+      <a href="{{.Article.URLCanonical}}" rel="noopener noreferrer">Original</a>
+      {{if .Tags}}
+        <span class="tags">
+          {{range .Tags}}<a class="tag" href="/tags/{{.ID}}">{{.Name}}</a>{{end}}
+        </span>
+      {{end}}
+    </p>
+
+    {{template "actions" (articleActions .)}}
+  </header>
+
+  {{if .HasBody}}
+    <div class="body">{{.Body}}</div>
+  {{else}}
+    <p class="notice">{{.Notice}}</p>
+  {{end}}
+</article>
+{{end}}

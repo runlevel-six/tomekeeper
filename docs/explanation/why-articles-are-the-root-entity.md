@@ -92,3 +92,6 @@ no reason to write the one that becomes a leak in M9.
 - [Data model](../reference/data-model.md) — the tables and their constraints
 - `internal/urlcanon/testdata/urls/canonical.txt` — the canonicalization
   specification, as executable cases
+
+Sharing articles between readers is what makes the access rules non-obvious;
+see [Scoping and access control](scoping-and-access-control.md).

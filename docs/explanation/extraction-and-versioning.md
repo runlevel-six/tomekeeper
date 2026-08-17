@@ -95,7 +95,7 @@ What settles the threshold is that the two failure modes are not symmetric:
   That is the failure the whole project exists to prevent, and it is silent —
   nothing logs an error and the article looks present.
 - A **false accept** stores a short but real body. Because the raw page is kept
-  (§2.2 above), it can be extracted again later with better heuristics.
+  (the store-the-raw-fetch principle above), it can be extracted again later with better heuristics.
 
 One is recoverable and one is not, so the absolute length wins where it can.
 Below 2,000 characters the question is genuinely open — a short run of text on a

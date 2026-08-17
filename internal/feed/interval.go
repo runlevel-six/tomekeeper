@@ -25,7 +25,7 @@ type IntervalPolicy struct {
 	Growth float64
 }
 
-// DefaultIntervalPolicy matches §5.2: a 15-minute floor, a 24-hour ceiling,
+// DefaultIntervalPolicy matches the poller design: a 15-minute floor, a 24-hour ceiling,
 // and 1.5× growth while a feed is quiet.
 func DefaultIntervalPolicy() IntervalPolicy {
 	return IntervalPolicy{

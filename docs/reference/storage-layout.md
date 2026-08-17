@@ -106,7 +106,7 @@ keeps its original absolute URL in the page, and the article is marked
 `assets_status = 'partial'` so the gap is visible rather than being discovered
 years later as a broken image.
 
-Deliberate skips, from §5.5:
+Deliberate skips, from the asset policy:
 
 | Rule | Why |
 |---|---|
@@ -174,7 +174,7 @@ those bytes go:
 
 Three things worth reading off that table when sizing a volume:
 
-- **Images are the budget.** At 62% of bytes, the asset policy in §5.5 is where
+- **Images are the budget.** At 62% of bytes, the asset policy in the asset policy is where
   storage is won or lost, and everything else is rounding.
 - **Raw pages are cheaper than they look.** Gzipped HTML averages 26.6 KB, so
   principle 2.2's promise — keep the original so every future extractor

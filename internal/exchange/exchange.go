@@ -85,7 +85,7 @@ type Article struct {
 	ExtractorVersion string `json:"extractor_version,omitempty"`
 
 	// Immutable marks a body that must never be regenerated — typically an
-	// import that is the only surviving copy of a dead URL (§2.3).
+	// import that is the only surviving copy of a dead URL.
 	Immutable bool `json:"immutable,omitempty"`
 
 	Highlights []Highlight `json:"highlights,omitempty"`

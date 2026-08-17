@@ -7,7 +7,7 @@
 
 -- The feed's own body, kept for the last rung of the extraction ladder.
 --
--- §5.2 requires the feed body as a fallback when fetching the page fails, and
+-- The poller design requires the feed body as a fallback when fetching the page fails, and
 -- M1 stored only the summary. The two are different: feed_summary is the short
 -- teaser most feeds carry, while this is content:encoded, which is sometimes
 -- the entire article and is the only surviving copy when a site goes down

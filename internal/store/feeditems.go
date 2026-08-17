@@ -27,7 +27,7 @@ type FeedItemParams struct {
 // over feeds for this user, so passing a feed id belonging to someone else
 // inserts nothing rather than silently attaching an item to their feed. That
 // makes the scope a property of the query rather than of the caller's
-// diligence, which is what §2.8 asks for.
+// diligence, which is what the scoping discipline asks for.
 //
 // A GUID already seen in this feed is not an error — it is the normal case on
 // every poll after the first, since feeds re-list their recent items.
@@ -54,7 +54,7 @@ func (s *Store) InsertFeedItem(ctx context.Context, userID UserID, p FeedItemPar
 // This is the shape every user-facing article query must take: it reaches the
 // shared articles pool only by joining through that user's feed_items. Reading
 // from articles directly would let one user learn of another's saved URLs, so
-// the join is the access control (§2.8).
+// the join is the access control.
 func (s *Store) CountUserArticles(ctx context.Context, userID UserID) (int64, error) {
 	var n int64
 	err := s.pool.QueryRow(ctx, `

@@ -57,7 +57,7 @@ func TestLocalizeRewritesImages(t *testing.T) {
 	}
 }
 
-// §5.5: pick one candidate and drop the rest. Keeping a srcset would send a
+// The asset policy: pick one candidate and drop the rest. Keeping a srcset would send a
 // reader's browser back to the origin for a picture already stored here.
 func TestLocalizeFlattensSrcset(t *testing.T) {
 	var fetched []string

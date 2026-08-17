@@ -49,7 +49,7 @@ const (
 	NameFeedBody    = "feed_body"
 )
 
-// Acceptance thresholds (§5.4).
+// Acceptance thresholds.
 const (
 	// minChars is the shortest body worth calling an article. Below this it is
 	// almost always a paywall stub, a cookie notice, or a navigation shell.
@@ -77,8 +77,8 @@ const (
 	//
 	// The asymmetry that sets the value: a false reject stores a truncated feed
 	// summary while the full page sits on disk unread, which is precisely the
-	// failure §1 exists to prevent. A false accept stores a short-but-real body
-	// that §2.2 lets us re-extract later. So the absolute floor wins, and it is
+	// failure this whole project exists to prevent. A false accept stores a short-but-real body
+	// that the store-the-raw-fetch principle lets us re-extract later. So the absolute floor wins, and it is
 	// set low enough to clear the whole measured range.
 	longBody = 2000
 )
@@ -333,7 +333,7 @@ func (e *Extractor) finish(name, body, text string, pageURL *url.URL, meta metad
 	}
 }
 
-// acceptable implements the §5.4 threshold: long enough in absolute terms, and
+// acceptable implements the ladder threshold: long enough in absolute terms, and
 // — for bodies short enough that the question is open — a large enough share of
 // the page to be the article rather than the chrome.
 func acceptable(text string, visibleLen int) bool {

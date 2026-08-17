@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-// visibleArticles is the §2.8 access boundary, written once.
+// visibleArticles is the access boundary, written once.
+//
+// See docs/explanation/scoping-and-access-control.md for the reasoning behind
+// having one definition rather than a scope repeated per query.
 //
 // An article is visible to a user when one of their feeds references it, or when
 // they starred it themselves. Both routes matter: a subscription is the usual
@@ -21,7 +24,7 @@ import (
 // never duplicated in the first place.
 //
 // **Every query that embeds this must pass the user id as $1.** That coupling is
-// the price of having one definition instead of five; §2.8 is explicit that a
+// the price of having one definition instead of five; the scoping discipline is explicit that a
 // forgotten scope should be impossible rather than merely unlikely, and one
 // predicate that is obviously wrong when misused beats five that are subtly
 // right.
@@ -212,7 +215,7 @@ type ArticleView struct {
 //
 // An article outside their visibility is reported as not found rather than
 // forbidden. The distinction matters: "forbidden" confirms the article exists,
-// which is precisely what §2.8 says one user must not be able to infer about
+// which is precisely what the scoping discipline says one user must not be able to infer about
 // another's saved URLs.
 func (s *Store) ArticleForUser(ctx context.Context, userID UserID, id ArticleID) (ArticleView, error) {
 	var (
@@ -370,7 +373,7 @@ func (s *Store) UnreadCountsFor(ctx context.Context, userID UserID) (UnreadCount
 	return counts, nil
 }
 
-// NeedsAttention is one entry in the failed-fetch queue (§5.7).
+// NeedsAttention is one entry in the failed-fetch queue.
 type NeedsAttention struct {
 	ArticleID    ArticleID
 	URLCanonical string

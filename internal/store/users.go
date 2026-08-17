@@ -61,7 +61,7 @@ func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (User
 
 // SetPassword stores a password hash and its matching Fever API key.
 //
-// Both in one statement, deliberately. §5.8 requires the Fever key to be written
+// Both in one statement, deliberately. The Fever API design requires the Fever key to be written
 // whenever the password is set, because MD5 of the cleartext cannot be recovered
 // from an argon2 hash later. Two separate updates could leave the pair
 // inconsistent — a hash from the new password beside a key from the old one —
@@ -94,7 +94,7 @@ func (s *SystemStore) SetPassword(ctx context.Context, id UserID, hash, apiKey s
 // Credentials returns the id and stored password hash for a username.
 //
 // On SystemStore rather than Store because a login has no user to scope to yet —
-// resolving the username *is* the operation. §2.8 puts every cross-user query
+// resolving the username *is* the operation. The scoping discipline puts every cross-user query
 // here so that the exceptions are greppable rather than accidental.
 //
 // A user with no password set yet returns an empty hash and no error. Callers

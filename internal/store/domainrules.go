@@ -8,7 +8,7 @@ import (
 
 // DomainRule is a per-domain extraction override.
 //
-// Rules are global and admin-only (§2.8): how to extract a site's articles is
+// Rules are global and admin-only: how to extract a site's articles is
 // a technical fact about that site, identical for every reader, and there is
 // no version of it that belongs to one user. They live on SystemStore for that
 // reason, not as an oversight.

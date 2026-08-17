@@ -8,7 +8,7 @@ import (
 
 // Article is a row of the articles table.
 //
-// Articles are a global pool shared by every user (§2.8): two people
+// Articles are a global pool shared by every user: two people
 // subscribed to the same site get one archived copy and one set of images.
 // Methods here therefore take no UserID, and that is deliberate rather than an
 // oversight — a user's *relationship* to an article lives in feed_items,

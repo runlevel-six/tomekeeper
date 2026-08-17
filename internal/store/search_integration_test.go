@@ -102,15 +102,15 @@ func TestSearchSnippetHighlightsTheMatch(t *testing.T) {
 	}
 
 	snippet := hits[0].Snippet
-	if !strings.Contains(snippet, "<mark>argonaut</mark>") {
-		t.Errorf("snippet does not highlight the match: %q", snippet)
+	want := store.HighlightStart + "argonaut" + store.HighlightEnd
+	if !strings.Contains(snippet, want) {
+		t.Errorf("snippet does not bracket the match with the highlight sentinels: %q", snippet)
 	}
-	// Nothing but the highlight: the body is stored sanitized, but a snippet is
-	// interpolated into a page, so anything else here would be a surprise.
-	for _, tag := range []string{"<script", "<img", "<a ", "<div"} {
-		if strings.Contains(snippet, tag) {
-			t.Errorf("snippet contains %q: %q", tag, snippet)
-		}
+	// Sentinels, deliberately not <mark>. The snippet is plain article text, and
+	// emitting tags here would make it unsafe to render — see the note on
+	// SearchResult.Snippet. The server escapes and then substitutes.
+	if strings.Contains(snippet, "<mark>") {
+		t.Errorf("snippet contains real markup, which callers would have no way to escape safely: %q", snippet)
 	}
 }
 
@@ -202,7 +202,7 @@ func TestSearchRespectsFilters(t *testing.T) {
 	}
 }
 
-// §2.8's specific warning: search must not become the way one reader discovers
+// The scoping discipline's specific warning: search must not become the way one reader discovers
 // what another has archived.
 func TestSearchIsScopedToTheReader(t *testing.T) {
 	tr := setupTwoReaders(t)

@@ -39,7 +39,7 @@ import (
 // than this is a malfunction or an attack, not content worth archiving.
 const MaxResponseBytes = 10 << 20 // 10MB
 
-// Defaults matching §5.3.
+// Defaults matching the politeness rules.
 const (
 	DefaultRPS         = 1.0
 	DefaultConcurrency = 10
@@ -418,7 +418,7 @@ func (c *Client) fetchRobots(ctx context.Context, origin string) (*robotstxt.Rob
 
 // retryDelay decides whether a response should be retried and how long to wait.
 //
-// §5.3: retry 429 and 503 honoring Retry-After; never retry a 4xx other than
+// The politeness rules: retry 429 and 503 honoring Retry-After; never retry a 4xx other than
 // 408 and 429. A 404 will still be a 404 in ten seconds, and retrying it is
 // just another request the origin did not need to serve.
 func retryDelay(resp *http.Response, attempt int) (time.Duration, bool) {

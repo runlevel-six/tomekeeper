@@ -30,7 +30,7 @@ type Outcome struct {
 
 	// Failed is how many kept their original absolute URL.
 	//
-	// These are not errors that stop anything (§5.5): a hotlinked image that
+	// These are not errors that stop anything: a hotlinked image that
 	// still loads is better than a broken one, and the article is marked
 	// 'partial' so the gap is visible rather than silent.
 	Failed int
@@ -42,7 +42,7 @@ type Outcome struct {
 // Two things happen in one DOM pass, because they are the same decision. A
 // <picture> element or a srcset offers the same image at several sizes; the
 // archive keeps exactly one, so the element is flattened to a plain <img>
-// pointing at the candidate nearest MaxDimension (§5.5). Archiving all of them
+// pointing at the candidate nearest MaxDimension. Archiving all of them
 // would multiply the storage cost of every illustrated article for a benefit
 // the archive cannot use, since it renders at one size.
 func Localize(body string, resolve Resolver) (string, Outcome) {

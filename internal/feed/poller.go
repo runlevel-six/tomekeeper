@@ -32,7 +32,7 @@ import (
 // real feeds: a 304, a malformed body, the twentieth consecutive failure.
 //
 // Every user-scoped method keeps its UserID here too. The indirection must not
-// become the place where scoping quietly goes missing (§2.8).
+// become the place where scoping quietly goes missing.
 type Store interface {
 	GetFeed(ctx context.Context, userID store.UserID, feedID store.FeedID) (store.Feed, error)
 	UpsertArticle(ctx context.Context, p store.ArticleParams) (store.ArticleID, bool, error)
@@ -109,7 +109,7 @@ func (p *Poller) Poll(ctx context.Context, userID store.UserID, feedID store.Fee
 		Header: conditionalHeaders(f),
 		// A feed is a subscription the reader asked for, published in a format
 		// whose whole purpose is automated consumption. Article and asset
-		// fetches are subject to robots.txt; this is not. See §5.3.
+		// fetches are subject to robots.txt; this is not. See the politeness rules.
 		SkipRobots: true,
 	})
 	if err != nil {
@@ -201,7 +201,7 @@ func (p *Poller) ingest(ctx context.Context, userID store.UserID, f store.Feed,
 			continue
 		}
 
-		// §5.2: deduplicate within a poll by GUID, falling back to the
+		// The poller design: deduplicate within a poll by GUID, falling back to the
 		// canonical URL when the feed does not supply one.
 		guid := strings.TrimSpace(item.GUID)
 		if guid == "" {

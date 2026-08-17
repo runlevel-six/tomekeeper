@@ -155,7 +155,7 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 		"is_current", madeCurrent)
 
 	if !madeCurrent {
-		// §2.3: an imported body may be the only surviving copy of a dead URL,
+		// The imported-content-is-immutable principle: an imported body may be the only surviving copy of a dead URL,
 		// so a fetched body is stored beside it rather than over it. Promoting
 		// one over the other is a deliberate human act.
 		log.Info("stored alongside an immutable body rather than replacing it")

@@ -1,0 +1,59 @@
+{{/*
+  Shared fragments. Rendered inside pages and returned alone as htmx responses, so
+  a control cannot look one way on load and another after a click.
+*/}}
+
+{{define "actions"}}
+<span class="actions" id="actions-{{.ArticleID}}">
+  <form method="post" action="/articles/{{.ArticleID}}/star"
+        hx-post="/articles/{{.ArticleID}}/star"
+        hx-target="#actions-{{.ArticleID}}" hx-swap="outerHTML">
+    <input type="hidden" name="on" value="{{if .Starred}}false{{else}}true{{end}}">
+    <button type="submit" class="toggle{{if .Starred}} on{{end}}"
+            aria-pressed="{{.Starred}}"
+            title="{{if .Starred}}Remove star{{else}}Star{{end}} (s)">
+      {{if .Starred}}★{{else}}☆{{end}}<span class="label">{{if .Starred}}Starred{{else}}Star{{end}}</span>
+    </button>
+  </form>
+
+  <form method="post" action="/articles/{{.ArticleID}}/read"
+        hx-post="/articles/{{.ArticleID}}/read"
+        hx-target="#actions-{{.ArticleID}}" hx-swap="outerHTML">
+    <input type="hidden" name="on" value="{{if .Read}}false{{else}}true{{end}}">
+    <button type="submit" class="toggle{{if .Read}} on{{end}}"
+            aria-pressed="{{.Read}}"
+            title="Mark {{if .Read}}unread{{else}}read{{end}} (m)">
+      {{if .Read}}◉{{else}}◯{{end}}<span class="label">{{if .Read}}Read{{else}}Unread{{end}}</span>
+    </button>
+  </form>
+</span>
+{{end}}
+
+{{/*
+  The stream rows, separately definable so that paging can return just these.
+  The last row carries the hx-get that loads the next page when it scrolls into
+  view — infinite scroll without a scroll listener.
+*/}}
+{{define "stream-rows"}}
+{{range $i, $item := .Items}}
+<article class="entry{{if $item.Read}} is-read{{end}}" data-article="{{$item.ArticleID}}"
+  {{if and $.NextPage (eq (len $.Items) (add $i 1))}}
+    hx-get="{{$.NextPage}}" hx-trigger="revealed" hx-swap="afterend"
+  {{end}}>
+  <h2><a href="/articles/{{$item.ArticleID}}">{{if $item.Title}}{{$item.Title}}{{else}}(untitled){{end}}</a></h2>
+
+  <p class="meta">
+    {{if $item.FeedTitle}}<span class="source">{{$item.FeedTitle}}</span>{{else if $item.SiteName}}<span class="source">{{$item.SiteName}}</span>{{end}}
+    {{if $item.Author}}<span class="byline">{{$item.Author}}</span>{{end}}
+    <time datetime="{{$item.SortAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since $item.SortAt}}</time>
+    {{with readingTime $item.WordCount}}<span class="length">{{.}}</span>{{end}}
+    {{if eq $item.AssetsStatus "partial"}}<span class="warn" title="Some images could not be archived">images incomplete</span>{{end}}
+    {{if not $item.HasBody}}<span class="warn" title="Nothing was extracted from this page">no body</span>{{end}}
+  </p>
+
+  {{if $item.Excerpt}}<p class="excerpt">{{$item.Excerpt}}</p>{{end}}
+
+  {{template "actions" (actionsOf $item)}}
+</article>
+{{end}}
+{{end}}

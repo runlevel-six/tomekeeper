@@ -43,7 +43,7 @@ const scheduleBatchSize = 100
 // UserID travels with FeedID even though a feed belongs to exactly one user
 // and the id would be enough to find it. Carrying it means the worker calls
 // user-scoped store methods rather than looking the owner up and trusting what
-// it finds, so §2.8 holds through the queue as well as through the database.
+// it finds, so the scoping discipline holds through the queue as well as through the database.
 type PollFeedArgs struct {
 	UserID int64 `json:"user_id"`
 	FeedID int64 `json:"feed_id"`

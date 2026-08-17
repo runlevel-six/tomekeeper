@@ -1,0 +1,45 @@
+{{define "title"}}Search — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="search">
+  <h1>Search</h1>
+
+  <form method="get" action="/search" role="search">
+    <input type="search" name="q" value="{{.Query}}" autofocus
+           placeholder="words, &quot;a phrase&quot;, OR, -excluded"
+           aria-label="Search the archive">
+    <button type="submit">Search</button>
+  </form>
+
+  <p class="hint">
+    Bare words must all appear. Quote a phrase to match it exactly, use
+    <code>OR</code> for either, and prefix a word with <code>-</code> to exclude it.
+  </p>
+
+  {{if .Ran}}
+    {{if .Results}}
+      <p class="count">{{plural (len .Results) "result"}} for <strong>{{.Query}}</strong></p>
+
+      <ol class="results">
+        {{range .Results}}
+        <li class="result{{if .Read}} is-read{{end}}">
+          <h2><a href="/articles/{{.ArticleID}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a></h2>
+          <p class="meta">
+            {{if .FeedTitle}}<span class="source">{{.FeedTitle}}</span>{{else if .SiteName}}<span class="source">{{.SiteName}}</span>{{end}}
+            {{if .Starred}}<span class="starred" title="Starred">★</span>{{end}}
+          </p>
+          {{/*
+            The snippet is HTML because Postgres wraps the matched terms in <mark>.
+            ts_headline builds it from the stored plain text, so <mark> is the only
+            markup it can contain — see the note on SearchResult.Snippet.
+          */}}
+          <p class="snippet">{{.Snippet | snippet}}</p>
+        </li>
+        {{end}}
+      </ol>
+    {{else}}
+      <p class="placeholder">Nothing matched <strong>{{.Query}}</strong>.</p>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

@@ -17,7 +17,7 @@ const (
 	FetchSkipped = "skipped"
 )
 
-// Content origins, recorded on each body (§2.3). Provenance belongs to the
+// Content origins, recorded on each body. Provenance belongs to the
 // body, not to the shared article row.
 const (
 	OriginFetched  = "fetched"
@@ -59,7 +59,7 @@ func (s *Store) RecordFetchSuccess(ctx context.Context, id ArticleID, sha, path 
 // inner-joins the current content row that these articles do not have. Measured
 // against a real feed list, 346 of 1,365 articles sat 'pending' forever.
 //
-// 'none' rather than a new value: §5.5 defines it as "the body had no qualifying
+// 'none' rather than a new value: the asset policy defines it as "the body had no qualifying
 // images", and an article with no body vacuously has none. That keeps the
 // vocabulary and needs no migration.
 func (s *Store) RecordFetchFailure(ctx context.Context, id ArticleID, status, reason string) error {
@@ -153,7 +153,7 @@ type ContentParams struct {
 // demoted. That is what lets a bad extractor release be diagnosed after the
 // fact, and it costs a row.
 //
-// An immutable current body is never demoted (§2.3). An imported Wallabag
+// An immutable current body is never demoted. An imported Wallabag
 // entry may be the only surviving copy of a dead URL, so a later successful
 // fetch of the same article is stored alongside it, not over it, and promoting
 // it is a deliberate human act.

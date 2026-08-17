@@ -87,7 +87,7 @@ func TestProcessTranscodes(t *testing.T) {
 	}
 }
 
-// §5.5: the long edge is capped at 1600, preserving aspect ratio.
+// The asset policy: the long edge is capped at 1600, preserving aspect ratio.
 func TestProcessDownscales(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -261,7 +261,7 @@ func TestShouldFetch(t *testing.T) {
 	}
 }
 
-// §5.5: pick the candidate nearest 1600 rather than the largest, so a 4000px
+// The asset policy: pick the candidate nearest 1600 rather than the largest, so a 4000px
 // original is not fetched only to be immediately downscaled.
 func TestSelectFromSrcset(t *testing.T) {
 	tests := []struct {

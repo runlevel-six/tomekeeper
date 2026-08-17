@@ -1,0 +1,20 @@
+{{define "title"}}{{.Heading}} — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="stream" id="stream" data-keyboard="stream">
+  <h1>{{.Heading}}</h1>
+
+  {{if .Items}}
+    {{template "stream-rows" .}}
+  {{else}}
+    <p class="placeholder">{{.Empty}}</p>
+  {{end}}
+</div>
+
+{{if .Items}}
+  <p class="hint">
+    <kbd>j</kbd> / <kbd>k</kbd> move, <kbd>o</kbd> open, <kbd>s</kbd> star,
+    <kbd>m</kbd> mark read
+  </p>
+{{end}}
+{{end}}
