@@ -133,22 +133,23 @@ exists to reduce storage, not to spend it.
 tome archive stats
 ```
 
-A real run, 2026-08-17, against 93 articles from 4 feeds:
+Measured 2026-08-17 against a real 74-feed subscription list — 1,365 articles
+ingested, 1,019 of them archived with a body:
 
 ```
-articles          93
-  fetched         93
-  with a body     93
-  partial images  3
-body text         2.8 MB
+articles          1365
+  fetched         1019
+  with a body     1019
+  partial images  69
+body text         17.4 MB
 
-images stored     86
-image references  91
-image bytes       4.5 MB
-  deduplicated    5 references, about 266.3 KB not stored twice
+images stored     1930
+image references  2690
+image bytes       105.2 MB
+  deduplicated    760 references, about 41.4 MB not stored twice
 
-per article         79.7 KB (body and images; excludes raw pages on disk)
-per 1,000 articles  77.9 MB
+per article         123.2 KB (body and images; excludes raw pages on disk)
+per 1,000 articles  120.3 MB
 ```
 
 Raw pages live on the filesystem rather than in the database, so size them
@@ -159,19 +160,42 @@ du -sh "$TOME_BLOB_ROOT/articles"   # index.html, meta.json, raw.html.gz
 du -sh "$TOME_BLOB_ROOT/assets"     # images
 ```
 
-The same run measured 8.1 MB under `articles/` and 4.6 MB under `assets/`, 13 MB
-in total — so **roughly 140 KB per article once raw pages are counted, against
-79.7 KB without them.** Raw HTML is on the order of half the archive's bytes for
-text-heavy sources, which is the cost principle 2.2 accepts in exchange for being
-able to re-extract the whole archive later.
+The same run: **67 MB** under `articles/`, **109 MB** under `assets/`, **176 MB
+total** — about **173 KB per archived article, or 173 MB per thousand**. Where
+those bytes go:
 
-> **This is a real measurement but not the one M3 asks for.** The acceptance
-> criterion wants 1,000 articles; this is 93, from 4 feeds, and the sample is
-> skewed — the largest contributor is a documentation site whose pages are ~500 KB
-> of raw HTML each, which inflates the raw-page share and depresses the image
-> share. The mix of photo-heavy and text-only sources moves these numbers by an
-> order of magnitude, so re-run `tome archive stats` once the archive passes a
-> thousand articles and replace the figures above.
+| Component | Size | Share | Mean per article |
+|---|---|---|---|
+| Images (`assets/`) | 109 MB | 62% | 107 KB |
+| Raw pages (`raw.html.gz`) | 34.8 MB | 20% | 26.6 KB |
+| Standalone page (`index.html`) | 12.9 MB | 7% | 13.0 KB |
+| Export record (`meta.json`) | 12.2 MB | 7% | 12.2 KB |
+| Filesystem overhead | ~7 MB | 4% | — |
+
+Three things worth reading off that table when sizing a volume:
+
+- **Images are the budget.** At 62% of bytes, the asset policy in §5.5 is where
+  storage is won or lost, and everything else is rounding.
+- **Raw pages are cheaper than they look.** Gzipped HTML averages 26.6 KB, so
+  principle 2.2's promise — keep the original so every future extractor
+  improvement reaches the whole archive — costs a fifth of the archive rather
+  than the half a small text-heavy sample suggests.
+- **The body is stored twice, deliberately.** `index.html` and `meta.json`
+  together are 14% of the archive because the export record embeds the body while
+  the standalone page wraps it for a browser. That is principle 2.4 and principle
+  2.5 both being literally true at once, and 14% is the price.
+
+Dedup is doing real work at this scale: 2,690 image references collapsed to 1,930
+stored files, saving **41.4 MB — 28%** of what a naive fetch-per-reference would
+have written.
+
+> **On the denominator.** 1,365 articles were ingested but 1,019 archived. The
+> difference is almost entirely webcomic feeds, which have no article text to
+> extract; one of them alone accounted for 280 items. Per-article figures above
+> use the 1,019 that actually hold content, since an ingested-but-bodyless article
+> costs one gzipped page and nothing else. The mix of photo-heavy and text-only
+> sources still moves these numbers substantially, so re-measure against your own
+> subscriptions rather than trusting them as a forecast.
 
 ## Permissions
 
