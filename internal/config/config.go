@@ -47,6 +47,15 @@ type Config struct {
 	// Username is the single v1 user, seeded by `tome migrate`.
 	Username string
 
+	// Password is the cleartext password for that user, read only by
+	// `tome migrate`, which hashes it and derives the Fever API key from it.
+	//
+	// Deliberately absent from LogValue, so logging a Config cannot leak it
+	// however carelessly that is called. `tome serve` never needs this value —
+	// it verifies against the stored hash — so the secret belongs only to the
+	// migration step and not to the long-running process.
+	Password string
+
 	// ContactURL is embedded in the outbound User-Agent so that an operator
 	// who wants this archiver to stop can find out who to ask. Optional, but
 	// strongly encouraged before pointing it at anyone else's server.
@@ -116,6 +125,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 		HTTPAddr:   get("HTTP_ADDR", defaultHTTPAddr),
 		LogFormat:  get("LOG_FORMAT", defaultLogFormat),
 		Username:   get("USERNAME", defaultUsername),
+		Password:   get("PASSWORD", ""),
 		ContactURL: get("CONTACT_URL", ""),
 		BlobRoot:   get("BLOB_ROOT", defaultBlobRoot),
 	}

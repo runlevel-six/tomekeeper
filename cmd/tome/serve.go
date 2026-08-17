@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/runlevel-six/tomekeeper/internal/auth"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/db"
 	"github.com/runlevel-six/tomekeeper/internal/logging"
@@ -83,13 +84,41 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	userID, err := store.New(pool).System().EnsureSeedUser(ctx, cfg.Username)
+	system := store.New(pool).System()
+
+	userID, err := system.EnsureSeedUser(ctx, cfg.Username)
 	if err != nil {
 		log.Error("seeding the user failed", "error", err)
 		return exitFailure
 	}
 
 	fmt.Fprintf(stdout, "schema up to date; user %q is id %d\n", cfg.Username, userID)
+
+	// The password is set here rather than by `tome serve`, so the cleartext
+	// exists only in the migration step and never in the long-running process.
+	// Unset is not an error: M1 through M3 have no login surface, and a worker
+	// does not need one.
+	if cfg.Password == "" {
+		fmt.Fprintf(stdout, "no %sPASSWORD set, so no password was changed\n", config.Prefix)
+		fmt.Fprintln(stdout, "the web interface cannot be signed into until one is")
+		return exitOK
+	}
+
+	hash, err := auth.Hash(cfg.Password)
+	if err != nil {
+		log.Error("hashing the password failed", "error", err)
+		return exitFailure
+	}
+	if err := system.SetPassword(ctx, userID, hash, auth.FeverAPIKey(cfg.Username, cfg.Password)); err != nil {
+		log.Error("storing the password failed", "error", err)
+		return exitFailure
+	}
+
+	fmt.Fprintf(stdout, "password set for %q\n", cfg.Username)
+	// Stated every time, because it is surprising and because §5.8 makes it
+	// unavoidable: the Fever credential is derived from the cleartext, so it
+	// necessarily changes with it.
+	fmt.Fprintln(stdout, "the Fever API key changed with it; mobile clients will need reconnecting")
 	return exitOK
 }
 

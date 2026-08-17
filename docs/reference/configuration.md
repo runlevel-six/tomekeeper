@@ -17,6 +17,7 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_LOG_FORMAT` | enum | `json` | no | Log output format. One of `json`, `text`. |
 | `TOME_SHUTDOWN_TIMEOUT` | duration | `15s` | no | Time allowed for in-flight requests to finish after a termination signal. Must be positive. Go duration syntax (`30s`, `1m`, `1m30s`). |
 | `TOME_USERNAME` | string | `tome` | no | The single v1 user, created by `tome migrate`. Changing it renames the existing user rather than creating a second one. |
+| `TOME_PASSWORD` | string | — | no | Password for the single user. Read **only by `tome migrate`**, which stores an argon2id hash and derives the Fever API key from it. `tome serve` never reads it. Unset leaves any existing password alone; unset on a first run means the web interface cannot be signed into. Setting it always rotates the Fever key, so mobile clients need reconnecting. |
 | `TOME_CONTACT_URL` | URL | — | no | Published in the outbound `User-Agent` as `tomekeeper/<version> (+<url>)`. Must be absolute if set. Strongly encouraged before pointing this at anyone else's server: it is how an operator finds out who to ask when they want it to stop. |
 | `TOME_POLL_MIN_INTERVAL` | duration | `15m` | no | Floor for the adaptive poll interval. No feed is polled more often. |
 | `TOME_POLL_MAX_INTERVAL` | duration | `24h` | no | Ceiling for the adaptive poll interval. Must be at least the floor. |
@@ -56,6 +57,16 @@ configuration summary logged at startup. The username, host, database name, and
 query parameters are preserved, so the log still answers "is it pointed at the
 right database".
 
+`TOME_PASSWORD` is never logged at all. It is absent from the configuration
+summary by construction rather than by redaction — the summary lists its fields
+explicitly, so a secret that is not in that list cannot be printed by any future
+caller, however careless.
+
+It is also deliberately scoped to one command. `tome serve` authenticates against
+the stored hash and has no use for the cleartext, so the secret belongs to the
+migration step alone. In Kubernetes that means the Secret is mounted on the
+migration Job, not on the long-running Deployment (M7).
+
 ## Example
 
 ```sh
@@ -80,6 +91,7 @@ as a whole. Only some affect a given command's behavior:
 | `TOME_HTTP_ADDR`, `TOME_SHUTDOWN_TIMEOUT` | yes | — | — | — |
 | `TOME_LOG_LEVEL`, `TOME_LOG_FORMAT` | yes | yes | yes | yes |
 | `TOME_USERNAME` | — | — | creates the user | selects the user |
+| `TOME_PASSWORD` | — | — | sets the password | — |
 | `TOME_CONTACT_URL` | — | yes | — | — |
 | `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — |
 | `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — |
