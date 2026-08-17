@@ -85,6 +85,22 @@ jobs:
             exit 1
           fi
 
+      # The real extraction corpus is third-party content and lives outside this
+      # repository, so it is absent on contributor PRs and present only where
+      # TOME_TEST_CORPUS_DIR is supplied. TestCorpus already fails when the
+      # variable points somewhere unusable; what this catches is the variable
+      # being set for the job but never reaching the test, which would look
+      # exactly like a passing suite with the whole real corpus missing.
+      - name: Verify the private corpus ran
+        if: env.TOME_TEST_CORPUS_DIR != ''
+        run: |
+          output=$(go test -v -run TestCorpus ./internal/extract/ 2>&1)
+          echo "$output" | grep 'corpus:' || true
+          if echo "$output" | grep -qE 'corpus: [0-9]+ committed fixtures, 0 private pages'; then
+            echo "::error::TOME_TEST_CORPUS_DIR is set for this job but no private pages loaded"
+            exit 1
+          fi
+
   fuzz:
     name: Fuzz URL canonicalization
     runs-on: ubuntu-latest

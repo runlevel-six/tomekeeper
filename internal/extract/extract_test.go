@@ -11,16 +11,36 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/extract"
 )
 
-// TestCorpus runs every case in testdata/pages.
+// corpusEnvVar names a directory of further corpus cases held outside the
+// repository.
+//
+// The corpus the plan asks for is ~30 pages from sites actually being read, and
+// those are third-party copyrighted content, so they are not committed here —
+// see the README in testdata/pages. Point this at a private checkout and the
+// same golden test covers them; leave it unset and only the synthetic fixtures
+// run, which is what a contributor gets.
+//
+// Unset means skip, matching internal/dbtest. A skipped case is not a passing
+// case, so `task test:corpus` fails when this is missing, the same way
+// `task test:integration` fails without a database.
+const corpusEnvVar = "TOME_TEST_CORPUS_DIR"
+
+// TestCorpus runs every case in testdata/pages, plus any in the private corpus.
 //
 // This is the regression suite for every extractor change, and the place a new
 // site that extracts badly gets added before anything is fixed. See the README
 // in that directory for the file format.
 func TestCorpus(t *testing.T) {
-	cases := loadCorpus(t)
-	if len(cases) == 0 {
-		t.Fatal("the corpus is empty")
-	}
+	committed := committedCorpus(t)
+	private := privateCorpus(t, committed)
+
+	// Printed on every run, passing or not: the number is how you notice that
+	// the private corpus quietly stopped being loaded.
+	t.Logf("corpus: %d committed fixtures, %d private pages", len(committed), len(private))
+
+	cases := make([]corpusCase, 0, len(committed)+len(private))
+	cases = append(cases, committed...)
+	cases = append(cases, private...)
 
 	e := extract.New()
 
@@ -245,13 +265,69 @@ type corpusCase struct {
 	expectNone bool
 }
 
-func loadCorpus(t *testing.T) []corpusCase {
+// committedCorpus loads the synthetic fixtures that ship with the repository.
+//
+// The named-fixture tests below use only these: they assert behavior against
+// structures built to exercise one rung each, which is a different job from the
+// breadth the private corpus provides.
+func committedCorpus(t *testing.T) []corpusCase {
 	t.Helper()
 
-	dir := filepath.Join("testdata", "pages")
+	cases := loadCorpusDir(t, filepath.Join("testdata", "pages"))
+	if len(cases) == 0 {
+		t.Fatal("the committed corpus is empty")
+	}
+	return cases
+}
+
+// privateCorpus loads the real pages named by corpusEnvVar, or nothing when it
+// is unset.
+//
+// Every failure here is fatal rather than a fall back to the synthetic set. A
+// variable that is set but unusable would otherwise drop the entire real corpus
+// while the suite still reported green, which is precisely the silent loss this
+// mechanism exists to prevent.
+func privateCorpus(t *testing.T, committed []corpusCase) []corpusCase {
+	t.Helper()
+
+	dir := os.Getenv(corpusEnvVar)
+	if dir == "" {
+		return nil
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("%s=%q: %v", corpusEnvVar, dir, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("%s=%q is not a directory", corpusEnvVar, dir)
+	}
+
+	cases := loadCorpusDir(t, dir)
+	if len(cases) == 0 {
+		t.Fatalf("%s=%q holds no *.want files; a corpus that loads nothing is not a corpus", corpusEnvVar, dir)
+	}
+
+	byName := make(map[string]bool, len(committed))
+	for _, tc := range committed {
+		byName[tc.name] = true
+	}
+	for _, tc := range cases {
+		// Duplicate stems would mean one case silently shadows the other in
+		// the test output, decided by glob order.
+		if byName[tc.name] {
+			t.Fatalf("corpus case %q is in both testdata/pages and %s; it belongs in one or the other", tc.name, dir)
+		}
+	}
+	return cases
+}
+
+func loadCorpusDir(t *testing.T, dir string) []corpusCase {
+	t.Helper()
+
 	wants, err := filepath.Glob(filepath.Join(dir, "*.want"))
 	if err != nil {
-		t.Fatalf("globbing corpus: %v", err)
+		t.Fatalf("globbing corpus in %s: %v", dir, err)
 	}
 
 	cases := make([]corpusCase, 0, len(wants))
@@ -349,12 +425,12 @@ func loadCase(t *testing.T, dir, name, wantPath string) corpusCase {
 
 func findCase(t *testing.T, name string) corpusCase {
 	t.Helper()
-	for _, tc := range loadCorpus(t) {
+	for _, tc := range committedCorpus(t) {
 		if tc.name == name {
 			return tc
 		}
 	}
-	t.Fatalf("corpus case %q not found", name)
+	t.Fatalf("committed corpus case %q not found", name)
 	return corpusCase{}
 }
 

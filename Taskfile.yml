@@ -60,6 +60,23 @@ tasks:
         fi
         go test -race -cover ./...
 
+  test:corpus:
+    desc: Run the extraction corpus against real pages, failing if TOME_TEST_CORPUS_DIR is unset
+    cmds:
+      - |
+        if [ -z "${TOME_TEST_CORPUS_DIR:-}" ]; then
+          echo "TOME_TEST_CORPUS_DIR is not set." >&2
+          echo "Only the synthetic fixtures would run, and those measure nothing" >&2
+          echo "about extraction against sites as they are actually built." >&2
+          echo "" >&2
+          echo "  export TOME_TEST_CORPUS_DIR=/path/to/tomekeeper-corpus" >&2
+          echo "" >&2
+          echo "The pages are not in this repository: they are third-party content." >&2
+          echo "See internal/extract/testdata/pages/README.md for the file format." >&2
+          exit 1
+        fi
+        go test -v -run TestCorpus ./internal/extract/
+
   fuzz:
     desc: Fuzz URL canonicalization, the function deduplication depends on
     vars:
