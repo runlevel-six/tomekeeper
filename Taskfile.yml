@@ -130,7 +130,7 @@ tasks:
         -t {{.IMAGE}}:{{.VERSION}} -t {{.IMAGE}}:latest .
 
   docker:smoke:
-    desc: Verify the container starts and answers its health endpoints
+    desc: Verify the container image — probes, embedded web interface, nonroot, clean SIGTERM
     cmds:
       - ./scripts/smoke.sh {{.IMAGE}}:smoke
 

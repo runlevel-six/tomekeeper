@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Both names, deliberately. This repository's default branch is master, and
+    # listing only main meant every push since the first commit went to a branch
+    # this workflow does not watch — so CI had never run at all, which is a
+    # failure mode with no symptom. Naming both survives a rename in either
+    # direction without silently switching CI off again.
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
