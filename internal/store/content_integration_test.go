@@ -315,6 +315,58 @@ func TestFetchStatusTransitions(t *testing.T) {
 	}
 }
 
+// An article the pipeline gave up on must not be left claiming its images are
+// still coming.
+//
+// The asset scheduler finds work by joining the current content row, so an
+// article that never got a body is invisible to it forever. Against a real feed
+// list that stranded 346 of 1,365 articles at 'pending' — a terminal state
+// wearing a transient label, which any "images outstanding" count would report
+// as work in progress until someone went looking.
+func TestFailedFetchSettlesAssetsStatus(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	bodyless := newArticle(t, s, "https://example.com/comic-strip")
+	if err := s.RecordFetchFailure(ctx, bodyless, store.FetchFailed, "extraction produced no content"); err != nil {
+		t.Fatalf("RecordFetchFailure() = %v", err)
+	}
+	article, err := s.GetArticle(ctx, bodyless)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.AssetsStatus != store.AssetsNone {
+		t.Errorf("AssetsStatus = %q for an article with no body, want %q — nothing will ever localize it",
+			article.AssetsStatus, store.AssetsNone)
+	}
+
+	// The other half of the invariant: an article that *does* have localized
+	// images keeps them when a later re-fetch fails. Clobbering this back to
+	// 'none' would report an archived article as having no images at all.
+	withAssets := newArticle(t, s, "https://example.com/real-article")
+	insertBody(t, s, withAssets, store.ContentParams{
+		ExtractorName:    "trafilatura",
+		ExtractorVersion: "2",
+		ContentOrigin:    store.OriginFetched,
+		HTML:             "<p>A body long enough to be an article.</p>",
+		Text:             "A body long enough to be an article.",
+		WordCount:        7,
+	})
+	if err := s.SetAssetsStatus(ctx, withAssets, store.AssetsOK); err != nil {
+		t.Fatalf("SetAssetsStatus() = %v", err)
+	}
+	if err := s.RecordFetchFailure(ctx, withAssets, store.FetchFailed, "HTTP 503 on a later re-fetch"); err != nil {
+		t.Fatalf("RecordFetchFailure() = %v", err)
+	}
+	if article, err = s.GetArticle(ctx, withAssets); err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.AssetsStatus != store.AssetsOK {
+		t.Errorf("AssetsStatus = %q after a failed re-fetch, want %q kept — the images are still there",
+			article.AssetsStatus, store.AssetsOK)
+	}
+}
+
 func TestPendingFetch(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)
 	ctx := t.Context()

@@ -50,14 +50,42 @@ func (s *Store) RecordFetchSuccess(ctx context.Context, id ArticleID, sha, path 
 // extraction tail routine maintenance rather than a mystery: a list of
 // articles with "HTTP 403" against them is a list of domains that need a rule
 // or an apology.
+//
+// It also settles assets_status, because every caller of this is a point where
+// the pipeline stops: a fetch that was refused, skipped by robots.txt, or an
+// extraction that produced nothing all mean no localization job will ever run.
+// Leaving the column at 'pending' made it a terminal state wearing a transient
+// label — and one the asset scheduler could never clear, since PendingAssets
+// inner-joins the current content row that these articles do not have. Measured
+// against a real feed list, 346 of 1,365 articles sat 'pending' forever.
+//
+// 'none' rather than a new value: §5.5 defines it as "the body had no qualifying
+// images", and an article with no body vacuously has none. That keeps the
+// vocabulary and needs no migration.
 func (s *Store) RecordFetchFailure(ctx context.Context, id ArticleID, status, reason string) error {
 	if status != FetchFailed && status != FetchSkipped {
 		return fmt.Errorf("invalid fetch status %q", status)
 	}
 
+	// The CASE is deliberately narrow. Only a row that is still 'pending' *and*
+	// has no current body is unreachable; anything already 'ok' or 'partial' has
+	// localized images that a later failed re-fetch must not erase, and a
+	// 'pending' row that does have a body is one the scheduler can still see and
+	// will process normally.
 	_, err := s.pool.Exec(ctx, `
-		UPDATE articles SET fetch_status = $2, fetch_error = $3 WHERE id = $1`,
-		id, status, reason)
+		UPDATE articles
+		SET fetch_status = $2,
+		    fetch_error  = $3,
+		    assets_status = CASE
+		        WHEN assets_status = $4
+		         AND NOT EXISTS (
+		               SELECT 1 FROM article_content c
+		               WHERE c.article_id = articles.id AND c.is_current)
+		        THEN $5
+		        ELSE assets_status
+		    END
+		WHERE id = $1`,
+		id, status, reason, AssetsPending, AssetsNone)
 	if err != nil {
 		return fmt.Errorf("recording fetch failure for article %d: %w", id, err)
 	}

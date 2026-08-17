@@ -47,7 +47,7 @@ Seven job types run:
 | `schedule_fetches` | every 60s, and once at startup | Enqueues a fetch for up to 100 articles still at `fetch_status = 'pending'`. In steady state it finds nothing; it exists for backlogs and for jobs lost to a crash. |
 | `fetch_article` | enqueued per new article | Fetches the page subject to robots.txt and rate limiting, stores the gzipped original in the blob store, enqueues extraction. |
 | `extract_article` | enqueued after a fetch, or by `tome reextract` | Runs the extraction ladder over the stored page. Touches no network. |
-| `schedule_assets` | every 60s, and once at startup | Enqueues localization for up to 100 articles still at `assets_status = 'pending'`. |
+| `schedule_assets` | every 60s, and once at startup | Enqueues localization for up to 100 articles still at `assets_status = 'pending'` **that have a current body**. Articles with no body are settled to `none` at failure time rather than being left here unreachable. |
 | `localize_assets` | enqueued after extraction | Downloads the article's images with the article as `Referer`, downscales and transcodes them, rewrites the body to point into the archive, and writes `index.html` and `meta.json`. |
 
 Every job is unique per subject while one is pending or running, so a slow poll

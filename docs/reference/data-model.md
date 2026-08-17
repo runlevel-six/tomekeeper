@@ -82,7 +82,7 @@ The root entity. A feed item, a manual save, and an imported entry are all
 | `raw_fetched_at` | `timestamptz` | |
 | `fetch_status` | `text` | `pending`, `ok`, `failed`, `skipped`. Constrained by `CHECK`. M1 leaves everything `pending`. |
 | `fetch_error` | `text` | |
-| `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized (M3). |
+| `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized (M3). `pending` is strictly transient: an article whose pipeline ended without a body is set to `none` when the failure is recorded, because the asset scheduler joins the current content row and could never reach it otherwise. |
 
 **There is deliberately no `origin` or `immutable` column here.** This row is
 shared by every user, so "how did this arrive" has no single answer.
