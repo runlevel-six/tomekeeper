@@ -66,8 +66,19 @@ func (s *Server) Handler() http.Handler { return s.http.Handler }
 // Run listens and serves until ctx is canceled, then shuts down gracefully
 // within the configured timeout. It returns nil on a clean shutdown.
 func (s *Server) Run(ctx context.Context) error {
-	ln, err := net.Listen("tcp", s.http.Addr)
+	// ListenConfig rather than net.Listen so that a shutdown signal arriving
+	// while the socket is still being bound cancels the bind instead of being
+	// noticed only afterwards.
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", s.http.Addr)
 	if err != nil {
+		// A cancellation arriving while the socket is still being bound is a
+		// shutdown, not a failure: the caller asked to stop before serving
+		// began, and this function's contract is to return nil on a clean
+		// shutdown. A genuine bind failure — an occupied port — still surfaces.
+		if ctx.Err() != nil {
+			return nil
+		}
 		return err
 	}
 

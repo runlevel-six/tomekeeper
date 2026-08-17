@@ -38,7 +38,10 @@ func importOPML(args []string, stdout, stderr io.Writer) int {
 	}
 	path := fs.Arg(0)
 
-	file, err := os.Open(path)
+	// G304 wants a constant path, but a variable one is the entire command: the
+	// operator names the OPML file to import. Nothing here is reachable by a
+	// remote caller.
+	file, err := os.Open(path) //nolint:gosec // the path is the operator's own argument
 	if err != nil {
 		fmt.Fprintf(stderr, "tome import-opml: %v\n", err)
 		return exitUsage

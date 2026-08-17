@@ -316,7 +316,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 	const promoHeavy = `<!DOCTYPE html><html lang="en"><head><title>Notes</title></head><body>
 	  <div class="promo">Subscribe today and save forty percent on an annual membership. Members get
 	  unlimited access to the full archive, the weekly newsletter, exclusive events, and the complete
-	  back catalogue going back decades. Cancel any time, no questions asked, money back in full.</div>
+	  back catalog going back decades. Cancel any time, no questions asked, money back in full.</div>
 	  <div data-role="story-body">
 	    <p>The measure that matters for an archive is not how many pages were saved but how many still
 	    render years later. A saved page that depends on a stylesheet from a lapsed domain is a saved

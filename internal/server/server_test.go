@@ -33,19 +33,31 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func get(t *testing.T, h http.Handler, path string) (*http.Response, map[string]any) {
+// response is the part of a recorded reply that outlives its body: everything
+// the tests below actually assert on.
+//
+// Deliberately not an *http.Response. Handing one back would make each caller
+// responsible for closing a body that get has already drained, which is both
+// the wrong ownership and what bodyclose correctly complains about.
+type response struct {
+	StatusCode int
+	Header     http.Header
+}
+
+func get(t *testing.T, h http.Handler, path string) (response, map[string]any) {
 	t.Helper()
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+
 	res := rec.Result()
-	t.Cleanup(func() { _ = res.Body.Close() })
+	defer func() { _ = res.Body.Close() }()
 
 	var body map[string]any
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatalf("GET %s: decoding body: %v", path, err)
 	}
-	return res, body
+	return response{StatusCode: res.StatusCode, Header: res.Header}, body
 }
 
 // The M0 acceptance criterion, at the handler level. The container-level
@@ -145,7 +157,7 @@ func TestUnknownPathIs404(t *testing.T) {
 	srv := server.New(testConfig(), discardLogger())
 
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	srv.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("GET /nope status = %d, want %d", rec.Code, http.StatusNotFound)
@@ -156,7 +168,7 @@ func TestProbesRejectNonGET(t *testing.T) {
 	srv := server.New(testConfig(), discardLogger())
 
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+	srv.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/healthz", nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST /healthz status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
@@ -191,7 +203,8 @@ func TestRunServesAndShutsDownCleanly(t *testing.T) {
 // A port already in use must fail loudly at startup rather than logging and
 // carrying on with no listener.
 func TestRunFailsOnUnavailablePort(t *testing.T) {
-	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	occupied, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserving a port: %v", err)
 	}

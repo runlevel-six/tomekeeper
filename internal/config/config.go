@@ -159,8 +159,8 @@ func Load(lookup LookupFunc) (*Config, error) {
 
 	// TOME_DATABASE_URL — required.
 	raw := get("DATABASE_URL", "")
-	switch {
-	case raw == "":
+	switch raw {
+	case "":
 		problems = append(problems, fmt.Errorf(
 			"%sDATABASE_URL is required: a PostgreSQL connection URL, "+
 				"for example postgres://tome:password@localhost:5432/tome?sslmode=disable", Prefix))

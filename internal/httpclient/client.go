@@ -484,7 +484,10 @@ func defaultJitter(d time.Duration) time.Duration {
 	if d <= 0 {
 		return 0
 	}
-	return d + time.Duration(rand.Int64N(int64(d)/4+1))
+	// Retry spreading is a scheduling concern, not a secret. An adversary who
+	// could predict this jitter would learn when a retry lands, which is neither
+	// useful nor hidden — the request itself is about to arrive at their server.
+	return d + time.Duration(rand.Int64N(int64(d)/4+1)) //nolint:gosec // jitter needs spread, not unpredictability
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

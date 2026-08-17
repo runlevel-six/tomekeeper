@@ -220,7 +220,7 @@ func TestRobotsDisallow(t *testing.T) {
 
 	c, _ := newTestClient(t, Options{MaxAttempts: 1})
 
-	if _, err := c.Get(t.Context(), srv.URL+"/private/secret", nil); !errors.Is(err, ErrDisallowedByRobots) {
+	if _, err := c.Get(t.Context(), srv.URL+"/private/secret", nil); !errors.Is(err, ErrDisallowedByRobots) { //nolint:bodyclose // asserts the call fails, so the discarded response is nil
 		t.Errorf("Get() on a disallowed path = %v, want ErrDisallowedByRobots", err)
 	}
 	if got := articleRequests.Load(); got != 0 {
@@ -289,7 +289,7 @@ func TestRobotsSkippedForFeeds(t *testing.T) {
 
 	// The same path without the exemption is refused, proving the exemption is
 	// what let it through.
-	if _, err := c.Get(t.Context(), srv.URL+"/feed.xml", nil); !errors.Is(err, ErrDisallowedByRobots) {
+	if _, err := c.Get(t.Context(), srv.URL+"/feed.xml", nil); !errors.Is(err, ErrDisallowedByRobots) { //nolint:bodyclose // asserts the call fails, so the discarded response is nil
 		t.Errorf("Get() without SkipRobots = %v, want ErrDisallowedByRobots", err)
 	}
 }
@@ -439,7 +439,7 @@ func TestReadBodyRejectsOversizedResponse(t *testing.T) {
 func TestRejectsURLWithoutHost(t *testing.T) {
 	c, _ := newTestClient(t, Options{MaxAttempts: 1})
 
-	if _, err := c.Get(t.Context(), "/relative/path", nil); err == nil {
+	if _, err := c.Get(t.Context(), "/relative/path", nil); err == nil { //nolint:bodyclose // asserts the call fails, so the discarded response is nil
 		t.Error("Get() with a relative URL = nil, want an error")
 	}
 }
@@ -457,7 +457,7 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 
-	if _, err := c.Do(ctx, Request{URL: srv.URL + "/slow", SkipRobots: true}); err == nil {
+	if _, err := c.Do(ctx, Request{URL: srv.URL + "/slow", SkipRobots: true}); err == nil { //nolint:bodyclose // asserts the call fails, so the discarded response is nil
 		t.Error("Do() = nil, want the canceled context to abandon the request")
 	}
 }
