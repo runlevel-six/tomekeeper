@@ -164,6 +164,31 @@ du -sh "$TOME_BLOB_ROOT/assets"     # images
 > magnitude. Run `tome archive stats` once your archive passes a thousand
 > articles and replace this section with what it actually says.
 
+## Permissions
+
+Everything written under `TOME_BLOB_ROOT` is created with:
+
+| | Mode | |
+|---|---|---|
+| Directories | `0750` | owner full, group read and traverse, no world access |
+| Files | `0640` | owner read/write, group read, no world access |
+
+Group read is deliberate: it lets a backup process replicate the tree without
+running as the same user as the worker. World access is withheld because the
+archive is a complete record of one person's reading.
+
+These are applied at creation time. Changing them does not rewrite files already
+in the tree — use `find` if you want an existing archive brought into line:
+
+```sh
+find "$TOME_BLOB_ROOT" -type d -exec chmod 0750 {} +
+find "$TOME_BLOB_ROOT" -type f -exec chmod 0640 {} +
+```
+
+Whatever the mode, the owner can always open `index.html` directly, which is the
+property [principle 2.4](../explanation/why-the-filesystem-is-the-archive.md)
+depends on.
+
 ## Backups
 
 Two things to back up, with different characteristics:

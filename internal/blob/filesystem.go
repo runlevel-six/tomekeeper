@@ -11,6 +11,21 @@ import (
 	"strings"
 )
 
+// Permissions for everything this store creates.
+//
+// Group-readable but not world-readable. The archive is a complete record of
+// what one person reads, which is worth keeping off a shared machine's
+// world-readable paths; group read is retained deliberately so the §10 backup
+// job can replicate the tree without running as the worker's own user.
+//
+// Principle 2.4 is unaffected either way: opening index.html with the service
+// stopped is something the owner does, and the owner can always read its own
+// archive.
+const (
+	dirMode  fs.FileMode = 0o750
+	fileMode fs.FileMode = 0o640
+)
+
 // Filesystem stores blobs as files under a root directory.
 type Filesystem struct {
 	root string
@@ -26,7 +41,7 @@ func NewFilesystem(root string) (*Filesystem, error) {
 	if !filepath.IsAbs(root) {
 		return nil, fmt.Errorf("blob root %q must be an absolute path", root)
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(root, dirMode); err != nil {
 		return nil, fmt.Errorf("creating blob root %s: %w", root, err)
 	}
 	return &Filesystem{root: root}, nil
@@ -48,7 +63,7 @@ func (f *Filesystem) Put(_ context.Context, path string, r io.Reader) error {
 	}
 
 	dir := filepath.Dir(full)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("creating %s: %w", dir, err)
 	}
 
@@ -76,7 +91,7 @@ func (f *Filesystem) Put(_ context.Context, path string, r io.Reader) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("closing %s: %w", path, err)
 	}
-	if err := os.Chmod(tmpName, 0o644); err != nil {
+	if err := os.Chmod(tmpName, fileMode); err != nil {
 		return fmt.Errorf("setting permissions on %s: %w", path, err)
 	}
 	if err := os.Rename(tmpName, full); err != nil {
@@ -92,7 +107,10 @@ func (f *Filesystem) Get(_ context.Context, path string) (io.ReadCloser, error) 
 		return nil, err
 	}
 
-	file, err := os.Open(full)
+	// resolve has already confirmed the path stays inside the root, which is
+	// what G304 is asking about; see its doc comment for why that check is a
+	// security boundary rather than tidiness.
+	file, err := os.Open(full) //nolint:gosec // path validated by resolve
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%s: %w", path, ErrNotFound)
 	}
