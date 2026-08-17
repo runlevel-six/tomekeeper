@@ -1,13 +1,13 @@
 // Package session issues and reads the credential that identifies a signed-in
 // user.
 //
-// M4 has exactly one implementation, a signed and encrypted cookie, chosen
+// There is exactly one implementation, a signed and encrypted cookie, chosen
 // because a single-user reader does not need revocation and a cookie needs no
-// table, no cleanup, and no query per request. The interface exists anyway: M9
-// adds more users, and revocation starts to matter the moment a second person
-// has an account. Keeping handlers behind Store means adding a database-backed
-// implementation later is a new type plus a migration, rather than an edit to
-// every handler that currently reads a cookie inline.
+// table, no cleanup, and no query per request. The interface exists anyway:
+// revocation starts to matter the moment a second person has an account. Keeping
+// handlers behind Store means adding a database-backed implementation later is a
+// new type plus a migration, rather than an edit to every handler that currently
+// reads a cookie inline.
 package session
 
 import (

@@ -1,7 +1,7 @@
 // Package server is the HTTP surface of `tome serve`.
 //
-// At M0 it serves only the health endpoints. The web UI (M4) and Fever API
-// (M5) mount onto the same mux.
+// Health endpoints, the web interface, and — later — the Fever API all mount
+// onto the same mux.
 package server
 
 import (
@@ -21,8 +21,8 @@ import (
 // Check is a named readiness probe for one dependency. A nil error means the
 // dependency is usable right now.
 //
-// M0 registers none: there is nothing to depend on yet. M1 registers the
-// database, M3 the blob root. See readyz in health.go for what that means.
+// `tome serve` registers the database. See readyz in health.go for what a
+// failing check does and, just as importantly, what it does not do.
 type Check struct {
 	Name string
 	Func func(context.Context) error
@@ -31,8 +31,8 @@ type Check struct {
 // Deps are the collaborators the web interface needs.
 //
 // Separate from Config because these are wired objects rather than settings, and
-// a zero Deps is meaningful: it yields a health-only server, which is what M0
-// through M3 ran and what the health tests still exercise without a database.
+// a zero Deps is meaningful: it yields a health-only server, which is what the
+// health tests exercise without needing a database.
 type Deps struct {
 	// Store is the data layer. Nil mounts no web interface.
 	Store *store.Store

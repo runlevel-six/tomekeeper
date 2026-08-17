@@ -10,7 +10,7 @@ import (
 
 // archiveCmd reports on the archive.
 //
-// The measurement exists because M3's acceptance criterion asks for storage to
+// The measurement exists because the acceptance criterion asks for storage to
 // be measured against real articles and recorded. A number from someone's
 // actual reading is worth more than any estimate, and this is how they get it.
 func archiveCmd(args []string, stdout, stderr io.Writer) int {

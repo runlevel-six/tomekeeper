@@ -151,8 +151,8 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 
 	// The password is set here rather than by `tome serve`, so the cleartext
 	// exists only in the migration step and never in the long-running process.
-	// Unset is not an error: M1 through M3 have no login surface, and a worker
-	// does not need one.
+	// Unset is not an error: a worker needs no login, and neither does an archive
+	// nobody has signed into yet.
 	if cfg.Password == "" {
 		fmt.Fprintf(stdout, "no %sPASSWORD set, so no password was changed\n", config.Prefix)
 		fmt.Fprintln(stdout, "the web interface cannot be signed into until one is")

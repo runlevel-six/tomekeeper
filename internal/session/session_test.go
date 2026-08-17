@@ -1,6 +1,7 @@
 package session_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -126,13 +127,33 @@ func TestTamperedCookieIsRejected(t *testing.T) {
 	}
 	original := rec.Result().Cookies()[0].Value
 
+	// Mutations are applied to the decoded bytes, not to the base64 text.
+	//
+	// Flipping a base64 character looks equivalent and is not: the final character
+	// of this cookie carries two insignificant bits, and Go's decoder is lenient
+	// about them, so several characters decode to identical bytes. A test that
+	// edited the last character therefore passed most of the time and failed
+	// roughly one run in sixteen — the cookie really was unchanged.
+	mutate := func(at int) string {
+		raw, err := base64.RawURLEncoding.DecodeString(original)
+		if err != nil {
+			t.Fatalf("decoding the cookie we just issued: %v", err)
+		}
+		if at < 0 {
+			at += len(raw)
+		}
+		raw[at] ^= 0x01
+		return base64.RawURLEncoding.EncodeToString(raw)
+	}
+
 	mutations := map[string]string{
-		"flipped last character":  original[:len(original)-1] + flip(original[len(original)-1]),
-		"flipped first character": flip(original[0]) + original[1:],
-		"truncated":               original[:len(original)/2],
-		"empty":                   "",
-		"not base64":              "!!! not base64 !!!",
-		"appended":                original + "AAAA",
+		"flipped a ciphertext bit": mutate(-1),
+		"flipped a nonce bit":      mutate(0),
+		"flipped a payload bit":    mutate(len(original) / 3),
+		"truncated":                original[:len(original)/2],
+		"empty":                    "",
+		"not base64":               "!!! not base64 !!!",
+		"appended":                 original + "AAAA",
 	}
 
 	for name, value := range mutations {
@@ -145,13 +166,6 @@ func TestTamperedCookieIsRejected(t *testing.T) {
 			}
 		})
 	}
-}
-
-func flip(b byte) string {
-	if b == 'A' {
-		return "B"
-	}
-	return "A"
 }
 
 // A cookie minted under a different key must not be accepted. This is what makes

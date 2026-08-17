@@ -7,7 +7,7 @@ stores the result as files on disk that outlive the application.
 
 The binary is `tome`.
 
-> **Status: M4 (read and search).** The service polls feeds, fetches the linked
+> **Status: early, and usable.** The service polls feeds, fetches the linked
 > pages politely, extracts readable bodies, localizes the images, writes each
 > article as a standalone page that opens in a browser with nothing running — and
 > now serves a web interface to read it in, with full-text search across the whole

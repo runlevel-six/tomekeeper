@@ -19,7 +19,7 @@ import (
 // reextract queues re-extraction of articles whose bodies were produced by an
 // older extractor version.
 //
-// This is the payoff for principle 2.2. Because the raw fetch was kept, an
+// This is the payoff for keeping the raw fetch. Because it was kept, an
 // improvement to extraction can be applied to the whole archive — including
 // articles from a decade ago, and including articles whose sites no longer
 // exist — without asking a single server for anything.
@@ -108,7 +108,7 @@ func queueReextractions(
 
 	for {
 		// Candidates are selected by the store with `NOT immutable` in the
-		// WHERE clause rather than filtered here. That is deliberate: M2's
+		// WHERE clause rather than filtered here. That is deliberate: the
 		// acceptance criterion is that imported bodies are *provably* skipped,
 		// and a WHERE clause is a proof while a conditional in a loop is a
 		// promise.

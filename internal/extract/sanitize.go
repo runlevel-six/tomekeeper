@@ -73,7 +73,7 @@ func (s *sanitizer) sanitize(body string) string {
 //
 // Two reasons this has to happen. The archive is served from a different path
 // than the origin, so a relative link would resolve to the wrong place; and
-// M3's asset pipeline needs absolute image URLs to fetch, since it works from
+// the asset pipeline needs absolute image URLs to fetch, since it works from
 // the stored body rather than from the live page.
 func resolveURLs(body string, base *url.URL) string {
 	if base == nil {

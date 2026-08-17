@@ -91,7 +91,8 @@ func (s *Server) render(w http.ResponseWriter, status int, page string, data any
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// The archive renders markup from arbitrary websites. Extraction sanitizes it
-	//, but a second, independent restraint costs one header.
+	// before it is ever stored, but a second, independent restraint costs one
+	// header.
 	//
 	// Everything is 'self' and nothing is 'unsafe-inline'. That is affordable
 	// precisely because the assets are vendored and the images are localized: a

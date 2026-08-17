@@ -23,6 +23,12 @@
 /docs/plan.md
 /docs/pending-decisions.md
 
+# Design work in progress. Logos, palettes, and mockups live here while they are
+# still being decided; anything that becomes a shipped asset moves into
+# internal/server/static/ and is committed there deliberately.
+/design/
+/logo-and-theme-*.png
+
 # Real exports used to exercise the importers and measure the archive. These are
 # a subscription list and a complete reading history — personal data that must
 # never be published, and third-party article content besides. Anonymized

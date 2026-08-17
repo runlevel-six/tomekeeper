@@ -57,7 +57,7 @@ func (LocalizeAssetsArgs) InsertOpts() river.InsertOpts {
 // content addresses, rewrites the body to point at them, and writes the
 // article's files.
 //
-// This is where principle 2.4 becomes literally true. After this job, the
+// This is where "files are the archive" becomes literally true. After this job, the
 // article is a directory containing a page that opens in a browser with this
 // service stopped, the database gone, and the machine offline.
 type LocalizeAssetsWorker struct {
@@ -74,8 +74,8 @@ type LocalizeAssetsWorker struct {
 	// The database check in resolve is a check-then-act: two articles sharing an
 	// image, landing on two workers at the same moment, both miss it and both
 	// fetch. The origin then serves one request per worker slot for a picture
-	// the archive needs once, which is the impoliteness B4 and principle 2.6
-	// exist to prevent. It is also what M3's "same image across ten articles"
+	// the archive needs once, which is the impoliteness the politeness rules
+	// exist to prevent. It is also what the "same image across ten articles"
 	// criterion measures.
 	//
 	// Per-process, deliberately. Two worker replicas would still duplicate
@@ -362,7 +362,8 @@ func (ScheduleAssetsArgs) InsertOpts() river.InsertOpts {
 // ScheduleAssetsWorker enqueues localization for articles still pending.
 //
 // Like the fetch scheduler, this finds nothing in steady state: extraction
-// enqueues the job directly. It covers the backlog from before M3 existed and
+// enqueues the job directly. It covers the backlog from before the asset
+// pipeline existed and
 // anything lost to a crash.
 type ScheduleAssetsWorker struct {
 	river.WorkerDefaults[ScheduleAssetsArgs]

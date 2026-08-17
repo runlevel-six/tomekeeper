@@ -122,7 +122,7 @@ func TestSanitizationRemovesActiveContent(t *testing.T) {
 	}
 }
 
-// M3's asset pipeline works from the stored body rather than the live page, so
+// The asset pipeline works from the stored body rather than the live page, so
 // every reference in it has to be absolute by the time it is stored.
 func TestRelativeURLsAreResolved(t *testing.T) {
 	tc := findCase(t, "hostile-markup")

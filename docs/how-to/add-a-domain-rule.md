@@ -74,7 +74,7 @@ stray argument and prints the usage text instead of saving anything.
 | `--selector` | CSS selector for the article body. Extraction uses this instead of the heuristics. |
 | `--strip` | Selector removed before extraction. Repeat for several. |
 | `--rate` | Per-host requests per second, overriding `TOME_FETCH_RPS`. Use it for a site that has asked you to slow down. |
-| `--requires-js` | Marks the domain as needing a headless render. Has no effect until M8. |
+| `--requires-js` | Marks the domain as needing a headless render. Has no effect until headless rendering exists. |
 | `--notes` | Why this rule exists. Write something; you will not remember. |
 
 Rules apply to subdomains. A rule for `example.com` covers `blog.example.com`

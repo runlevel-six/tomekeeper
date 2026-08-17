@@ -12,7 +12,7 @@ store, and the article row records where. The extracted body is derived from
 that copy, not from the network.
 
 This costs disk — roughly a fifth of the page after compression, kept forever,
-for every article — and it is the single most important thing M2 does.
+for every article — and it is the single most important thing the fetcher does.
 
 The reason is arithmetic. Extraction improves: a library gets better, a
 threshold gets tuned, someone writes a rule for a site that never worked. If
@@ -34,7 +34,7 @@ Extraction runs in order and stops at the first acceptable result:
 1. **A domain rule's CSS selector**, if the host has one.
 2. **go-trafilatura**, the primary extractor.
 3. **go-readability**, the fallback.
-4. *Headless rendering* — M8, for domains flagged `requires_js`.
+4. *Headless rendering* — planned, for domains flagged `requires_js`.
 5. **The feed's own body**, if everything else failed.
 
 Two extractors rather than one because they fail differently. Trafilatura has
@@ -181,7 +181,7 @@ whatever session the reader has. So:
   does not leak the reader's location to sites it links to.
 - Every reference is resolved to an absolute URL *before* sanitization, against
   the article's own address. A relative link in stored markup would otherwise
-  resolve against whatever page displays it — and M3's asset pipeline works
+  resolve against whatever page displays it — and the asset pipeline works
   from the stored body, so it needs absolute image URLs to fetch.
 
 ## Where the tail lives

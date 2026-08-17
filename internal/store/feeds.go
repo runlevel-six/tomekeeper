@@ -161,7 +161,7 @@ func (s *Store) RecordPollSuccess(ctx context.Context, userID UserID, feedID Fee
 // RecordPollNotModified records a 304 response.
 //
 // This is the success case that costs nothing, and the acceptance criterion
-// for M1 is that a second poll of unchanged feeds produces mostly these.
+// worth holding to is that a second poll of unchanged feeds produces mostly these.
 func (s *Store) RecordPollNotModified(ctx context.Context, userID UserID, feedID FeedID,
 	interval time.Duration,
 ) error {

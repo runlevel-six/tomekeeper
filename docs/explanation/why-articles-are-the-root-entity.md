@@ -85,7 +85,7 @@ must reach articles by joining through `feed_items` or `article_state`.**
 Selecting from `articles` directly returns the whole household's reading. That
 is why search is specified to join, from the first version, even though there
 is only one user today — the query shape is identical either way, so there is
-no reason to write the one that becomes a leak in M9.
+no reason to write the one that becomes a leak once there is a second reader.
 
 ## See also
 

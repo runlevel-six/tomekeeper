@@ -1,13 +1,13 @@
 // Package jobs defines the background work River performs and wires the
 // client that runs it.
 //
-// At M1 there are two job types. `schedule_feeds` runs on a timer and asks
+// `schedule_feeds` runs on a timer and asks
 // which feeds are due; `poll_feed` polls one of them. The split matters: the
 // scheduler is one cheap query, while a poll is a network round trip that may
 // take thirty seconds, and putting both in one job would serialize every feed
 // behind the slowest server in the list.
 //
-// M2 adds fetch_article and extract_article to the same client.
+// fetch_article, extract_article, and localize_assets run on the same client.
 package jobs
 
 import (
@@ -198,7 +198,7 @@ func (ScheduleFetchesArgs) InsertOpts() river.InsertOpts {
 //
 // The poller enqueues a fetch as it discovers each article, so in steady state
 // this finds nothing. It exists for the two cases that matter anyway: the
-// backlog left by M1, which ingested articles before there was a fetcher, and
+// backlog of articles ingested before there was a fetcher, and
 // any article whose fetch job was lost to a crash. Without it, an article that
 // slipped through would sit at 'pending' forever with nothing ever looking at
 // it again.

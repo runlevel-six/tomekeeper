@@ -1,6 +1,6 @@
 // Package archive writes the on-disk form of an article.
 //
-// Principle 2.4: files are the archive, the database is an index. Everything
+// Files are the archive, the database is an index. Everything
 // here exists to make that literally true — a directory per article holding a
 // standalone index.html, the record as meta.json, and the original page as
 // raw.html.gz, with images resolved by relative path into a shared assets tree.

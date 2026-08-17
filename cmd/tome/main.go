@@ -1,7 +1,7 @@
 // Command tome is the tomekeeper binary: feed aggregator and article archive.
 //
 // One binary, several subcommands. `tome serve` runs the HTTP surface;
-// `tome worker` (M1) runs the job pool. They are separate Deployments built
+// `tome worker` runs the job pool. They are separate Deployments built
 // from the same image.
 package main
 

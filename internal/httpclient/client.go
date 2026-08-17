@@ -1,7 +1,7 @@
 // Package httpclient is the single outbound HTTP client shared by every
 // component that talks to the internet.
 //
-// Principle 2.6: be a polite network citizen. This is ethics and self-interest
+// Be a polite network citizen. This is ethics and self-interest
 // at once — impolite fetchers get their addresses banned, and then the archive
 // stops growing. Everything here exists to keep this service welcome on
 // servers it does not own:

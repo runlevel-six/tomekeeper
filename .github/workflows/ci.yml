@@ -139,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # scripts/smoke.sh builds the image itself and then asserts the M0
+      # scripts/smoke.sh builds the image itself and then asserts the
       # acceptance criteria against a running container. Keeping the assertions
       # in the script rather than in workflow steps means they can be run
       # locally, unchanged, when CI disagrees with a developer's machine.

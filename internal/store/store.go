@@ -2,7 +2,7 @@
 //
 // # Scoping
 //
-// Principle 2.8 of the implementation plan: user-scoped data is scoped
+// User-scoped data is scoped
 // structurally, not by convention. Two mechanisms enforce that here.
 //
 // First, UserID is a distinct type rather than an int64. A method that needs a

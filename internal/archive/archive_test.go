@@ -59,7 +59,7 @@ func sampleArticle() archive.Article {
 	}
 }
 
-// The M3 acceptance criterion, and the testing strategy's non-negotiable test.
+// The acceptance criterion, and the testing strategy's non-negotiable test.
 //
 // A generated index.html is opened from a temporary directory with no server
 // running, and every image it references must resolve to a file that actually

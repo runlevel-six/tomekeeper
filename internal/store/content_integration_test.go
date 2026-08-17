@@ -129,7 +129,7 @@ func TestImmutableContentIsNeverReplaced(t *testing.T) {
 	}
 }
 
-// The M2 acceptance criterion: content rows flagged immutable are provably
+// The acceptance criterion: content rows flagged immutable are provably
 // skipped by a bulk reprocess. Provable means excluded by the query.
 func TestReextractCandidatesExcludeImmutable(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)

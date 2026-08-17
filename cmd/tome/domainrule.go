@@ -54,7 +54,7 @@ Actions:
 Flags for set:
   --selector <css>        CSS selector for the article body
   --strip <css>           Selector to remove before extraction (repeatable)
-  --requires-js           Mark the domain as needing a headless render (M8)
+  --requires-js           Mark the domain as needing a headless render
   --rate <rps>            Per-host request rate, overriding TOME_FETCH_RPS
   --notes <text>          Why this rule exists
 
@@ -142,7 +142,7 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 
 	selector := fs.String("selector", "", "CSS selector for the article body")
-	requiresJS := fs.Bool("requires-js", false, "the domain needs a headless render (M8)")
+	requiresJS := fs.Bool("requires-js", false, "the domain needs a headless render")
 	rate := fs.Float64("rate", 0, "per-host request rate in requests per second")
 	notes := fs.String("notes", "", "why this rule exists")
 

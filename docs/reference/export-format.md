@@ -3,7 +3,7 @@
 One format serves three purposes: it is what importers produce, what exports
 emit, and what `meta.json` contains in every article's directory.
 
-That symmetry is deliberate (principle 2.5). Because export uses the same type
+That symmetry is deliberate. Because export uses the same type
 every importer consumes, export is exercised by every import test and cannot
 quietly rot. For a project with one maintainer, a format that only breaks when
 someone finally needs it is the format that loses the archive.
@@ -107,7 +107,7 @@ worse than not reading it.
 
 | Version | Change |
 |---|---|
-| 1 | Initial format (M3). |
+| 1 | Initial format. |
 
 Every future bump gets a row here saying what changed and how to read the older
 version. An archive contains files written by every version this service has
@@ -115,9 +115,10 @@ ever run.
 
 ## Stability
 
-This format is designed at M3 rather than with the importers at M6, because
-`meta.json` cannot exist without it. M6 **consumes** this format; it does not
-invent one. Any change M6 wants is a versioned format change with a row in the
+This format was designed with the archive writer rather than with the importers
+that will consume it, because `meta.json` cannot exist without it. The importers
+**consume** this format; they do not invent one. Any change they want is a
+versioned format change with a row in the
 table above.
 
 ## See also

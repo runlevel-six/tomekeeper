@@ -97,7 +97,7 @@ type Config struct {
 	FetchConcurrency int
 
 	// BlobRoot is the filesystem root of the archive. Raw fetched pages are
-	// stored under it from M2; extracted articles and assets from M3.
+	// stored under it, along with the extracted articles and their images.
 	BlobRoot string
 }
 

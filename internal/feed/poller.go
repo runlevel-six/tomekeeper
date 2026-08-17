@@ -1,8 +1,9 @@
 // Package feed polls subscriptions and turns their entries into article
 // references.
 //
-// Nothing here fetches article pages or extracts content — that is M2. A poll
-// leaves new articles at fetch_status='pending', which is the queue M2's
+// Nothing here fetches article pages or extracts content — those are separate
+// jobs. A poll
+// leaves new articles at fetch_status='pending', which is the queue the
 // fetcher will drain.
 package feed
 
@@ -119,7 +120,7 @@ func (p *Poller) Poll(ctx context.Context, userID store.UserID, feedID store.Fee
 
 	switch {
 	case resp.StatusCode == http.StatusNotModified:
-		// The cheap path, and the one M1's acceptance criteria are about: a
+		// The cheap path, and the one the acceptance criteria are about: a
 		// second poll of an unchanged feed should mostly land here, having
 		// transferred no body at all.
 		interval := p.policy.OnNoChange(f.PollInterval)

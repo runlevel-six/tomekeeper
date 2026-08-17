@@ -10,7 +10,7 @@ commands and settings *are*, see [CLI](../reference/cli.md) and
 
 - `tome serve` — the HTTP surface: web UI, Fever API, health endpoints.
 - `tome worker` — the job pool: feed polling now; fetching, extraction, and
-  assets from M2.
+  assets.
 
 They are deployed as two workloads built from one image. The alternative — one
 process doing both — is simpler to start and wrong to run: extraction is CPU-
@@ -80,7 +80,7 @@ become a crash loop that outlasts the original problem. Readiness failing is
 the correct response: stop sending traffic, keep the process alive, recover
 when the dependency does.
 
-`tome serve` registers one check, the database. The blob root joins it at M3.
+`tome serve` registers one check, the database. The blob root joins it when the asset pipeline lands.
 
 ## What runs where
 
@@ -101,7 +101,7 @@ when the dependency does.
                            │ writes
                            ▼
                     ┌──────────────┐
-                    │  blob store  │  filesystem (M3)
+                    │  blob store  │  filesystem
                     └──────────────┘
                            ▲
                     ┌──────┴───────┐
@@ -109,8 +109,9 @@ when the dependency does.
                     └──────────────┘
 ```
 
-At M1 the worker polls and records references; nothing fetches article pages
-yet, so articles sit at `fetch_status = 'pending'` waiting for M2.
+A poll records references and leaves articles at `fetch_status = 'pending'`;
+fetching them is a separate job, so a slow or blocked site cannot hold up
+ingest.
 
 ## Scheduling
 

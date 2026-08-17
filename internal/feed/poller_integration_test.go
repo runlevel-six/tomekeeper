@@ -12,7 +12,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
-// The whole M1 pipeline against a live database: subscribe, poll, and confirm
+// The whole ingest pipeline against a live database: subscribe, poll, and confirm
 // that a second poll of an unchanged feed transfers nothing and adds nothing.
 //
 // Skips without TOME_TEST_DATABASE_URL. See internal/dbtest.
@@ -99,7 +99,7 @@ func TestPollPipelineAgainstDatabase(t *testing.T) {
 		t.Errorf("the archive holds %d articles after two polls, want 2", count)
 	}
 
-	// M1 stops here: articles are left pending for M2's fetcher.
+	// Polling stops here: articles are left pending for the fetcher.
 	article, err := s.GetArticleByURL(ctx, "https://example.com/first")
 	if err != nil {
 		t.Fatalf("GetArticleByURL() = %v", err)

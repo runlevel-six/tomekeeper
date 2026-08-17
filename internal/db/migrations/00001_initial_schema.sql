@@ -11,7 +11,7 @@
 CREATE TABLE users (
   id            bigserial PRIMARY KEY,
   username      text NOT NULL UNIQUE,
-  -- Empty until authentication lands (M4). The Fever API key is MD5 of
+  -- Empty until authentication lands. The Fever API key is MD5 of
   -- username:password and must be written whenever the password is set, since
   -- it cannot be derived from the hash afterwards.
   password_hash text NOT NULL DEFAULT '',
@@ -70,7 +70,7 @@ CREATE TABLE articles (
     CHECK (assets_status IN ('pending', 'ok', 'partial', 'none'))
 );
 
--- The fetch worker's hot path (M2).
+-- The fetch worker's hot path.
 CREATE INDEX articles_pending_fetch_idx ON articles (first_seen_at)
   WHERE fetch_status = 'pending';
 

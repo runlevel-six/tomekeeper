@@ -130,7 +130,7 @@ tasks:
         -t {{.IMAGE}}:{{.VERSION}} -t {{.IMAGE}}:latest .
 
   docker:smoke:
-    desc: Verify the M0 acceptance criteria against the container image
+    desc: Verify the container starts and answers its health endpoints
     cmds:
       - ./scripts/smoke.sh {{.IMAGE}}:smoke
 

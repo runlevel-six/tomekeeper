@@ -1,7 +1,7 @@
 // Package extract turns a fetched HTML page into a readable article body.
 //
 // Extraction is a *derived, versioned view* over the stored raw fetch, never
-// the authoritative copy (principle 2.2). Extraction quality only improves, so
+// the authoritative copy. Extraction quality only improves, so
 // every body carries the name and version of what produced it and can be
 // regenerated in bulk by `tome reextract` without re-fetching anything.
 //
@@ -10,11 +10,11 @@
 //  1. A domain rule's CSS selector, when one exists for the host.
 //  2. go-trafilatura, the primary extractor.
 //  3. go-readability, the fallback.
-//  4. Headless rendering — M8, for domains flagged requires_js.
+//  4. Headless rendering — planned, for domains flagged requires_js.
 //  5. The feed's own body, when everything else failed.
 //
 // Rung 4 is deliberately absent here: nothing in this package starts a
-// browser. When M8 lands it becomes another Extractor implementation.
+// browser. When that lands it becomes another Extractor implementation.
 package extract
 
 import (
@@ -94,7 +94,8 @@ type Result struct {
 	// Name is which rung produced this, recorded as extractor_name.
 	Name string
 
-	// HTML is the sanitized body. Image sources are absolute; M3 rewrites
+	// HTML is the sanitized body. Image sources are absolute; the asset pipeline
+	// rewrites
 	// them to relative blob paths once the images are localized.
 	HTML string
 

@@ -5,9 +5,10 @@ import (
 	"fmt"
 )
 
-// SeedUserID is the id of the single v1 user. Multi-user is a later milestone
-// (M9); until then this is the only user in the system, and it is created by
-// `tome migrate` from configuration.
+// SeedUserID is the id of the single v1 user.
+//
+// Multi-user is a later milestone; until then this is the only user in the
+// system, and it is created by `tome migrate` from configuration.
 const SeedUserID UserID = 1
 
 // EnsureSeedUser creates or renames the single v1 user and returns its id.
@@ -16,7 +17,7 @@ const SeedUserID UserID = 1
 // tracks TOME_USERNAME: changing the configured name renames the existing user
 // rather than creating a second one, which would orphan every feed.
 //
-// The password hash is left empty. Authentication arrives with M4; there is no
+// The password hash is left empty. Authentication arrives with the web interface; there is no
 // login surface to protect until there is a login.
 func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (UserID, error) {
 	if username == "" {
@@ -42,7 +43,7 @@ func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (User
 	}
 
 	// Inserting an explicit id does not advance the bigserial sequence, so
-	// without this the first user created by M9's signup flow would collide
+	// without this the first user created by a future signup flow would collide
 	// with the seed user. Fixing it here costs nothing; discovering it in two
 	// years costs an afternoon.
 	if _, err := tx.Exec(ctx, `

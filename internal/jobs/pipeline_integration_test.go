@@ -113,7 +113,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// The M2 pipeline end to end: a pending article is fetched, its raw page is
+// The fetch-and-extract pipeline end to end: a pending article is fetched, its raw page is
 // stored, and the ladder produces a body.
 func TestFetchAndExtractPipeline(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)
@@ -429,7 +429,7 @@ func containsArticle(candidates []store.ReextractCandidate, id store.ArticleID) 
 	return false
 }
 
-// The M3 acceptance criterion: the same image across ten articles stores once.
+// The acceptance criterion: the same image across ten articles stores once.
 //
 // Two properties are asserted, and they are different. Storage deduplication
 // comes from content-addressing and would hold even if the image were fetched

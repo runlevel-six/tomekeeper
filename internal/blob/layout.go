@@ -15,10 +15,10 @@ import (
 //
 //	<root>/
 //	  articles/2026/08/the-article-slug-a1b2c3/
-//	      index.html        # standalone, relative asset links   (M3)
-//	      meta.json         # the export record                  (M3)
-//	      raw.html.gz       # the original fetched page           (M2)
-//	  assets/sha256/a1/b2/a1b2c3….avif                            (M3)
+//	      index.html        # standalone, relative asset links
+//	      meta.json         # the export record
+//	      raw.html.gz       # the original fetched page
+//	  assets/sha256/a1/b2/a1b2c3….avif
 //
 // The tree is meant to be navigated by a human with a file manager, ten years
 // from now, with this service long gone. That is why the directory carries a

@@ -196,7 +196,7 @@ FROM feeds;
 `has_etag` being true is why the second poll transferred nothing. `poll_interval`
 will have adjusted itself based on what the poll found.
 
-Now the part M2 added — the article text itself:
+Now the part that matters — the article text itself:
 
 ```sql
 SELECT a.title, c.extractor_name, c.word_count, left(c.content_text, 300)

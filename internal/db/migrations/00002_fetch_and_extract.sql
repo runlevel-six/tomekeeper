@@ -1,4 +1,4 @@
--- M2: fetching article pages and extracting their bodies.
+-- Fetching article pages and extracting their bodies.
 --
 -- Migrations are append-only. 00001 has run, so corrections go here rather
 -- than into that file.
@@ -8,7 +8,8 @@
 -- The feed's own body, kept for the last rung of the extraction ladder.
 --
 -- The poller design requires the feed body as a fallback when fetching the page fails, and
--- M1 stored only the summary. The two are different: feed_summary is the short
+-- The initial schema stored only the summary. The two are different:
+-- feed_summary is the short
 -- teaser most feeds carry, while this is content:encoded, which is sometimes
 -- the entire article and is the only surviving copy when a site goes down
 -- between publication and the next poll.

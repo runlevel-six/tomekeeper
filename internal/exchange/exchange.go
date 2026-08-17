@@ -3,14 +3,15 @@
 //
 // One struct serves both directions. Importers produce it, exports emit it,
 // and `meta.json` in every article's directory is its serialization. That
-// symmetry is principle 2.5, and it is deliberate insurance: because export
+// symmetry is deliberate insurance: because export
 // uses the same type every importer consumes, export is exercised by every
 // import test and cannot quietly rot. For a project with one maintainer, a
 // format that only breaks when someone finally needs it is the format that
 // loses the archive.
 //
-// The type is defined at M3 rather than at M6 with the importers, because the
-// archive writer cannot produce `meta.json` without it. M6 consumes this
+// The type is defined with the archive writer rather than with the importers that
+// will consume it, because the writer cannot produce `meta.json` without it. The
+// importers consume this
 // format; it does not get to invent one.
 package exchange
 

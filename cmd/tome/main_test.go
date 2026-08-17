@@ -8,7 +8,7 @@ import (
 )
 
 // These tests cover the binary's operational contract: exit codes and the
-// messages an operator sees. The M0 acceptance criterion — "exits nonzero with
+// messages an operator sees. The acceptance criterion — "exits nonzero with
 // a clear message when TOME_DATABASE_URL is unset" — is the last case here,
 // and again end to end against a container in scripts/smoke.sh.
 func TestRun(t *testing.T) {
@@ -74,7 +74,7 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// The M0 acceptance criterion. t.Setenv guarantees the variable is absent for
+// The acceptance criterion. t.Setenv guarantees the variable is absent for
 // this test regardless of the developer's shell.
 func TestServeFailsWithoutDatabaseURL(t *testing.T) {
 	t.Setenv("TOME_DATABASE_URL", "")

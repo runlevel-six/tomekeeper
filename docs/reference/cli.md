@@ -44,7 +44,7 @@ Runs the background job pool in the foreground until it receives `SIGINT` or
 Takes no flags or positional arguments.
 
 The worker polls feeds. It runs as a separate process from `tome serve` because
-polling — and, from M2, extraction — is bursty and memory-hungry, and a backlog
+polling, extraction, and image processing are bursty and memory-hungry, and a backlog
 must not be able to make the reader unresponsive. Both are built from the same
 image.
 
@@ -209,7 +209,7 @@ Flags for `set`:
 | `--selector <css>` | CSS selector for the article body. Extraction uses it instead of the heuristics, and it overrides the ratio check. |
 | `--strip <css>` | Selector removed before extraction. Repeatable. |
 | `--rate <rps>` | Per-host request rate, overriding `TOME_FETCH_RPS`. |
-| `--requires-js` | Marks the domain as needing a headless render. No effect until M8. |
+| `--requires-js` | Marks the domain as needing a headless render. No effect until headless rendering exists. |
 | `--notes <text>` | Why the rule exists. |
 
 Rules apply to subdomains: a rule for `example.com` covers `blog.example.com`
@@ -242,7 +242,7 @@ saving; and estimates cost per thousand articles. Raw pages live on the
 filesystem rather than in the database, so the command prints the `du` commands
 that size them rather than guessing.
 
-This exists because M3's acceptance criterion asks for storage across 1,000
+This exists because the acceptance criterion asks for storage across 1,000
 real articles to be measured and recorded. See [Storage
 layout](storage-layout.md#measuring-your-archive).
 
@@ -356,7 +356,7 @@ fails. The whole probe is bounded at 3 seconds.
 
 `tome serve` registers one check, `database`, which pings the connection pool.
 A failing database therefore takes this instance out of the load balancer while
-leaving the process alive to recover. The blob root check arrives with M3.
+leaving the process alive to recover. The blob root check arrives with the asset pipeline.
 
 The `checks` field is omitted entirely when no checks are registered.
 
@@ -379,10 +379,11 @@ among the things that may have just failed to validate.
 
 ## Not yet implemented
 
-| Subcommand | Arrives with |
+| Subcommand | Status |
 |---|---|
-| `tome reindex` — rebuild the search index | M4 |
-| `tome import` / `tome export` | M6 |
+| `tome import` / `tome export` | Planned. The intermediate representation they will use already exists — see [Export format](export-format.md). |
+| `tome reindex` — rebuild the search index | Not currently needed: the search index is a generated column PostgreSQL maintains itself. |
 
-These are listed in the implementation plan and are not yet accepted by the
-binary; invoking one exits `2` as an unknown subcommand.
+Invoking either exits `2` as an unknown subcommand. They are named here so that
+the absence is a documented gap rather than something you conclude from a failed
+command.

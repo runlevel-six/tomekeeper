@@ -7,7 +7,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
-// M4's acceptance criterion, and the scoping discipline's whole reason for
+// the acceptance criterion, and the scoping discipline's whole reason for
 // existing: two users with
 // distinct feed sets, and neither can see, modify, or infer the other's articles.
 //
@@ -35,7 +35,7 @@ func setupTwoReaders(t *testing.T) twoReaders {
 	pool, s, alice := dbtest.SetupWithUser(t)
 	ctx := t.Context()
 
-	// A second user, created directly: M9 owns signup, and this test must not wait
+	// A second user, created directly: there is no signup flow, and this test must not wait
 	// for it.
 	var bob store.UserID
 	if err := pool.QueryRow(ctx,

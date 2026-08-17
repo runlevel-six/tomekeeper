@@ -232,7 +232,7 @@ func TestSearchIsScopedToTheReader(t *testing.T) {
 	}
 }
 
-// M4's acceptance criterion with a number on it: relevant results across the full
+// the acceptance criterion with a number on it: relevant results across the full
 // archive in under 200ms at 10,000 articles.
 func TestSearchPerformanceAt10kArticles(t *testing.T) {
 	pool, s, userID := dbtest.SetupWithUser(t)

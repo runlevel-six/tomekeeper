@@ -60,7 +60,7 @@ func get(t *testing.T, h http.Handler, path string) (response, map[string]any) {
 	return response{StatusCode: res.StatusCode, Header: res.Header}, body
 }
 
-// The M0 acceptance criterion, at the handler level. The container-level
+// The acceptance criterion, at the handler level. The container-level
 // version of the same assertion lives in scripts/smoke.sh.
 func TestHealthzIsAlwaysOK(t *testing.T) {
 	srv := server.New(testConfig(), discardLogger(), server.Deps{})

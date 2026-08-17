@@ -266,7 +266,7 @@ type ReextractCandidate struct {
 // operation over the shared article pool, not a user's view of it.
 //
 // Immutable bodies are excluded in the query rather than skipped in the
-// caller. That is the point of M2's acceptance criterion: an imported article
+// caller. That is the point of the acceptance criterion: an imported article
 // must be *provably* untouched by a bulk reprocess, and a WHERE clause is a
 // proof, while a conditional in a loop is a promise.
 //
@@ -303,7 +303,8 @@ func (s *SystemStore) ReextractCandidates(ctx context.Context, beforeVersion str
 
 // PendingFetch returns articles that have not been fetched yet.
 //
-// The scheduler uses this to drain the backlog left by M1, and to pick up
+// The scheduler uses this to drain a backlog of articles ingested before there
+// was a fetcher, and to pick up
 // anything whose fetch job was lost. It spans users because the article pool
 // is shared; nothing user-specific is returned.
 func (s *SystemStore) PendingFetch(ctx context.Context, limit int) ([]ArticleID, error) {
@@ -328,7 +329,7 @@ func (s *SystemStore) PendingFetch(ctx context.Context, limit int) ([]ArticleID,
 	return ids, rows.Err()
 }
 
-// ExtractionStats counts bodies by extractor, for the M2 acceptance criterion
+// ExtractionStats counts bodies by extractor, for the acceptance criterion
 // and for the feed health view.
 type ExtractionStats struct {
 	Extractor string

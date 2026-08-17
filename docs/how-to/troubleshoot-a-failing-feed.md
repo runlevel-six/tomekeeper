@@ -3,7 +3,7 @@
 A feed that stops producing articles is either failing to fetch, failing to
 parse, or genuinely quiet. This tells them apart.
 
-Until the feed health view exists (M4), the answers come from SQL. Connect with
+Until the feed health view exists, the answers come from SQL. Connect with
 `psql "$TOME_DATABASE_URL"`.
 
 ## Find failing feeds

@@ -31,14 +31,14 @@ entity](../explanation/why-articles-are-the-root-entity.md).
 ### `users`
 
 The single v1 user, created by `tome migrate` from `TOME_USERNAME`. Multi-user
-is M9; the schema is user-scoped from the start regardless.
+is a later milestone; the schema is user-scoped from the start regardless.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `bigserial` | Primary key. The seed user is always `1`. |
 | `username` | `text` | Unique. |
-| `password_hash` | `text` | Empty until authentication lands (M4). |
-| `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API (M5). It cannot be derived from `password_hash`, so it is written whenever the password is set. |
+| `password_hash` | `text` | Empty until authentication lands. |
+| `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API. It cannot be derived from `password_hash`, so it is written whenever the password is set. |
 | `created_at` | `timestamptz` | |
 
 ### `feeds`
@@ -80,9 +80,9 @@ The root entity. A feed item, a manual save, and an imported entry are all
 | `raw_blob_sha` | `text` | SHA-256 of the original fetched bytes. Null for imports with no original. |
 | `raw_blob_path` | `text` | Where the gzipped page is in the blob store. Stored rather than derived: a title can change on a later poll, and a derived path would then point at nothing. |
 | `raw_fetched_at` | `timestamptz` | |
-| `fetch_status` | `text` | `pending`, `ok`, `failed`, `skipped`. Constrained by `CHECK`. M1 leaves everything `pending`. |
+| `fetch_status` | `text` | `pending`, `ok`, `failed`, `skipped`. Constrained by `CHECK`. Polling alone leaves everything `pending`. |
 | `fetch_error` | `text` | |
-| `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized (M3). `pending` is strictly transient: an article whose pipeline ended without a body is set to `none` when the failure is recorded, because the asset scheduler joins the current content row and could never reach it otherwise. |
+| `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized. `pending` is strictly transient: an article whose pipeline ended without a body is set to `none` when the failure is recorded, because the asset scheduler joins the current content row and could never reach it otherwise. |
 
 **There is deliberately no `origin` or `immutable` column here.** This row is
 shared by every user, so "how did this arrive" has no single answer.
@@ -90,7 +90,7 @@ Per-reference provenance lives in `feed_items`, `import_records`, and
 `article_state.saved_at`; per-body provenance lives in
 `article_content.content_origin`.
 
-Additional indexes from M2: `articles_awaiting_extraction_idx` on
+`articles_awaiting_extraction_idx` on
 `(first_seen_at) WHERE fetch_status = 'ok' AND raw_blob_sha IS NOT NULL`, the
 extract worker's hot path.
 
@@ -164,7 +164,7 @@ three feeds has one state rather than three.
 | `saved_at` | `timestamptz` | Non-null marks a manual save, which is one of the per-reference provenance signals. |
 | `read_at` | `timestamptz` | |
 
-Rows are created on demand, not when an article is ingested. M1 writes none;
+Rows are created on demand, not when an article is ingested. Polling writes none;
 unread state is the absence of a row.
 
 ### `assets` and `article_assets`
@@ -194,7 +194,7 @@ Per-domain extraction overrides.
 | `domain` | `text` | Unique. Lowercased on write. A rule applies to subdomains unless a more specific rule exists. |
 | `content_selector` | `text` | CSS selector for the article body. Overrides the heuristics and the ratio check. |
 | `strip_selectors` | `text[]` | Removed before extraction. |
-| `requires_js` | `boolean` | Needs a headless render. No effect until M8. |
+| `requires_js` | `boolean` | Needs a headless render. No effect until headless rendering exists. |
 | `user_agent` | `text` | Reserved; not yet read. |
 | `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. |
 | `notes` | `text` | Why the rule exists. |
@@ -206,11 +206,11 @@ about that site, identical for every reader. Managed with
 ### `tags`, `article_tags`, `highlights`
 
 User-scoped annotation. `tags` is unique per `(user_id, name)`; `article_tags`
-joins articles to tags, so the user scope travels via the tag. Unused until M4.
+joins articles to tags, so the user scope travels via the tag. Unused until the web interface lands.
 
 ### `import_records`
 
-Idempotency bookkeeping for imports (M6).
+Idempotency bookkeeping for imports.
 
 | Column | Type | Notes |
 |---|---|---|

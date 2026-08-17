@@ -1,7 +1,7 @@
 # Politeness and rate limiting
 
 This service fetches pages from servers it does not own, on a schedule, without
-anyone watching. Principle 2.6 of the design says to be a polite network
+anyone watching. The design commits to being a polite network
 citizen, and that is ethics and self-interest at the same time: an impolite
 fetcher gets its address banned, and then the archive stops growing.
 

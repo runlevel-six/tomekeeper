@@ -70,7 +70,7 @@ whether one was configured, which is the operationally useful fact.
 It is also deliberately scoped to one command. `tome serve` authenticates against
 the stored hash and has no use for the cleartext, so the secret belongs to the
 migration step alone. In Kubernetes that means the Secret is mounted on the
-migration Job, not on the long-running Deployment (M7).
+migration Job, not on the long-running Deployment.
 
 ## Example
 

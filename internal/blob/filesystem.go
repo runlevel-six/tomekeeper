@@ -18,7 +18,7 @@ import (
 // world-readable paths; group read is retained deliberately so a backup
 // job can replicate the tree without running as the worker's own user.
 //
-// Principle 2.4 is unaffected either way: opening index.html with the service
+// The archive stays openable either way: opening index.html with the service
 // stopped is something the owner does, and the owner can always read its own
 // archive.
 const (

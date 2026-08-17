@@ -5,7 +5,7 @@ it is addressed.
 
 The layout is designed to be navigated by a person with a file manager, ten
 years from now, with this service gone. That is not a nice-to-have: it is
-principle 2.4, and it is why the directories carry readable names rather than
+the whole point, and it is why the directories carry readable names rather than
 only hashes.
 
 ## The tree
@@ -177,13 +177,14 @@ Three things worth reading off that table when sizing a volume:
 - **Images are the budget.** At 62% of bytes, the asset policy in the asset policy is where
   storage is won or lost, and everything else is rounding.
 - **Raw pages are cheaper than they look.** Gzipped HTML averages 26.6 KB, so
-  principle 2.2's promise — keep the original so every future extractor
+  the promise that the original is kept so every future extractor
   improvement reaches the whole archive — costs a fifth of the archive rather
   than the half a small text-heavy sample suggests.
 - **The body is stored twice, deliberately.** `index.html` and `meta.json`
   together are 14% of the archive because the export record embeds the body while
-  the standalone page wraps it for a browser. That is principle 2.4 and principle
-  2.5 both being literally true at once, and 14% is the price.
+  the standalone page wraps it for a browser. That is "files are the archive" and
+  "export is symmetric with import" both being literally true at once, and 14% is
+  the price.
 
 Dedup is doing real work at this scale: 2,690 image references collapsed to 1,930
 stored files, saving **41.4 MB — 28%** of what a naive fetch-per-reference would
@@ -219,7 +220,7 @@ find "$TOME_BLOB_ROOT" -type f -exec chmod 0640 {} +
 ```
 
 Whatever the mode, the owner can always open `index.html` directly, which is the
-property [principle 2.4](../explanation/why-the-filesystem-is-the-archive.md)
+property [the filesystem archive](../explanation/why-the-filesystem-is-the-archive.md)
 depends on.
 
 ## Backups

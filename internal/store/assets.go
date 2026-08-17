@@ -179,7 +179,7 @@ func (s *SystemStore) PendingAssets(ctx context.Context, limit int) ([]ArticleID
 
 // ArchiveStats summarizes what the archive holds, for `tome archive stats`.
 //
-// The M3 acceptance criterion asks for storage to be measured against real
+// The acceptance criterion asks for storage to be measured against real
 // articles and recorded. This is the measurement.
 type ArchiveStats struct {
 	Articles        int64

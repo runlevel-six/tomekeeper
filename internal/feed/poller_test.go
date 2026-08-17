@@ -164,7 +164,7 @@ func TestPollOmitsEmptyConditionalHeaders(t *testing.T) {
 	}
 }
 
-// The M1 acceptance criterion: a second poll of an unchanged feed produces no
+// The acceptance criterion: a second poll of an unchanged feed produces no
 // new articles.
 func TestSecondPollOfUnchangedFeedAddsNothing(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

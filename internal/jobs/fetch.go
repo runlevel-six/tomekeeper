@@ -49,7 +49,7 @@ func (FetchArticleArgs) InsertOpts() river.InsertOpts {
 
 // FetchArticleWorker downloads an article page and stores the raw bytes.
 //
-// Storing the raw fetch is principle 2.2: extraction quality only improves, so
+// The raw fetch is stored because extraction quality only improves, so
 // a body is a derived view that can be regenerated. If the page were not kept,
 // every future extraction improvement would apply only to articles fetched
 // after it, and the decade of archive behind it would stay as bad as the day
@@ -81,7 +81,7 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 
 	if article.FetchStatus == store.FetchOK && article.RawBlobPath != "" {
 		// Already fetched. Re-fetching would be a request the origin did not
-		// need to serve, and principle 2.3 says a re-fetch is a new version
+		// need to serve, and a re-fetch is a new version
 		// rather than an overwrite — a decision for `tome reextract`, not for
 		// a duplicate job.
 		log.Debug("article already fetched, skipping")

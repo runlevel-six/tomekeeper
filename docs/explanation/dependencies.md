@@ -10,7 +10,7 @@ worse than the risk of the dependency.*
 
 ## Go module dependencies
 
-Twelve libraries as of M3, across fourteen modules — River publishes its driver and
+Twelve libraries across fourteen modules — River publishes its driver and
 type packages separately. Each is here because the standard library cannot do
 the job and doing it by hand would be worse than the risk of the dependency.
 
@@ -48,11 +48,11 @@ Still done with the standard library, deliberately:
 
 Named here in advance so that adding one is a decision that was already made
 and reviewed, rather than a surprise in a diff. Each moves into the list above,
-with its justification, in the milestone that introduces it.
+with its justification, when the work that needs it lands.
 
-| Dependency | Milestone | Why it will be needed |
+| Dependency | For | Why it will be needed |
 |---|---|---|
-| `chromedp` | M8 | Driving a headless browser for the small set of domains that render their content in JavaScript. |
+| `chromedp` | headless rendering | Driving a headless browser for the small set of domains that render their content in JavaScript. |
 
 ## Build and CI dependencies
 

@@ -61,7 +61,8 @@ func TestEnsureSeedUserIsIdempotent(t *testing.T) {
 }
 
 // Seeding with an explicit id=1 does not advance the bigserial sequence, so
-// without the fix in EnsureSeedUser the first user M9 creates would collide.
+// without the fix in EnsureSeedUser the first user a signup flow creates would
+// collide.
 func TestSeedUserAdvancesTheIDSequence(t *testing.T) {
 	pool, _, _ := dbtest.SetupWithUser(t)
 
@@ -76,7 +77,7 @@ func TestSeedUserAdvancesTheIDSequence(t *testing.T) {
 	}
 }
 
-// The M1 acceptance criterion: duplicate articles across feeds collapse to one
+// The acceptance criterion: duplicate articles across feeds collapse to one
 // articles row.
 func TestArticleDeduplicationAcrossFeeds(t *testing.T) {
 	_, s, userID := dbtest.SetupWithUser(t)
@@ -188,12 +189,13 @@ func TestArticleUpsertFillsGapsWithoutClobbering(t *testing.T) {
 		t.Errorf("PublishedAt = %v, want %v", got.PublishedAt, published)
 	}
 	if got.FetchStatus != "pending" {
-		t.Errorf("FetchStatus = %q, want %q — M1 leaves articles for M2 to fetch", got.FetchStatus, "pending")
+		t.Errorf("FetchStatus = %q, want %q — polling leaves articles for the fetcher", got.FetchStatus, "pending")
 	}
 }
 
-// The scoping discipline, enforced structurally rather than by convention. This is the M1
-// portion of the isolation guarantee the M4 criteria will test in full.
+// The scoping discipline, enforced structurally rather than by convention. This
+// is the ingest portion; the reading views are covered by the isolation tests in
+// isolation_integration_test.go.
 func TestUserScopingIsolatesFeedsAndItems(t *testing.T) {
 	pool, s, alice := dbtest.SetupWithUser(t)
 	ctx := t.Context()
