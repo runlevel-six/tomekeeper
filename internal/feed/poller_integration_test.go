@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/runlevel-six/tomekeeper/internal/dbtest"
 	"github.com/runlevel-six/tomekeeper/internal/feed"
@@ -68,6 +67,12 @@ func TestPollPipelineAgainstDatabase(t *testing.T) {
 		t.Fatalf("stored ETag = %q, want %q", f.ETag, etag)
 	}
 
+	// Captured because the first poll found items, and OnNewItems halves the
+	// interval rather than resetting it to the floor. Growth from the 304 has to
+	// be measured against this, not against the one-hour default the feed was
+	// created with — the interval is legitimately below that by now.
+	afterFirstPoll := f.PollInterval
+
 	// A due time in the future is exactly right in production, but this test
 	// polls again immediately.
 	second, err := poller.Poll(ctx, userID, feedID)
@@ -118,8 +123,9 @@ func TestPollPipelineAgainstDatabase(t *testing.T) {
 	if f.ConsecutiveFailures != 0 {
 		t.Errorf("ConsecutiveFailures = %d after two successful polls, want 0", f.ConsecutiveFailures)
 	}
-	if f.PollInterval <= time.Hour {
-		t.Errorf("PollInterval = %v, want it to have grown past the initial hour", f.PollInterval)
+	if f.PollInterval <= afterFirstPoll {
+		t.Errorf("PollInterval = %v after a 304, want it to have grown past the %v the first poll left",
+			f.PollInterval, afterFirstPoll)
 	}
 }
 
