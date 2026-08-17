@@ -22,3 +22,14 @@
 # be published with the repository.
 /docs/plan.md
 /docs/pending-decisions.md
+
+# Real exports used to exercise the importers and measure the archive. These are
+# a subscription list and a complete reading history — personal data that must
+# never be published, and third-party article content besides. Anonymized
+# fixtures for the test suite live under testdata/ and are committed there
+# deliberately; nothing matching these patterns is a fixture.
+/private/
+/*.opml
+/*.opml.xml
+/wallabag*.json
+/freshrss-*.json
