@@ -26,6 +26,16 @@ logged at `error` and the process exits `1`.
 
 **Required configuration:** `TOME_DATABASE_URL`.
 
+Serves the web interface as well as the health endpoints. Every page except the
+sign-in form and `/static/` requires a session; a request without one is
+redirected to `/login`, or answered `401` if its `Accept` header asks for
+something other than HTML, so an API client is not handed a login page with a
+`200` on it.
+
+Signing in is impossible until a password exists — see `tome migrate` below. The
+sign-in page says so explicitly rather than reporting a wrong password, because
+the fix is an operator action.
+
 ### `tome worker`
 
 Runs the background job pool in the foreground until it receives `SIGINT` or
@@ -84,11 +94,30 @@ Two migration histories are applied: the application schema, embedded in the
 binary from `internal/db/migrations/`, and River's own job-queue schema, which
 River owns and versions itself.
 
+It also sets the user's password when `TOME_PASSWORD` is present, storing an
+argon2id hash and deriving the Fever API key from the same cleartext. `serve`
+never reads `TOME_PASSWORD`; it authenticates against the stored hash, so the
+secret belongs to this command alone.
+
+Setting a password always rotates the Fever API key. That is unavoidable rather
+than unfortunate: the key is MD5 of `username:password`, which cannot be
+recovered from the hash, so it has to be recomputed while the cleartext exists.
+Mobile clients therefore need reconnecting after any password change.
+
 On success it prints the seeded user and exits `0`:
 
 ```console
 $ tome migrate
 schema up to date; user "tome" is id 1
+no TOME_PASSWORD set, so no password was changed
+the web interface cannot be signed into until one is
+```
+
+```console
+$ TOME_PASSWORD=... tome migrate
+schema up to date; user "tome" is id 1
+password set for "tome"
+the Fever API key changed with it; mobile clients will need reconnecting
 ```
 
 ### `tome import-opml`
@@ -240,6 +269,13 @@ equivalent.
 Served by `tome serve`. Both respond to `GET` and `HEAD`; any other method
 returns `405`. Both set `Cache-Control: no-store` and return
 `application/json; charset=utf-8`.
+
+The web interface is documented as pages rather than endpoints; the routes are
+`/` (unread), `/starred`, `/search`, `/feeds`, `GET` and `POST /login`,
+`POST /logout`, and `/static/`. HTML responses carry
+`Content-Security-Policy: default-src 'none'`, which permits the archive's own
+stylesheet and images and nothing else — no inline script and no third-party
+requests, which is all a localized archive needs.
 
 ### `GET /healthz` — liveness
 

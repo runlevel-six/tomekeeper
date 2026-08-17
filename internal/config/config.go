@@ -47,6 +47,23 @@ type Config struct {
 	// Username is the single v1 user, seeded by `tome migrate`.
 	Username string
 
+	// SessionKey is the secret that session cookies are sealed with.
+	//
+	// Optional. When it is empty, `tome serve` generates one at startup and says
+	// so: sessions then work but do not survive a restart. Absent from LogValue,
+	// like Password.
+	SessionKey string
+
+	// CookieSecure sets the Secure attribute on the session cookie, so it is
+	// only ever sent over HTTPS. On by default.
+	//
+	// Browsers treat localhost as a secure context, so a local first run is
+	// unaffected. It exists as a setting because serving plain HTTP on a LAN
+	// address is a real self-hosted deployment, and there the default would look
+	// like a successful login followed by silently not being logged in — the
+	// cookie is set and then never sent back.
+	CookieSecure bool
+
 	// Password is the cleartext password for that user, read only by
 	// `tome migrate`, which hashes it and derives the Fever API key from it.
 	//
@@ -126,6 +143,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 		LogFormat:  get("LOG_FORMAT", defaultLogFormat),
 		Username:   get("USERNAME", defaultUsername),
 		Password:   get("PASSWORD", ""),
+		SessionKey: get("SESSION_KEY", ""),
 		ContactURL: get("CONTACT_URL", ""),
 		BlobRoot:   get("BLOB_ROOT", defaultBlobRoot),
 	}
@@ -148,6 +166,17 @@ func Load(lookup LookupFunc) (*Config, error) {
 		default:
 			return d
 		}
+	}
+
+	boolean := func(name string, def bool) bool {
+		raw := get(name, strconv.FormatBool(def))
+		b, err := strconv.ParseBool(raw)
+		if err != nil {
+			problems = append(problems, fmt.Errorf(
+				"%s%s %q is not a boolean; use true or false", Prefix, name, raw))
+			return def
+		}
+		return b
 	}
 
 	positiveInt := func(name string, def int) int {
@@ -244,6 +273,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 			Prefix, cfg.PollMinInterval, Prefix, cfg.PollMaxInterval))
 	}
 
+	cfg.CookieSecure = boolean("COOKIE_SECURE", true)
 	cfg.FeedFailureThreshold = positiveInt("FEED_FAILURE_THRESHOLD", defaultFeedFailureThreshold)
 	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
 	cfg.FetchConcurrency = positiveInt("FETCH_CONCURRENCY", defaultFetchConcurrency)
@@ -320,6 +350,11 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("log_format", c.LogFormat),
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
 		slog.String("username", c.Username),
+		// Password and SessionKey are deliberately absent. This list is the only
+		// thing that gets logged, so a secret omitted here cannot leak through a
+		// future careless call.
+		slog.Bool("cookie_secure", c.CookieSecure),
+		slog.Bool("session_key_configured", c.SessionKey != ""),
 		slog.String("contact_url", c.ContactURL),
 		slog.Duration("poll_min_interval", c.PollMinInterval),
 		slog.Duration("poll_max_interval", c.PollMaxInterval),

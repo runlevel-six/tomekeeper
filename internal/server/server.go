@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/runlevel-six/tomekeeper/internal/config"
+	"github.com/runlevel-six/tomekeeper/internal/session"
+	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
 // Check is a named readiness probe for one dependency. A nil error means the
@@ -25,22 +27,55 @@ type Check struct {
 	Func func(context.Context) error
 }
 
+// Deps are the collaborators the web interface needs.
+//
+// Separate from Config because these are wired objects rather than settings, and
+// a zero Deps is meaningful: it yields a health-only server, which is what M0
+// through M3 ran and what the health tests still exercise without a database.
+type Deps struct {
+	// Store is the data layer. Nil mounts no web interface.
+	Store *store.Store
+
+	// Sessions issues and reads the sign-in credential.
+	Sessions session.Store
+}
+
 // Server wraps an http.Server with this application's routes, timeouts, and
 // shutdown behavior.
 type Server struct {
-	log    *slog.Logger
-	cfg    *config.Config
-	checks []Check
-	http   *http.Server
+	log      *slog.Logger
+	cfg      *config.Config
+	checks   []Check
+	http     *http.Server
+	store    *store.Store
+	sessions session.Store
+	ui       *ui
 }
 
 // New builds a server. It does not listen; call Run.
-func New(cfg *config.Config, log *slog.Logger, checks ...Check) *Server {
-	s := &Server{log: log, cfg: cfg, checks: checks}
+//
+// The web interface is mounted only when deps carries what it needs. A template
+// that fails to parse is logged and the interface is left unmounted rather than
+// panicking: the health endpoints are how an orchestrator finds out the process is
+// alive, and taking them down because a page is malformed turns a rendering bug
+// into a crash loop.
+func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Server {
+	s := &Server{log: log, cfg: cfg, checks: checks, store: deps.Store, sessions: deps.Sessions}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
+
+	if s.store != nil && s.sessions != nil {
+		u, err := newUI()
+		switch {
+		case err != nil:
+			s.log.Error("the web interface could not be built; serving health endpoints only", "error", err)
+		default:
+			s.ui = u
+			s.mountWeb(mux)
+		}
+	}
 
 	s.http = &http.Server{
 		Addr:    cfg.HTTPAddr,
@@ -58,6 +93,21 @@ func New(cfg *config.Config, log *slog.Logger, checks ...Check) *Server {
 		ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
 	return s
+}
+
+// mountWeb registers the web interface.
+//
+// Grouped in one place so that "which routes require a session" is answerable by
+// reading nine lines rather than by auditing every handler. Everything except the
+// sign-in pages and the stylesheet goes through requireUser.
+func (s *Server) mountWeb(mux *http.ServeMux) {
+	mux.HandleFunc("GET /static/", s.handleStatic)
+
+	mux.HandleFunc("GET /login", s.handleLoginForm)
+	mux.HandleFunc("POST /login", s.handleLogin)
+	mux.HandleFunc("POST /logout", s.handleLogout)
+
+	mux.HandleFunc("GET /{$}", s.requireUser(s.handleIndex))
 }
 
 // Handler exposes the routed handler for tests that do not want a live socket.

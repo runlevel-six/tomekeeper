@@ -63,7 +63,7 @@ func get(t *testing.T, h http.Handler, path string) (response, map[string]any) {
 // The M0 acceptance criterion, at the handler level. The container-level
 // version of the same assertion lives in scripts/smoke.sh.
 func TestHealthzIsAlwaysOK(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger())
+	srv := server.New(testConfig(), discardLogger(), server.Deps{})
 
 	res, body := get(t, srv.Handler(), "/healthz")
 
@@ -81,7 +81,7 @@ func TestHealthzIsAlwaysOK(t *testing.T) {
 // Liveness must not depend on any registered dependency: a failing database
 // should take this instance out of the load balancer, not get it killed.
 func TestHealthzIgnoresFailingChecks(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger(), server.Check{
+	srv := server.New(testConfig(), discardLogger(), server.Deps{}, server.Check{
 		Name: "database",
 		Func: func(context.Context) error { return errors.New("connection refused") },
 	})
@@ -94,7 +94,7 @@ func TestHealthzIgnoresFailingChecks(t *testing.T) {
 }
 
 func TestReadyzWithNoChecks(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger())
+	srv := server.New(testConfig(), discardLogger(), server.Deps{})
 
 	res, body := get(t, srv.Handler(), "/readyz")
 
@@ -110,7 +110,7 @@ func TestReadyzWithNoChecks(t *testing.T) {
 }
 
 func TestReadyzWithPassingChecks(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger(), server.Check{
+	srv := server.New(testConfig(), discardLogger(), server.Deps{}, server.Check{
 		Name: "database",
 		Func: func(context.Context) error { return nil },
 	})
@@ -127,7 +127,7 @@ func TestReadyzWithPassingChecks(t *testing.T) {
 }
 
 func TestReadyzWithFailingCheck(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger(),
+	srv := server.New(testConfig(), discardLogger(), server.Deps{},
 		server.Check{Name: "healthy", Func: func(context.Context) error { return nil }},
 		server.Check{Name: "database", Func: func(context.Context) error {
 			return errors.New("connection refused")
@@ -154,7 +154,7 @@ func TestReadyzWithFailingCheck(t *testing.T) {
 }
 
 func TestUnknownPathIs404(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger())
+	srv := server.New(testConfig(), discardLogger(), server.Deps{})
 
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
@@ -165,7 +165,7 @@ func TestUnknownPathIs404(t *testing.T) {
 }
 
 func TestProbesRejectNonGET(t *testing.T) {
-	srv := server.New(testConfig(), discardLogger())
+	srv := server.New(testConfig(), discardLogger(), server.Deps{})
 
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/healthz", nil))
@@ -182,7 +182,7 @@ func TestRunServesAndShutsDownCleanly(t *testing.T) {
 	cfg.HTTPAddr = "127.0.0.1:0" // let the kernel pick a free port
 	cfg.ShutdownTimeout = 5 * time.Second
 
-	srv := server.New(cfg, discardLogger())
+	srv := server.New(cfg, discardLogger(), server.Deps{})
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -213,7 +213,7 @@ func TestRunFailsOnUnavailablePort(t *testing.T) {
 	cfg := testConfig()
 	cfg.HTTPAddr = occupied.Addr().String()
 
-	srv := server.New(cfg, discardLogger())
+	srv := server.New(cfg, discardLogger(), server.Deps{})
 
 	if err := srv.Run(t.Context()); err == nil {
 		t.Errorf("Run() = nil, want an error binding to the occupied address %s", cfg.HTTPAddr)

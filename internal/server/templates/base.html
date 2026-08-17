@@ -1,0 +1,28 @@
+{{define "base"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}Tomekeeper{{end}}</title>
+  <link rel="stylesheet" href="/static/tome.css">
+</head>
+<body>
+{{if .User}}
+  <header class="chrome">
+    <a class="brand" href="/">Tomekeeper</a>
+    <nav>
+      <a href="/">Unread</a>
+      <a href="/starred">Starred</a>
+      <a href="/search">Search</a>
+      <a href="/feeds">Feeds</a>
+    </nav>
+    <form class="signout" method="post" action="/logout">
+      <button type="submit">Sign out</button>
+    </form>
+  </header>
+{{end}}
+<main>
+{{block "content" .}}{{end}}
+</main>
+</body>
+</html>{{end}}

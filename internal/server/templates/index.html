@@ -1,0 +1,15 @@
+{{define "title"}}Unread — Tomekeeper{{end}}
+
+{{define "content"}}
+<h1>Unread</h1>
+
+{{/*
+  Slice 2 of M4 establishes authentication; the reading views arrive with the
+  reader queries and templates. This page exists so that a successful sign-in has
+  somewhere to land and so the middleware protecting it can be tested.
+*/}}
+<p class="placeholder">
+  Signed in as <strong>{{.Username}}</strong>.
+  The unread stream is not built yet.
+</p>
+{{end}}

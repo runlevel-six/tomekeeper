@@ -1,0 +1,133 @@
+/*
+ * Hand-written, no build step, served from the binary.
+ *
+ * Deliberately small at this stage: slice 2 of M4 needs a sign-in page and a
+ * frame to hang the reading views on. The reader's typography and the keyboard
+ * affordances come with those views.
+ */
+
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --ink: #1c1b19;
+  --ink-soft: #5c584f;
+  --rule: #ddd8cc;
+  --accent: #7a4b2a;
+  --error: #8a2b20;
+  --measure: 34rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16151a;
+    --surface: #1e1d23;
+    --ink: #e9e5dd;
+    --ink-soft: #a29b8e;
+    --rule: #35333c;
+    --accent: #d8a066;
+    --error: #e08074;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 ui-serif, Georgia, "Times New Roman", serif;
+}
+
+main { padding: 2rem 1.25rem 4rem; }
+
+a { color: var(--accent); }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+}
+
+/* Site chrome, shown only when signed in. */
+.chrome {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9rem;
+}
+
+.brand { font-weight: 700; text-decoration: none; }
+.chrome nav { display: flex; gap: 1rem; }
+.chrome .signout { margin-left: auto; }
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Sign-in page. */
+.signin {
+  max-width: 22rem;
+  margin: 4rem auto;
+  padding: 1.75rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.signin h1 { margin: 0 0 1.25rem; font-size: 1.4rem; }
+
+.signin label {
+  display: block;
+  margin: 0.9rem 0 0.3rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.signin input {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+}
+
+.signin input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.signin button { width: 100%; margin-top: 1.4rem; }
+
+.error {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--error);
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  font-size: 0.95rem;
+}
+
+.placeholder { max-width: var(--measure); color: var(--ink-soft); }

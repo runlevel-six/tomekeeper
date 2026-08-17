@@ -12,6 +12,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/db"
 	"github.com/runlevel-six/tomekeeper/internal/logging"
 	"github.com/runlevel-six/tomekeeper/internal/server"
+	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 	"github.com/runlevel-six/tomekeeper/internal/version"
 )
@@ -39,10 +40,19 @@ func serve(args []string, stderr io.Writer) int {
 	}
 	defer pool.Close()
 
+	sessions, err := newSessionStore(cfg, log)
+	if err != nil {
+		log.Error("cannot set up sessions", "error", err)
+		return exitFailure
+	}
+
 	// Readiness consults the database; liveness deliberately does not. A
 	// Postgres restart should take this instance out of the load balancer, not
 	// get every replica killed and restarted. See docs/reference/cli.md.
-	srv := server.New(cfg, log, server.Check{
+	srv := server.New(cfg, log, server.Deps{
+		Store:    store.New(pool),
+		Sessions: sessions,
+	}, server.Check{
 		Name: "database",
 		Func: func(ctx context.Context) error { return db.Ping(ctx, pool) },
 	})
@@ -52,6 +62,36 @@ func serve(args []string, stderr io.Writer) int {
 		return exitFailure
 	}
 	return exitOK
+}
+
+// newSessionStore builds the session store, generating a key if none is set.
+//
+// A generated key is a deliberate convenience, not an oversight: a first run
+// should work with nothing but a database URL, and Tutorial 1 depends on that. The
+// cost is that every restart invalidates sessions, so it says so loudly and names
+// the setting that fixes it. Anything long-lived wants a configured key.
+func newSessionStore(cfg *config.Config, log *slog.Logger) (*session.Cookie, error) {
+	secret := []byte(cfg.SessionKey)
+	if len(secret) == 0 {
+		generated, err := session.GenerateKey()
+		if err != nil {
+			return nil, err
+		}
+		secret = generated
+		log.Warn("no session key configured, so one was generated for this process; "+
+			"signing in again will be required after every restart",
+			"set", config.Prefix+"SESSION_KEY")
+	}
+
+	if !cfg.CookieSecure {
+		// Worth a line in the log, because it is a deliberate weakening that is
+		// otherwise invisible until someone wonders why the cookie has no Secure
+		// attribute.
+		log.Warn("session cookies are not marked Secure, so they may travel over plain HTTP",
+			"set", config.Prefix+"COOKIE_SECURE=true")
+	}
+
+	return session.NewCookie(secret, session.DefaultTTL, cfg.CookieSecure)
 }
 
 // migrate applies the schema and seeds the single v1 user.

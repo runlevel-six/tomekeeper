@@ -1,0 +1,30 @@
+{{define "title"}}Sign in — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="signin">
+  <h1>Tomekeeper</h1>
+
+  {{if .Error}}
+    <p class="error" role="alert">{{.Error}}</p>
+  {{end}}
+
+  {{if .NoPassword}}
+    <p class="error" role="alert">
+      No password has been set for this archive yet. Run
+      <code>tome migrate</code> with <code>TOME_PASSWORD</code> set, then sign in.
+    </p>
+  {{else}}
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username"
+             value="{{.Username}}" required autofocus>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required>
+
+      <button type="submit">Sign in</button>
+    </form>
+  {{end}}
+</div>
+{{end}}
