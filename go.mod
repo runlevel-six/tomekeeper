@@ -12,6 +12,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mmcdole/gofeed v1.4.1
 	github.com/pressly/goose/v3 v3.27.3
+	github.com/prometheus/client_golang v1.24.1
 	github.com/riverqueue/river v0.43.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.43.0
 	github.com/riverqueue/river/rivertype v0.43.0
@@ -28,6 +29,8 @@ require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/elliotchance/pie/v2 v2.9.0 // indirect
 	github.com/forPelevin/gomoji v1.2.0 // indirect
@@ -47,6 +50,10 @@ require (
 	github.com/mattn/go-isatty v0.0.23 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
+	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/riverqueue/river/riverdriver v0.43.0 // indirect
 	github.com/riverqueue/river/rivershared v0.43.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -64,4 +71,5 @@ require (
 	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )

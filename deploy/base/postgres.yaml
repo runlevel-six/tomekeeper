@@ -1,0 +1,100 @@
+# PostgreSQL, deployed as part of the application rather than assumed to exist.
+#
+# `kubectl apply -k` into an empty namespace should produce a working archive with
+# no out-of-band setup. Pointing at an externally managed database stays possible
+# by overriding TOME_DATABASE_URL in an overlay, but it is not the default path.
+#
+# A StatefulSet rather than a Deployment: this holds the index to a decade of
+# reading, and a Deployment's rolling update would happily start a second process
+# on the same volume.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: database
+spec:
+  # Headless, so the pod is addressed directly rather than load-balanced. There is
+  # exactly one and there always will be.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: database
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tomekeeper
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tomekeeper
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            # The user and database name are not secrets, so they live here where
+            # they can be read without decoding anything. Only the password comes
+            # from the Secret, and it is the only thing the operator has to invent.
+            - name: POSTGRES_USER
+              value: tome
+            - name: POSTGRES_DB
+              value: tome
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: tomekeeper, key: postgres-password }
+            # The data directory is a subdirectory of the mount rather than the
+            # mount itself, because a fresh RBD volume arrives with a lost+found
+            # in it and initdb refuses a directory that is not empty.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi

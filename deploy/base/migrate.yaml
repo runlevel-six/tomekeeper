@@ -1,0 +1,84 @@
+# Schema migration, run as an explicit step rather than on server start.
+#
+# `tome serve` refuses to migrate on its own by design: a rolling restart at 3am
+# is not when a schema change should first meet the data. This Job is how the
+# migration is asked for, and its exit status is the answer to whether it worked.
+#
+# The Job is also the bootstrap: `tome migrate` with TOME_PASSWORD set creates or
+# updates the single user, so the first apply produces an account you can sign in
+# to without a second manual step.
+#
+# Jobs are immutable, so re-applying an unchanged one fails with a field-conflict
+# error. ttlSecondsAfterFinished clears it shortly after it succeeds; if you are
+# re-applying sooner than that, delete it first:
+#
+#     kubectl -n tomekeeper delete job tomekeeper-migrate --ignore-not-found
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tomekeeper-migrate
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: migrate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tomekeeper
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The database is a StatefulSet coming up alongside this, and a migration
+        # that fails because Postgres was not listening yet is a confusing way to
+        # learn that everything is fine. Wait for it instead.
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -p 5432 -U tome -d tome; do
+                echo "waiting for postgres"
+                sleep 2
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+      containers:
+        - name: migrate
+          image: ghcr.io/runlevel-six/tomekeeper:latest
+          args: ["migrate"]
+          envFrom:
+            - configMapRef:
+                name: tomekeeper-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: tomekeeper, key: postgres-password }
+            - name: TOME_DATABASE_URL
+              value: postgres://tome:$(POSTGRES_PASSWORD)@postgres:5432/tome?sslmode=disable
+            # Sets the sign-in password for TOME_USERNAME. Re-running this Job
+            # after changing the Secret is how the password is rotated.
+            - name: TOME_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: tomekeeper, key: password }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

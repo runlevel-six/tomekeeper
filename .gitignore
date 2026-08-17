@@ -39,3 +39,8 @@
 /*.opml.xml
 /wallabag*.json
 /freshrss-*.json
+
+# Real overlays. A hostname, a storage class and a cluster name are facts about
+# someone's network, and this repository is public. deploy/overlays/example is
+# the committed one; the working copy stays here.
+/deploy/overlays/local/

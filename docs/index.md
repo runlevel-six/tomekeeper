@@ -34,6 +34,8 @@ doing.
 
 - [Add a domain rule](how-to/add-a-domain-rule.md) — fixing a site that
   extracts badly
+- [Install on Kubernetes](how-to/install-kubernetes.md) — the manifests in
+  `deploy/`, and the handful of things that will confuse you once
 - [Reprocess the archive](how-to/reprocess-the-archive.md)
 - [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md)
 
@@ -43,6 +45,7 @@ Dry, complete descriptions of the machinery. Look things up here.
 
 - [Configuration](reference/configuration.md) — every environment variable
 - [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint
+- [Metrics](reference/metrics.md) — every metric, and why they are on their own port
 - [Data model](reference/data-model.md) — the schema and its constraints
 - [Storage layout](reference/storage-layout.md) — the on-disk archive
 - [Export format](reference/export-format.md) — what `meta.json` contains
@@ -76,6 +79,8 @@ rejected. Design rationale lives here and nowhere else.
 | Understand why duplicates collapse | [Why articles are the root entity](explanation/why-articles-are-the-root-entity.md) |
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
 | Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
+| Run this on a cluster | [Install on Kubernetes](how-to/install-kubernetes.md) |
+| Scrape it with Prometheus | [Metrics](reference/metrics.md) |
 | Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
 | Read an article without this service running | [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md) |
 | Understand why a dependency is present | [Dependencies](explanation/dependencies.md) |

@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The namespace is not created here. Creating a namespace from the same
+# kustomization that fills it means `kubectl delete -k` takes the namespace with
+# it, and with the namespace goes every PersistentVolumeClaim in it. The archive
+# should not be one `delete -k` away from gone. Create it once, by hand.
+namespace: tomekeeper
+
+resources:
+  - postgres.yaml
+  - migrate.yaml
+  - tomekeeper.yaml
+  - ingress.yaml
+  - backup.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: tomekeeper
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/runlevel-six/tomekeeper
+    newTag: latest
+
+# The Secret is deliberately absent. It holds the database password, the session
+# key and the sign-in password, and this repository is public. It is created once
+# by hand — see docs/how-to/install-kubernetes.md — with these three keys:
+#
+#   postgres-password   the database password
+#   session-key         32 random bytes, base64; rotating it signs everyone out
+#   password            the sign-in password for TOME_USERNAME
+
+configMapGenerator:
+  - name: tomekeeper-config
+    envs:
+      - config.env

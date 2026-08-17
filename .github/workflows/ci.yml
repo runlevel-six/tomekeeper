@@ -153,3 +153,65 @@ jobs:
       # locally, unchanged, when CI disagrees with a developer's machine.
       - name: Acceptance criteria
         run: ./scripts/smoke.sh tomekeeper:ci
+
+  publish:
+    name: Publish image
+    runs-on: ubuntu-latest
+    # Only after everything that can say the build is broken has said otherwise.
+    # An image that fails its own acceptance test is worse than no image: it looks
+    # deployable.
+    needs: [test, lint, fuzz, image]
+    if: github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # A moving tag for the deployment to follow, plus an immutable one so a
+          # rollback has something exact to point at.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || format('0.0.0-{0}', github.sha) }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.event.head_commit.timestamp }}
+          # No attestation manifest. It makes the tag point at an index rather
+          # than an image, and some older pull paths handle that badly for no
+          # benefit here.
+          provenance: false
+
+      # The digest is what a deployment should pin to: a tag can be moved, a
+      # digest cannot. Printed in the summary so a running pod can be traced back
+      # to an exact build without going digging in the registry.
+      - name: Report the digest
+        run: |
+          {
+            echo '### Image published'
+            echo
+            echo '```'
+            echo 'ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

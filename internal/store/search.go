@@ -117,46 +117,9 @@ func (p *PostgresSearch) Query(ctx context.Context, userID UserID, q SearchQuery
 		return nil, nil
 	}
 
-	limit := q.Limit
-	switch {
-	case limit <= 0:
-		limit = DefaultStreamLimit
-	case limit > MaxStreamLimit:
-		limit = MaxStreamLimit
-	}
+	sql, args := p.statement(userID, q)
 
-	where := []string{visibleArticles, `c.tsv @@ tsq`}
-	if q.UnreadOnly {
-		where = append(where, `NOT COALESCE(st.read, false)`)
-	}
-	if q.StarredOnly {
-		where = append(where, `COALESCE(st.starred, false)`)
-	}
-
-	// The tsquery is computed once in a CROSS JOIN rather than repeated in the
-	// WHERE, the ranking, and the headline. Repeating it parses the same string
-	// three times per row and, worse, invites the three copies to drift apart.
-	query := `
-		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.site_name, ''), a.url_canonical,
-		       COALESCE(feed.title, ''),
-		       ts_rank_cd(c.tsv, tsq) AS rank,
-		       ts_headline($3, c.content_text, tsq,
-		           'StartSel=[[hl]], StopSel=[[/hl]], MaxWords=40, MinWords=20, MaxFragments=2, FragmentDelimiter=" … "'),
-		       COALESCE(st.read, false), COALESCE(st.starred, false)
-		FROM websearch_to_tsquery($3, $2) AS tsq
-		CROSS JOIN articles a
-		JOIN article_content c ON c.article_id = a.id AND c.is_current
-		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
-		LEFT JOIN LATERAL (
-			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
-			WHERE fi3.article_id = a.id AND f3.user_id = $1
-			ORDER BY fi3.seen_at, fi3.id LIMIT 1
-		) feed ON true
-		WHERE ` + strings.Join(where, "\n		  AND ") + `
-		ORDER BY rank DESC, a.id DESC
-		LIMIT $4`
-
-	rows, err := p.store.pool.Query(ctx, query, userID, q.Text, searchConfig, limit)
+	rows, err := p.store.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("searching for user %d: %w", userID, err)
 	}
@@ -189,3 +152,77 @@ func (p *PostgresSearch) Index(_ context.Context, _ ArticleID) error { return ni
 func (p *PostgresSearch) Delete(_ context.Context, _ ArticleID) error { return nil }
 
 var _ SearchIndex = (*PostgresSearch)(nil)
+
+// statement builds the search SQL and its arguments.
+//
+// Extracted so that ExplainQuery can ask the database about the *same* statement
+// the reader's search runs. A test that explains a hand-copied approximation
+// proves nothing about the query that ships.
+func (p *PostgresSearch) statement(userID UserID, q SearchQuery) (string, []any) {
+	limit := q.Limit
+	switch {
+	case limit <= 0:
+		limit = DefaultStreamLimit
+	case limit > MaxStreamLimit:
+		limit = MaxStreamLimit
+	}
+
+	where := []string{visibleArticles, `c.tsv @@ tsq`}
+	if q.UnreadOnly {
+		where = append(where, `NOT COALESCE(st.read, false)`)
+	}
+	if q.StarredOnly {
+		where = append(where, `COALESCE(st.starred, false)`)
+	}
+
+	// The tsquery is computed once in a CROSS JOIN rather than repeated in the
+	// WHERE, the ranking, and the headline. Repeating it parses the same string
+	// three times per row and, worse, invites the three copies to drift apart.
+	sql := `
+		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.site_name, ''), a.url_canonical,
+		       COALESCE(feed.title, ''),
+		       ts_rank_cd(c.tsv, tsq) AS rank,
+		       ts_headline($3, c.content_text, tsq,
+		           'StartSel=[[hl]], StopSel=[[/hl]], MaxWords=40, MinWords=20, MaxFragments=2, FragmentDelimiter=" … "'),
+		       COALESCE(st.read, false), COALESCE(st.starred, false)
+		FROM websearch_to_tsquery($3, $2) AS tsq
+		CROSS JOIN articles a
+		JOIN article_content c ON c.article_id = a.id AND c.is_current
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		LEFT JOIN LATERAL (
+			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
+			WHERE fi3.article_id = a.id AND f3.user_id = $1
+			ORDER BY fi3.seen_at, fi3.id LIMIT 1
+		) feed ON true
+		WHERE ` + strings.Join(where, "\n		  AND ") + `
+		ORDER BY rank DESC, a.id DESC
+		LIMIT $4`
+
+	return sql, []any{userID, q.Text, searchConfig, limit}
+}
+
+// ExplainQuery returns PostgreSQL's plan for a search.
+//
+// Exposed because "is search still using the index" is a question worth being able
+// to answer directly — in a test, and on a real archive when search has become
+// slow. Timing a query tells you it is slow; the plan tells you why.
+func (p *PostgresSearch) ExplainQuery(ctx context.Context, userID UserID, q SearchQuery) (string, error) {
+	sql, args := p.statement(userID, q)
+
+	rows, err := p.store.pool.Query(ctx, "EXPLAIN "+sql, args...)
+	if err != nil {
+		return "", fmt.Errorf("explaining the search query: %w", err)
+	}
+	defer rows.Close()
+
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return "", fmt.Errorf("scanning the query plan: %w", err)
+		}
+		plan.WriteString(line)
+		plan.WriteByte('\n')
+	}
+	return plan.String(), rows.Err()
+}

@@ -33,6 +33,8 @@ import (
 
 	"github.com/temoto/robotstxt"
 	"golang.org/x/time/rate"
+
+	"github.com/runlevel-six/tomekeeper/internal/metrics"
 )
 
 // MaxResponseBytes caps any single response body. A feed or article larger
@@ -241,6 +243,10 @@ func (c *Client) Do(ctx context.Context, req Request) (*http.Response, error) {
 		}
 
 		resp, err := c.attempt(ctx, req)
+		// Recorded per attempt rather than per call, because the interesting
+		// number for a site that is rate-limiting is how many 429s it sent, not
+		// how many of our calls eventually succeeded anyway.
+		observe(host, resp, err)
 		if err != nil {
 			lastErr = err
 			// A transport error is usually transient: a dropped connection, a
@@ -510,6 +516,41 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 func drain(resp *http.Response) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 	_ = resp.Body.Close()
+}
+
+// observe records the outcome of one attempt for the metrics endpoint.
+//
+// Per attempt rather than per call, because the interesting number for a site that
+// is rate-limiting is how many 429s it sent, not how many of our calls eventually
+// succeeded anyway.
+func observe(host string, resp *http.Response, err error) {
+	switch {
+	case err != nil:
+		metrics.OutboundFailures.WithLabelValues(host).Inc()
+	case resp != nil:
+		metrics.OutboundResponses.WithLabelValues(host, statusClass(resp.StatusCode)).Inc()
+	}
+}
+
+// statusClass buckets a status code.
+//
+// By class rather than exact code: the difference between 502 and 503 is not worth
+// a time series per host, while the difference between 2xx and 4xx is the whole
+// question. 429 keeps its own bucket, because it is the one status that means
+// "you are being told to slow down", and averaging it into 4xx hides it.
+func statusClass(code int) string {
+	switch {
+	case code >= 500:
+		return "5xx"
+	case code == 429:
+		return "429"
+	case code >= 400:
+		return "4xx"
+	case code >= 300:
+		return "3xx"
+	default:
+		return "2xx"
+	}
 }
 
 func hostOf(origin string) string {

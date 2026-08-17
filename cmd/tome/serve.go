@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/runlevel-six/tomekeeper/internal/auth"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/db"
 	"github.com/runlevel-six/tomekeeper/internal/logging"
+	"github.com/runlevel-six/tomekeeper/internal/metrics"
 	"github.com/runlevel-six/tomekeeper/internal/server"
 	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
@@ -72,11 +75,38 @@ func serve(args []string, stderr io.Writer) int {
 		Func: func(ctx context.Context) error { return db.Ping(ctx, pool) },
 	})
 
+	// Metrics run beside the server rather than inside it, on their own port. An
+	// archive that cannot publish metrics is still an archive, so a failure here
+	// is logged and the reader is served anyway.
+	stopMetrics := startMetrics(ctx, cfg, pool, log)
+	defer stopMetrics()
+
 	if err := srv.Run(ctx); err != nil {
 		log.Error("server failed", "error", err)
 		return exitFailure
 	}
 	return exitOK
+}
+
+// startMetrics runs the Prometheus listener in the background and returns a
+// function that waits for it to stop.
+func startMetrics(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) func() {
+	if cfg.MetricsAddr == "" {
+		log.Info("metrics are disabled", "set", config.Prefix+"METRICS_ADDR")
+		return func() {}
+	}
+
+	reg := metrics.New(pool, log)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		if err := reg.Serve(ctx, cfg.MetricsAddr, log); err != nil {
+			log.Error("the metrics listener stopped", "error", err)
+		}
+	}()
+
+	return func() { <-done }
 }
 
 // newSessionStore builds the session store, generating a key if none is set.

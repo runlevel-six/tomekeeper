@@ -1,0 +1,87 @@
+# Nightly database dump.
+#
+# This backs up the *index*, not the archive. The blob tree — the stored pages,
+# extracted bodies and images — is much larger and is not something a CronJob
+# inside the cluster should be shipping anywhere. Replicate it separately, with
+# something built for it (restic, rclone, an RBD mirror). What is here is the
+# part that is small, changes constantly, and is unrecoverable: which feeds you
+# subscribe to, what you have read, what you saved.
+#
+# The dump lands on its own volume rather than in the blob tree, so that a
+# restore never depends on the thing being restored, and so a runaway dump
+# cannot fill the archive.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tomekeeper-backups
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: backup
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tomekeeper-backup
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # A missed window should not trigger a catch-up run hours later against a
+  # database that is already being used.
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: dump
+              image: postgres:16-alpine
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef: { name: tomekeeper, key: postgres-password }
+              command:
+                - sh
+                - -euc
+                - |
+                  # Custom format, because it is compressed and pg_restore can
+                  # pull a single table out of it. Written to a temporary name
+                  # and moved into place, so an interrupted dump never leaves a
+                  # truncated file that looks like a backup.
+                  day=$(date +%u)
+                  out=/backups/tome-$day.dump
+                  pg_dump -h postgres -U tome -d tome -Fc -f "$out.partial"
+                  mv "$out.partial" "$out"
+                  ls -lh /backups
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              resources:
+                requests: { cpu: 50m, memory: 64Mi }
+                limits: { memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: tomekeeper-backups

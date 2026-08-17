@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# A worked example. Copy it to deploy/overlays/local — which is gitignored,
+# because a hostname and a storage class are facts about your network and this
+# repository is public — then change the host and the storage class and delete
+# whatever does not apply to your cluster.
+
+resources:
+  - ../../base
+
+# Ceph RBD. The base leaves storageClassName unset so that a cluster with a
+# default class works out of the box; naming it here means a change to the
+# cluster default cannot silently move the archive onto different storage.
+patches:
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |
+      - op: add
+        path: /spec/storageClassName
+        value: ceph-block
+
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: ceph-block
+
+  - target:
+      kind: Ingress
+      name: tomekeeper
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: tomekeeper.example.com
+      # No TLS block, because the controller this was written against terminates
+      # TLS with a default certificate and listing a secretName would mean
+      # maintaining a second certificate for no benefit. If yours has no
+      # default, add:
+      #
+      #   - op: add
+      #     path: /spec/tls
+      #     value: [{hosts: [your.host], secretName: your-tls}]
+      #
+      # and make sure TOME_COOKIE_SECURE stays true either way.
+
+# Pin to a digest rather than following :latest, so that what is running is a
+# fact rather than whatever the tag pointed at when the pod last restarted. The
+# publish workflow prints the digest for each build.
+images:
+  - name: ghcr.io/runlevel-six/tomekeeper
+    newTag: latest

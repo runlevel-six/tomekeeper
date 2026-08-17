@@ -71,6 +71,13 @@ func worker(args []string, stderr io.Writer) int {
 		return exitFailure
 	}
 
+	// The worker is where the numbers worth watching are made: poll outcomes,
+	// extraction, and every outbound request. It publishes its own metrics rather
+	// than routing them through the server, because the two are separate processes
+	// with separate failure modes.
+	stopMetrics := startMetrics(ctx, cfg, pool, log)
+	defer stopMetrics()
+
 	if err := jobs.Run(ctx, riverClient, log); err != nil {
 		log.Error("worker failed", "error", err)
 		return exitFailure

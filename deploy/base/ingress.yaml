@@ -1,0 +1,39 @@
+# Public route to the reader.
+#
+# The host and ingressClassName are placeholders that an overlay is expected to
+# replace — see deploy/overlays/emtrey. The base carries them so that `kustomize
+# build deploy/base` produces something valid rather than something that needs an
+# overlay to be legal YAML.
+#
+# There is deliberately no PodDisruptionBudget anywhere in this deployment. Both
+# workloads are single-replica and share a ReadWriteOnce volume, so a node drain
+# takes the archive down no matter what a budget says. A PDB permitting eviction
+# would be decoration, and one forbidding it would silently wedge node
+# maintenance until someone went looking for why a drain had hung. The honest
+# statement is the one made here: this is a single-node service, and it is
+# unavailable while its node is.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tomekeeper
+  labels:
+    app.kubernetes.io/name: tomekeeper
+  annotations:
+    # Archived pages carry their images inline from the blob store, and a long
+    # article with a lot of them is not small. The default proxy buffer is well
+    # under what a page render can be.
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tomekeeper.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tomekeeper
+                port:
+                  name: http

@@ -54,6 +54,13 @@ type Config struct {
 	// like Password.
 	SessionKey string
 
+	// MetricsAddr is the listen address for the Prometheus endpoint.
+	//
+	// Its own listener, not a route on the main server, because the Ingress in
+	// front of this routes everything and the metrics name the hosts being
+	// fetched from — a published list of what someone reads. Empty disables it.
+	MetricsAddr string
+
 	// CookieSecure sets the Secure attribute on the session cookie, so it is
 	// only ever sent over HTTPS. On by default.
 	//
@@ -108,6 +115,7 @@ const (
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "json"
 	defaultShutdownTimeout = 15 * time.Second
+	defaultMetricsAddr     = ":9090"
 
 	defaultUsername             = "tome"
 	defaultPollMinInterval      = 15 * time.Minute
@@ -139,13 +147,14 @@ func Load(lookup LookupFunc) (*Config, error) {
 	}
 
 	cfg := &Config{
-		HTTPAddr:   get("HTTP_ADDR", defaultHTTPAddr),
-		LogFormat:  get("LOG_FORMAT", defaultLogFormat),
-		Username:   get("USERNAME", defaultUsername),
-		Password:   get("PASSWORD", ""),
-		SessionKey: get("SESSION_KEY", ""),
-		ContactURL: get("CONTACT_URL", ""),
-		BlobRoot:   get("BLOB_ROOT", defaultBlobRoot),
+		HTTPAddr:    get("HTTP_ADDR", defaultHTTPAddr),
+		LogFormat:   get("LOG_FORMAT", defaultLogFormat),
+		Username:    get("USERNAME", defaultUsername),
+		Password:    get("PASSWORD", ""),
+		SessionKey:  get("SESSION_KEY", ""),
+		MetricsAddr: get("METRICS_ADDR", defaultMetricsAddr),
+		ContactURL:  get("CONTACT_URL", ""),
+		BlobRoot:    get("BLOB_ROOT", defaultBlobRoot),
 	}
 	var problems []error
 
@@ -225,6 +234,19 @@ func Load(lookup LookupFunc) (*Config, error) {
 	} else if port == "" {
 		problems = append(problems, fmt.Errorf(
 			"%sHTTP_ADDR %q has no port", Prefix, cfg.HTTPAddr))
+	}
+
+	// TOME_METRICS_ADDR — same rules, but empty is meaningful: it turns the
+	// endpoint off rather than being a mistake.
+	if cfg.MetricsAddr != "" {
+		if _, port, err := net.SplitHostPort(cfg.MetricsAddr); err != nil {
+			problems = append(problems, fmt.Errorf(
+				"%sMETRICS_ADDR %q is not a host:port address (leave it empty to disable metrics): %w",
+				Prefix, cfg.MetricsAddr, err))
+		} else if port == "" {
+			problems = append(problems, fmt.Errorf(
+				"%sMETRICS_ADDR %q has no port", Prefix, cfg.MetricsAddr))
+		}
 	}
 
 	// TOME_LOG_LEVEL
@@ -353,6 +375,7 @@ func (c *Config) LogValue() slog.Value {
 		// Password and SessionKey are deliberately absent. This list is the only
 		// thing that gets logged, so a secret omitted here cannot leak through a
 		// future careless call.
+		slog.String("metrics_addr", c.MetricsAddr),
 		slog.Bool("cookie_secure", c.CookieSecure),
 		slog.Bool("session_key_configured", c.SessionKey != ""),
 		slog.String("contact_url", c.ContactURL),
