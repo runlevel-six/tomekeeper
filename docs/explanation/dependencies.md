@@ -29,6 +29,7 @@ the job and doing it by hand would be worse than the risk of the dependency.
 | `github.com/gen2brain/avif` | AVIF encoding, which is where most of the archive's storage saving comes from. Pure Go via a WebAssembly runtime, so it works under `CGO_ENABLED=0` and the image stays distroless-static — the libaom bindings would have cost that. It reuses the same wazero runtime trafilatura already pulls in. |
 | `github.com/HugoSmits86/nativewebp` | WebP encoding, as the fallback when AVIF encoding fails. Pure Go, for the same reason. It is lossless-only, which is why the pipeline discards any transcode larger than its source. |
 | `golang.org/x/image` | WebP *decoding*, and the CatmullRom scaler used to downscale. The standard library has neither. |
+| `golang.org/x/sync/singleflight` | Collapsing concurrent fetches of the same image URL across articles. The database lookup that dedupes fetches is a check-then-act, so without this the origin serves one request per worker slot for a picture shared between articles. Already in the tree as a transitive dependency, and a hand-rolled map of in-flight keys is the kind of thing that looks right and leaks a goroutine on the error path. |
 
 Still done with the standard library, deliberately:
 

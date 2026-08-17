@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/runlevel-six/tomekeeper/internal/archive"
 	"github.com/runlevel-six/tomekeeper/internal/asset"
@@ -67,6 +68,22 @@ type LocalizeAssetsWorker struct {
 	blobs   blob.Store
 	archive *archive.Writer
 	log     *slog.Logger
+
+	// inflight collapses concurrent work on the same source URL.
+	//
+	// The database check in resolve is a check-then-act: two articles sharing an
+	// image, landing on two workers at the same moment, both miss it and both
+	// fetch. The origin then serves one request per worker slot for a picture
+	// the archive needs once, which is the impoliteness B4 and principle 2.6
+	// exist to prevent. It is also what M3's "same image across ten articles"
+	// criterion measures.
+	//
+	// Per-process, deliberately. Two worker replicas would still duplicate
+	// across the concurrent window; closing that needs an advisory lock per
+	// image, which is a round trip per reference to save at most one fetch while
+	// the worker runs as a single Deployment. Revisit if the worker is ever
+	// scaled out.
+	inflight singleflight.Group
 }
 
 // Work implements river.Worker.
@@ -165,30 +182,64 @@ func (w *LocalizeAssetsWorker) resolver(
 	}
 }
 
-// localize fetches and stores one image, returning its store-relative path.
+// localize resolves one image and links it to this article, returning its
+// store-relative path.
 func (w *LocalizeAssetsWorker) localize(
 	ctx context.Context, id store.ArticleID, articleURL, sourceURL string,
 ) (string, error) {
-	// Already fetched from this URL, possibly for a different article. This is
-	// the ten-articles-one-image case: the file is on disk, the row exists,
-	// and all that is needed is the link.
-	if existing, err := w.store.AssetBySourceURL(ctx, sourceURL); err == nil {
-		if err := w.store.LinkAsset(ctx, id, existing.SHA256); err != nil {
-			return "", err
-		}
-		return existing.FSPath, nil
-	} else if !store.IsNotFound(err) {
+	stored, err := w.resolve(ctx, articleURL, sourceURL)
+	if err != nil {
 		return "", err
 	}
 
+	// Linking stays outside the single-flight below: ten articles sharing one
+	// image need one fetch and ten links, so this is the part that must run once
+	// per caller rather than once per URL.
+	if err := w.store.LinkAsset(ctx, id, stored.SHA256); err != nil {
+		return "", err
+	}
+	return stored.FSPath, nil
+}
+
+// resolve returns the archived asset for sourceURL, fetching it only if it is
+// not already stored and no other job is fetching it at this moment.
+func (w *LocalizeAssetsWorker) resolve(
+	ctx context.Context, articleURL, sourceURL string,
+) (store.Asset, error) {
+	v, err, _ := w.inflight.Do(sourceURL, func() (any, error) {
+		// Already fetched from this URL, possibly for a different article. This
+		// is the ten-articles-one-image case: the file is on disk and the row
+		// exists, so all that is needed is the link the caller adds.
+		if existing, err := w.store.AssetBySourceURL(ctx, sourceURL); err == nil {
+			return existing, nil
+		} else if !store.IsNotFound(err) {
+			return store.Asset{}, err
+		}
+		return w.download(ctx, articleURL, sourceURL)
+	})
+	if err != nil {
+		return store.Asset{}, err
+	}
+
+	stored, ok := v.(store.Asset)
+	if !ok {
+		return store.Asset{}, fmt.Errorf("resolving image %s: unexpected result %T", sourceURL, v)
+	}
+	return stored, nil
+}
+
+// download fetches, transcodes, and stores one image that is not yet archived.
+func (w *LocalizeAssetsWorker) download(
+	ctx context.Context, articleURL, sourceURL string,
+) (store.Asset, error) {
 	raw, mediaType, err := w.fetch(ctx, articleURL, sourceURL)
 	if err != nil {
-		return "", err
+		return store.Asset{}, err
 	}
 
 	processed, err := asset.Process(raw, mediaType)
 	if err != nil {
-		return "", err
+		return store.Asset{}, err
 	}
 
 	// The blob is written before the row, so a crash between them leaves an
@@ -196,15 +247,15 @@ func (w *LocalizeAssetsWorker) localize(
 	// harmless; a dangling reference breaks the page.
 	exists, err := w.blobs.Exists(ctx, processed.Path)
 	if err != nil {
-		return "", err
+		return store.Asset{}, err
 	}
 	if !exists {
 		if err := w.blobs.Put(ctx, processed.Path, bytes.NewReader(processed.Bytes)); err != nil {
-			return "", fmt.Errorf("storing image %s: %w", sourceURL, err)
+			return store.Asset{}, fmt.Errorf("storing image %s: %w", sourceURL, err)
 		}
 	}
 
-	if _, err := w.store.UpsertAsset(ctx, store.Asset{
+	stored := store.Asset{
 		SHA256:    processed.SHA256,
 		MediaType: processed.MediaType,
 		ByteSize:  int64(len(processed.Bytes)),
@@ -212,14 +263,11 @@ func (w *LocalizeAssetsWorker) localize(
 		Height:    processed.Height,
 		FSPath:    processed.Path,
 		SourceURL: sourceURL,
-	}); err != nil {
-		return "", err
 	}
-
-	if err := w.store.LinkAsset(ctx, id, processed.SHA256); err != nil {
-		return "", err
+	if _, err := w.store.UpsertAsset(ctx, stored); err != nil {
+		return store.Asset{}, err
 	}
-	return processed.Path, nil
+	return stored, nil
 }
 
 // fetch downloads one image through the shared, rate-limited client.
