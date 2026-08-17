@@ -57,12 +57,17 @@ The path is in `articles.raw_blob_path`.
 ## Write the rule
 
 ```sh
-tome domain-rule set example.com \
+tome domain-rule set \
   --selector 'div[data-role="story-body"]' \
   --strip '.promo' \
   --strip '.newsletter-signup' \
-  --notes 'body is in a data-role attribute; promos are inline in the flow'
+  --notes 'body is in a data-role attribute; promos are inline in the flow' \
+  example.com
 ```
+
+**The flags come before the domain.** Argument parsing stops at the first
+non-flag word, so `set example.com --selector ...` treats the selector as a
+stray argument and prints the usage text instead of saving anything.
 
 | Flag | What it does |
 |---|---|

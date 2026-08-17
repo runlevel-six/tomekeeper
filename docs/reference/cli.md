@@ -169,7 +169,7 @@ Manages per-domain extraction overrides.
 ```
 tome domain-rule list
 tome domain-rule show <domain>
-tome domain-rule set <domain> [flags]
+tome domain-rule set [flags] <domain>
 tome domain-rule rm <domain>
 ```
 
@@ -187,8 +187,13 @@ Rules apply to subdomains: a rule for `example.com` covers `blog.example.com`
 unless that subdomain has a rule of its own, in which case the more specific one
 wins. `show` names which rule matched, so an inherited one is not a surprise.
 
+Flags must precede the domain: parsing stops at the first non-flag argument, so
+`set example.com --selector …` prints usage rather than saving a rule.
+
 A rule changes nothing already stored until the affected articles are
-reprocessed with `tome reextract`.
+reprocessed. Use `tome reextract --since-version 0` — `reextract` selects on
+extractor version, so a bare run finds nothing when every body is already at the
+current version, and there is no way to reprocess only one domain.
 
 Rules are global and admin-only. How to extract a site's articles is a technical
 fact about that site, identical for every reader.
