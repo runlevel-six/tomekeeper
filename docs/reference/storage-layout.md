@@ -133,20 +133,22 @@ exists to reduce storage, not to spend it.
 tome archive stats
 ```
 
+A real run, 2026-08-17, against 93 articles from 4 feeds:
+
 ```
-articles              1,204
-  fetched             1,180
-  with a body         1,166
-  partial images         31
-body text            18.4 MB
+articles          93
+  fetched         93
+  with a body     93
+  partial images  3
+body text         2.8 MB
 
-images stored         2,140
-image references      2,880
-image bytes         214.7 MB
-  deduplicated        740 references, about 74.2 MB not stored twice
+images stored     86
+image references  91
+image bytes       4.5 MB
+  deduplicated    5 references, about 266.3 KB not stored twice
 
-per article         199.7 KB (body and images; excludes raw pages on disk)
-per 1,000 articles  195.0 MB
+per article         79.7 KB (body and images; excludes raw pages on disk)
+per 1,000 articles  77.9 MB
 ```
 
 Raw pages live on the filesystem rather than in the database, so size them
@@ -157,12 +159,19 @@ du -sh "$TOME_BLOB_ROOT/articles"   # index.html, meta.json, raw.html.gz
 du -sh "$TOME_BLOB_ROOT/assets"     # images
 ```
 
-> **The numbers above are illustrative, not measured.** M3's acceptance
-> criterion asks for storage across 1,000 real articles to be measured and
-> recorded here, and that has to come from a real feed list — the mix of
-> photo-heavy and text-only sources changes the answer by an order of
-> magnitude. Run `tome archive stats` once your archive passes a thousand
-> articles and replace this section with what it actually says.
+The same run measured 8.1 MB under `articles/` and 4.6 MB under `assets/`, 13 MB
+in total — so **roughly 140 KB per article once raw pages are counted, against
+79.7 KB without them.** Raw HTML is on the order of half the archive's bytes for
+text-heavy sources, which is the cost principle 2.2 accepts in exchange for being
+able to re-extract the whole archive later.
+
+> **This is a real measurement but not the one M3 asks for.** The acceptance
+> criterion wants 1,000 articles; this is 93, from 4 feeds, and the sample is
+> skewed — the largest contributor is a documentation site whose pages are ~500 KB
+> of raw HTML each, which inflates the raw-page share and depresses the image
+> share. The mix of photo-heavy and text-only sources moves these numbers by an
+> order of magnitude, so re-run `tome archive stats` once the archive passes a
+> thousand articles and replace the figures above.
 
 ## Permissions
 
