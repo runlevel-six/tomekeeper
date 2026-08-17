@@ -185,7 +185,12 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 			// version a bare run finds nothing and the rule appears to do
 			// nothing. Comparing against a version no body has selects all of
 			// them.
-			fmt.Fprintln(stdout, "run `tome reextract --since-version 0` to apply it to articles already stored")
+			// Scoped to this domain, because it is the only site the rule can
+			// affect, and reprocessing a large archive to correct one site is
+			// hours of needless work.
+			fmt.Fprintf(stdout,
+				"run `tome reextract --since-version 0 --domain %s` to apply it to articles already stored\n",
+				strings.ToLower(domain))
 		}
 		return exitOK
 	})

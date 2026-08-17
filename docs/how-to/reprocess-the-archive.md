@@ -55,6 +55,7 @@ GROUP BY state;
 |---|---|
 | `--limit N` | Queue at most N articles. Good for trying a change on a sample first. |
 | `--since-version V` | Select articles whose body came from a version other than `V`. |
+| `--domain` | Restrict to one host and its subdomains. |
 | `--dry-run` | Count without queueing. |
 
 To reprocess **everything**, including articles already at the current version
@@ -66,6 +67,17 @@ tome reextract --since-version 0
 ```
 
 Version `0` never matches any stored body, so every mutable article qualifies.
+
+To reprocess **one site** — the usual case, after writing a domain rule for it:
+
+```sh
+tome reextract --since-version 0 --domain example.com
+```
+
+That covers subdomains too, so `example.com` reaches `blog.example.com`, matching
+how the rule itself applies. It compares the article's host rather than searching
+the URL, so `notexample.com` is not swept in and neither is a link that merely
+mentions the domain in a query parameter.
 
 To try a change on a hundred articles before committing to the whole archive:
 

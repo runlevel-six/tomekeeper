@@ -23,17 +23,24 @@ import (
 // improvement to extraction can be applied to the whole archive — including
 // articles from a decade ago, and including articles whose sites no longer
 // exist — without asking a single server for anything.
+//
+// --domain exists because the common reason to reprocess is a domain rule that
+// was just written for one badly-extracting site. Without it, fixing one site
+// means re-extracting everything, which at a large archive is hours of work to
+// correct a handful of articles.
 func reextract(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("reextract", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	sinceVersion := fs.String("since-version", extract.Version,
 		"reprocess articles whose body came from an extractor version other than this")
+	domain := fs.String("domain", "",
+		"only reprocess articles from this host and its subdomains (default: every host)")
 	limit := fs.Int("limit", 0, "stop after queueing this many articles (0 means no limit)")
 	dryRun := fs.Bool("dry-run", false, "report what would be queued without queueing it")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: tome reextract [--since-version V] [--limit N] [--dry-run]")
+		fmt.Fprintln(stderr, "Usage: tome reextract [--since-version V] [--domain HOST] [--limit N] [--dry-run]")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -72,19 +79,36 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	total, err := queueReextractions(ctx, s, client, *sinceVersion, *limit, *dryRun, stdout)
+	total, err := queueReextractions(ctx, s, client, *sinceVersion, *domain, *limit, *dryRun, stdout)
 	if err != nil {
 		log.Error("reextract failed", "error", err)
 		return exitFailure
 	}
 
+	scope := ""
+	if *domain != "" {
+		scope = " under " + *domain
+	}
+	noun := "articles"
+	if total == 1 {
+		noun = "article"
+	}
+
 	switch {
+	case total == 0 && *domain != "":
+		// Two quite different situations, and the reader needs to know which:
+		// nothing to reprocess, or nothing archived from that host at all — often
+		// a typo in the domain.
+		fmt.Fprintf(stdout, "nothing to do: no article%s has a mutable body at a version other than %s\n",
+			scope, *sinceVersion)
+		fmt.Fprintln(stdout, "if that is unexpected, check the spelling; `tome archive stats` lists what is stored")
 	case total == 0:
 		fmt.Fprintf(stdout, "nothing to do: every mutable body is already at version %s\n", *sinceVersion)
 	case *dryRun:
-		fmt.Fprintf(stdout, "%d articles would be re-extracted (dry run, nothing queued)\n", total)
+		fmt.Fprintf(stdout, "%d %s%s would be re-extracted (dry run, nothing queued)\n", total, noun, scope)
 	default:
-		fmt.Fprintf(stdout, "queued %d articles for re-extraction; run `tome worker` to process them\n", total)
+		fmt.Fprintf(stdout, "queued %d %s%s for re-extraction; run `tome worker` to process them\n",
+			total, noun, scope)
 	}
 	return exitOK
 }
@@ -95,6 +119,7 @@ func queueReextractions(
 	s *store.Store,
 	client *river.Client[pgx.Tx],
 	version string,
+	domain string,
 	limit int,
 	dryRun bool,
 	stdout io.Writer,
@@ -112,7 +137,7 @@ func queueReextractions(
 		// acceptance criterion is that imported bodies are *provably* skipped,
 		// and a WHERE clause is a proof while a conditional in a loop is a
 		// promise.
-		candidates, err := s.System().ReextractCandidates(ctx, version, cursor, batch)
+		candidates, err := s.System().ReextractCandidates(ctx, version, domain, cursor, batch)
 		if err != nil {
 			return total, err
 		}

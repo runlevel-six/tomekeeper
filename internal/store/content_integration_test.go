@@ -154,7 +154,7 @@ func TestReextractCandidatesExcludeImmutable(t *testing.T) {
 	insertBody(t, s, unfetched, store.ContentParams{ExtractorName: "feed_body", ExtractorVersion: "1"})
 	insertBody(t, s, current, store.ContentParams{ExtractorName: "trafilatura", ExtractorVersion: "2"})
 
-	candidates, err := s.System().ReextractCandidates(ctx, "2", 0, 100)
+	candidates, err := s.System().ReextractCandidates(ctx, "2", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}
@@ -198,7 +198,7 @@ func TestReextractCandidatesPaginate(t *testing.T) {
 	var seen []store.ArticleID
 	var cursor store.ArticleID
 	for range total + 2 { // more passes than needed; the walk must terminate
-		batch, err := s.System().ReextractCandidates(ctx, "2", cursor, 2)
+		batch, err := s.System().ReextractCandidates(ctx, "2", "", cursor, 2)
 		if err != nil {
 			t.Fatalf("ReextractCandidates() = %v", err)
 		}
@@ -511,5 +511,94 @@ func TestExtractionStats(t *testing.T) {
 	}
 	if counts["trafilatura"] != 2 || counts["readability"] != 1 {
 		t.Errorf("counts = %v, want trafilatura 2 and readability 1", counts)
+	}
+}
+
+// --domain scopes a reprocess to one site, which is the common case: a domain
+// rule was just written and only that site's articles need re-extracting.
+//
+// The subdomain behavior has to match how a domain rule applies. A rule written
+// for example.com governs blog.example.com, so a reprocess scoped to example.com
+// must cover the same set, or the flag quietly does less than the rule it exists
+// to apply.
+func TestReextractCandidatesByDomain(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	// The last two are the reason this compares hosts rather than doing a LIKE
+	// over the whole URL: `LIKE '%example.com%'` matches both, and the second is
+	// a path an attacker controls.
+	urls := map[string]string{
+		"apex":         "https://example.com/a",
+		"subdomain":    "https://blog.example.com/b",
+		"deep":         "https://a.b.example.com/c",
+		"with port":    "https://example.com:8443/d",
+		"other host":   "https://other.example.org/e",
+		"suffix trap":  "https://notexample.com/f",
+		"in the query": "https://evil.com/g?ref=example.com",
+	}
+
+	ids := make(map[string]store.ArticleID, len(urls))
+	for name, url := range urls {
+		id := newArticle(t, s, url)
+		if err := s.RecordFetchSuccess(ctx, id, "sha-"+name, "path/"+name); err != nil {
+			t.Fatalf("RecordFetchSuccess(%s) = %v", name, err)
+		}
+		insertBody(t, s, id, store.ContentParams{ExtractorName: "readability", ExtractorVersion: "1"})
+		ids[name] = id
+	}
+
+	selected := func(domain string) map[store.ArticleID]bool {
+		t.Helper()
+		got, err := s.System().ReextractCandidates(ctx, "2", domain, 0, 100)
+		if err != nil {
+			t.Fatalf("ReextractCandidates(%q) = %v", domain, err)
+		}
+		out := make(map[store.ArticleID]bool, len(got))
+		for _, c := range got {
+			out[c.ArticleID] = true
+		}
+		return out
+	}
+
+	all := selected("")
+	if len(all) != len(urls) {
+		t.Errorf("an empty domain selected %d articles, want all %d", len(all), len(urls))
+	}
+
+	scoped := selected("example.com")
+
+	for _, name := range []string{"apex", "subdomain", "deep", "with port"} {
+		if !scoped[ids[name]] {
+			t.Errorf("the %s article was not selected for example.com", name)
+		}
+	}
+	for _, name := range []string{"other host", "suffix trap", "in the query"} {
+		if scoped[ids[name]] {
+			t.Errorf("the %q article was selected for example.com, which it does not belong to", name)
+		}
+	}
+
+	// A subdomain scope must not reach up to the apex.
+	sub := selected("blog.example.com")
+	if !sub[ids["subdomain"]] {
+		t.Error("blog.example.com did not select its own article")
+	}
+	if sub[ids["apex"]] {
+		t.Error("blog.example.com selected the apex domain's article")
+	}
+
+	// Case and a trailing dot are both things a person types.
+	for _, spelling := range []string{"EXAMPLE.COM", "example.com.", "  example.com  "} {
+		if got := selected(spelling); len(got) != len(scoped) {
+			t.Errorf("%q selected %d articles, want the same %d as the canonical spelling",
+				spelling, len(got), len(scoped))
+		}
+	}
+
+	// A host with nothing archived is not an error, just empty — the command says
+	// so distinctly, because it is usually a typo.
+	if got := selected("nothing-here.example.net"); len(got) != 0 {
+		t.Errorf("an unarchived host selected %d articles, want 0", len(got))
 	}
 }

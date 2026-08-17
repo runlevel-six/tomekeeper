@@ -100,11 +100,19 @@ A rule changes nothing on its own. Articles already extracted keep the body
 they have until they are reprocessed:
 
 ```sh
-tome reextract --since-version 0   # anything not at version 0, i.e. everything
+tome reextract --since-version 0 --domain example.com
 ```
 
+Both flags earn their place. `--since-version 0` matches every stored body,
+because the articles you are trying to fix are already at the current version and
+a bare run would skip them. `--domain` keeps the work to the one site the rule
+can affect — on a large archive the difference is minutes against hours.
+
+`set` prints this command for you, with the domain filled in.
+
 That re-runs extraction **from the stored pages** — no requests to the site.
-See [Reprocess the archive](reprocess-the-archive.md) for narrowing it down.
+See [Reprocess the archive](reprocess-the-archive.md) for other ways to narrow
+it.
 
 ## Check the result
 
@@ -127,7 +135,7 @@ against the stored page.
 
 ```sh
 tome domain-rule rm example.com
-tome reextract --since-version 0
+tome reextract --since-version 0 --domain example.com
 ```
 
 Worth doing when a site is redesigned and the heuristics now handle it: fewer

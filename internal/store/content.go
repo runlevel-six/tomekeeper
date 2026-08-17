@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -274,17 +275,40 @@ type ReextractCandidate struct {
 // change the row's extractor version — the worker does that later — so an
 // offset-free repeat of the same query would return the same rows forever and
 // only ever reprocess the first batch.
-func (s *SystemStore) ReextractCandidates(ctx context.Context, beforeVersion string, afterID ArticleID, limit int) ([]ReextractCandidate, error) {
+//
+// An empty domain matches every article. A non-empty one restricts to that host
+// and its subdomains, matching how a domain rule applies: a rule written for
+// example.com governs blog.example.com, so a reprocess scoped to example.com has
+// to cover the same set or the flag would quietly do less than the rule it exists
+// to apply.
+func (s *SystemStore) ReextractCandidates(
+	ctx context.Context, beforeVersion, domain string, afterID ArticleID, limit int,
+) ([]ReextractCandidate, error) {
+	// Compared against the article's host rather than with a LIKE over the whole
+	// URL. `LIKE '%example.com%'` would also match notexample.com, and — worse —
+	// evil.com/?ref=example.com, which is a path an attacker controls.
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
+
+	// The host is derived once in a subquery rather than twice in the WHERE, so the
+	// two comparisons cannot drift apart. A plain subquery rather than a CTE, so the
+	// planner is free to push the predicates down instead of materializing every
+	// candidate first.
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, COALESCE(a.raw_blob_path, '')
-		FROM articles a
-		JOIN article_content c ON c.article_id = a.id AND c.is_current
-		WHERE NOT c.immutable
-		  AND c.extractor_version <> $1
-		  AND a.raw_blob_path IS NOT NULL
-		  AND a.id > $2
-		ORDER BY a.id
-		LIMIT $3`, beforeVersion, afterID, limit)
+		SELECT id, raw_blob_path FROM (
+			SELECT a.id AS id,
+			       COALESCE(a.raw_blob_path, '') AS raw_blob_path,
+			       -- scheme://host[:port]/path -> host
+			       split_part(split_part(split_part(a.url_canonical, '://', 2), '/', 1), ':', 1) AS host
+			FROM articles a
+			JOIN article_content c ON c.article_id = a.id AND c.is_current
+			WHERE NOT c.immutable
+			  AND c.extractor_version <> $1
+			  AND a.raw_blob_path IS NOT NULL
+			  AND a.id > $2
+		) candidates
+		WHERE $4 = '' OR host = $4 OR host LIKE '%.' || $4
+		ORDER BY id
+		LIMIT $3`, beforeVersion, afterID, limit, host)
 	if err != nil {
 		return nil, fmt.Errorf("listing reextract candidates: %w", err)
 	}

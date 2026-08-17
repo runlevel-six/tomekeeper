@@ -172,12 +172,13 @@ Queues re-extraction of stored pages at the current extractor version. Makes no
 requests to any site.
 
 ```
-tome reextract [--since-version V] [--limit N] [--dry-run]
+tome reextract [--since-version V] [--domain HOST] [--limit N] [--dry-run]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--since-version` | the compiled-in version | Select articles whose current body came from a version other than this. Pass `0` to select everything, which is what you want after adding a domain rule. |
+| `--domain` | every host | Restrict to one host and its subdomains. `example.com` covers `blog.example.com`, matching how a domain rule applies. |
 | `--limit` | `0` (no limit) | Stop after queueing this many articles. |
 | `--dry-run` | off | Count without queueing. |
 
@@ -220,9 +221,16 @@ Flags must precede the domain: parsing stops at the first non-flag argument, so
 `set example.com --selector …` prints usage rather than saving a rule.
 
 A rule changes nothing already stored until the affected articles are
-reprocessed. Use `tome reextract --since-version 0` — `reextract` selects on
-extractor version, so a bare run finds nothing when every body is already at the
-current version, and there is no way to reprocess only one domain.
+reprocessed, and `set` prints the command to do it. It needs both flags:
+
+```sh
+tome reextract --since-version 0 --domain example.com
+```
+
+`--since-version 0` because `reextract` selects on extractor version, so a bare
+run finds nothing when every body is already current. `--domain` because the rule
+can only affect that one site, and reprocessing a large archive to correct a
+handful of articles is hours of needless work.
 
 Rules are global and admin-only. How to extract a site's articles is a technical
 fact about that site, identical for every reader.

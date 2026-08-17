@@ -372,7 +372,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 
 		// Exactly what `tome reextract` does: confirm the article is a
 		// candidate, then queue a forced extraction.
-		candidates, err := s.System().ReextractCandidates(ctx, "never-matches", 0, 100)
+		candidates, err := s.System().ReextractCandidates(ctx, "never-matches", "", 0, 100)
 		if err != nil {
 			t.Fatalf("ReextractCandidates() = %v", err)
 		}

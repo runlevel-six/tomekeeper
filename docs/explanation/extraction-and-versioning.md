@@ -139,8 +139,19 @@ never reaches the archive it was written for.
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not
 select the affected articles on its own. Use `--since-version 0`, which matches
-every body because no body carries version `0`. There is currently no way to
-reprocess a single domain.
+every body because no body carries version `0`, together with `--domain` to keep
+the work to the site the rule affects:
+
+```sh
+tome reextract --since-version 0 --domain example.com
+```
+
+That asymmetry is worth understanding rather than working around. The version
+constant tracks *this program's* extraction behavior, and a domain rule is data
+rather than behavior — it can change between two runs of the same binary. Making
+rule edits bump a compiled-in constant is impossible; making the version a
+database value would mean every rule edit invalidated the whole archive's bodies.
+Two flags is the honest interface.
 
 A new body does not overwrite the old one; it **demotes** it. `is_current`
 moves to the new row and the previous one stays. That costs a row and buys the
