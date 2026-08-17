@@ -8,6 +8,10 @@ version: '3'
 
 vars:
   BINARY: tome
+  # Matching the Dockerfile is not cosmetic: without this the AVIF encoder links
+  # the binary against libc, which the distroless-static runtime image cannot
+  # exec. See the comment in the Dockerfile.
+  TAGS: nodynamic
   PACKAGE: github.com/runlevel-six/tomekeeper
   IMAGE: '{{.IMAGE | default "tomekeeper"}}'
   VERSION:
@@ -31,8 +35,17 @@ tasks:
 
   build:
     desc: Build the tome binary into bin/
+    # CGO_ENABLED=0 and TAGS together are what make the binary static, and the
+    # container image needs it static. They are separate causes: cgo pulls libc in
+    # through net and os/user, and without the tag the AVIF encoder pulls it in
+    # through purego. Setting both here means `task build` produces the same
+    # artifact the image ships, rather than one that happens to work locally.
+    #
+    # Deliberately *not* applied to the test tasks: `go test -race` requires cgo.
+    env:
+      CGO_ENABLED: '0'
     cmds:
-      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} ./cmd/{{.BINARY}}
+      - go build -trimpath -tags '{{.TAGS}}' -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} ./cmd/{{.BINARY}}
 
   run:
     desc: Run the server locally (needs TOME_DATABASE_URL)
@@ -43,7 +56,7 @@ tasks:
   test:
     desc: Run tests with the race detector (integration tests skip without a database)
     cmds:
-      - go test -race -cover ./...
+      - go test -race -cover -tags '{{.TAGS}}' ./...
 
   test:integration:
     desc: Run tests against a live PostgreSQL, failing if TOME_TEST_DATABASE_URL is unset
@@ -58,7 +71,7 @@ tasks:
           echo "  export TOME_TEST_DATABASE_URL='postgres://tome:tome@localhost:5432/tome_test?sslmode=disable'" >&2
           exit 1
         fi
-        go test -race -cover ./...
+        go test -race -cover -tags '{{.TAGS}}' ./...
 
   test:corpus:
     desc: Run the extraction corpus against real pages, failing if TOME_TEST_CORPUS_DIR is unset

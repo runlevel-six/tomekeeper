@@ -69,21 +69,24 @@ jobs:
             exit 1
           fi
 
+      # -tags nodynamic everywhere, matching the Dockerfile: without it the binary
+      # links against libc and cannot run in the distroless-static image, and the
+      # tests would be exercising a different build than the one that ships.
       - name: Vet
-        run: go vet ./...
+        run: go vet -tags nodynamic ./...
 
       - name: Build
-        run: go build ./...
+        run: go build -tags nodynamic ./...
 
       - name: Test
-        run: go test -race -cover ./...
+        run: go test -race -cover -tags nodynamic ./...
 
       # A skipped integration test looks exactly like a passing one in the
       # summary. This fails the job if the database-backed tests did not
       # actually run.
       - name: Verify integration tests ran
         run: |
-          output=$(go test -v -run 'Integration|Database|Deduplication|Scoping|Migrations' ./internal/... 2>&1)
+          output=$(go test -v -tags nodynamic -run 'Integration|Database|Deduplication|Scoping|Migrations' ./internal/... 2>&1)
           if echo "$output" | grep -q "SKIP"; then
             echo "::error::Integration tests skipped despite TOME_TEST_DATABASE_URL being set"
             echo "$output" | grep "SKIP"
@@ -99,7 +102,7 @@ jobs:
       - name: Verify the private corpus ran
         if: env.TOME_TEST_CORPUS_DIR != ''
         run: |
-          output=$(go test -v -run TestCorpus ./internal/extract/ 2>&1)
+          output=$(go test -v -tags nodynamic -run TestCorpus ./internal/extract/ 2>&1)
           echo "$output" | grep 'corpus:' || true
           if echo "$output" | grep -qE 'corpus: [0-9]+ committed fixtures, 0 private pages'; then
             echo "::error::TOME_TEST_CORPUS_DIR is set for this job but no private pages loaded"
@@ -121,7 +124,7 @@ jobs:
       # first minute of fuzzing found two real bugs. A short run on every
       # change is cheap insurance; the seed corpus keeps both regressions.
       - name: Fuzz
-        run: go test -fuzz FuzzCanonicalize -fuzztime 60s ./internal/urlcanon/
+        run: go test -tags nodynamic -fuzz FuzzCanonicalize -fuzztime 60s ./internal/urlcanon/
 
   lint:
     name: Lint

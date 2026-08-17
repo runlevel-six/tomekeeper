@@ -22,9 +22,23 @@ ARG DATE=""
 
 ENV CGO_ENABLED=0
 
+# -tags nodynamic is what makes the runtime stage below possible, and it is not
+# optional. The AVIF encoder pulls in ebitengine/purego, which uses
+# //go:cgo_import_dynamic to reach dlopen — so the binary links against
+# libc.so.6 and needs an ELF interpreter *even with CGO_ENABLED=0*. In an image
+# with no libc that produces "exec /usr/local/bin/tome: no such file or
+# directory", which is a confusing way to say the loader is missing.
+#
+# The tag drops purego's dlopen path, which only existed to use a system libavif
+# when one happens to be installed. Encoding still runs through the bundled
+# WebAssembly build, which is the path this project intended all along.
+#
+# scripts/smoke.sh is what catches this if it ever regresses: it is the only test
+# that runs the binary in an image without a libc to fall back on.
 RUN go build \
       -trimpath \
       -buildvcs=false \
+      -tags nodynamic \
       -ldflags "-s -w \
         -X github.com/runlevel-six/tomekeeper/internal/version.Version=${VERSION} \
         -X github.com/runlevel-six/tomekeeper/internal/version.Commit=${COMMIT} \

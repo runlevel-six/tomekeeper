@@ -36,7 +36,26 @@ PORT="${SMOKE_PORT:-18080}"
 DSN="postgres://tome:smoke@${DB_CONTAINER}:5432/tome?sslmode=disable"
 
 pass() { printf '  ok   %s\n' "$1"; }
-fail() { printf '  FAIL %s\n' "$1" >&2; exit 1; }
+
+# On failure, dump everything a reader would otherwise have to go and get: the
+# server's log, the database's log, and the container states. A CI failure that
+# says only "GET /healthz returned 000" costs a round trip to diagnose.
+fail() {
+  printf '  FAIL %s\n' "$1" >&2
+  {
+    echo
+    echo "---- docker ps -a ----"
+    docker ps -a --filter "name=tomekeeper-smoke" --format '{{.Names}}\t{{.Status}}\t{{.Image}}' || true
+    for c in "$CONTAINER" "$DB_CONTAINER"; do
+      if docker inspect "$c" >/dev/null 2>&1; then
+        echo
+        echo "---- logs: $c ----"
+        docker logs --tail 60 "$c" 2>&1 || true
+      fi
+    done
+  } >&2
+  exit 1
+}
 
 cleanup() {
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -60,7 +79,7 @@ output=$(docker run --rm "$IMAGE" serve 2>&1)
 code=$?
 set -e
 
-[ "$code" -ne 0 ] || fail "exited 0 with no TOME_DATABASE_URL, want nonzero"
+[ "$code" -ne 0 ] || fail "exited 0 with no TOME_DATABASE_URL, want nonzero. Output: $output"
 pass "exited $code"
 
 grep -q "TOME_DATABASE_URL" <<<"$output" \
@@ -82,15 +101,17 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 docker exec "$DB_CONTAINER" pg_isready -U tome >/dev/null 2>&1 \
-  || fail "PostgreSQL did not become ready"
+  || fail "PostgreSQL did not become ready within 30s"
 pass "PostgreSQL is ready"
 
 echo "==> Applying migrations from the image"
-docker run --rm --network "$NETWORK" \
+if ! migrate_out=$(docker run --rm --network "$NETWORK" \
   -e "TOME_DATABASE_URL=$DSN" \
   -e "TOME_PASSWORD=smoke-password" \
-  "$IMAGE" migrate >/dev/null \
-  || fail "migrate failed against a reachable database"
+  "$IMAGE" migrate 2>&1); then
+  printf '%s\n' "$migrate_out" >&2
+  fail "migrate failed against a reachable database"
+fi
 pass "migrate succeeded"
 
 echo "==> Case 2: a configured server answers its probes"
@@ -101,10 +122,17 @@ docker run -d --name "$CONTAINER" --network "$NETWORK" \
   "$IMAGE" >/dev/null
 
 base="http://127.0.0.1:${PORT}"
+up=false
 for _ in $(seq 1 60); do
-  curl -sf -o /dev/null "${base}/healthz" && break
+  if curl -sf -o /dev/null "${base}/healthz"; then up=true; break; fi
+  # A container that has already exited will never answer, so stop waiting for
+  # it and report the reason it exited instead of timing out silently.
+  if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
+    fail "the server container exited before answering /healthz"
+  fi
   sleep 0.25
 done
+[ "$up" = true ] || fail "the server did not answer /healthz within 15s"
 
 check_status() {
   local path="$1" want="$2"
