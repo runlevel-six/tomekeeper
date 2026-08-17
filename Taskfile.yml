@@ -41,9 +41,31 @@ tasks:
       - ./bin/{{.BINARY}} serve
 
   test:
-    desc: Run tests with the race detector
+    desc: Run tests with the race detector (integration tests skip without a database)
     cmds:
       - go test -race -cover ./...
+
+  test:integration:
+    desc: Run tests against a live PostgreSQL, failing if TOME_TEST_DATABASE_URL is unset
+    cmds:
+      - |
+        if [ -z "${TOME_TEST_DATABASE_URL:-}" ]; then
+          echo "TOME_TEST_DATABASE_URL is not set." >&2
+          echo "Integration tests would skip silently, which is not a pass." >&2
+          echo "" >&2
+          echo "  docker run -d --name tome-test -e POSTGRES_USER=tome -e POSTGRES_PASSWORD=tome \\" >&2
+          echo "    -e POSTGRES_DB=tome_test -p 5432:5432 postgres:16-alpine" >&2
+          echo "  export TOME_TEST_DATABASE_URL='postgres://tome:tome@localhost:5432/tome_test?sslmode=disable'" >&2
+          exit 1
+        fi
+        go test -race -cover ./...
+
+  fuzz:
+    desc: Fuzz URL canonicalization, the function deduplication depends on
+    vars:
+      FUZZTIME: '{{.FUZZTIME | default "60s"}}'
+    cmds:
+      - go test -fuzz FuzzCanonicalize -fuzztime {{.FUZZTIME}} ./internal/urlcanon/
 
   vet:
     desc: Run go vet

@@ -16,6 +16,27 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+
+    # Integration tests skip themselves when TOME_TEST_DATABASE_URL is unset,
+    # so without this service they would quietly stop covering anything.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tome
+          POSTGRES_PASSWORD: tome
+          POSTGRES_DB: tome_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tome"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TOME_TEST_DATABASE_URL: postgres://tome:tome@localhost:5432/tome_test?sslmode=disable
+
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +53,17 @@ jobs:
             exit 1
           fi
 
+      # go.mod is maintained by hand when the module proxy is unreachable, so
+      # CI is the thing that proves it matches what the code actually imports.
+      - name: Check go.mod is tidy
+        run: |
+          go mod tidy
+          if ! git diff --quiet go.mod go.sum; then
+            echo "::error::go.mod or go.sum is not tidy; run 'go mod tidy'"
+            git diff go.mod go.sum
+            exit 1
+          fi
+
       - name: Vet
         run: go vet ./...
 
@@ -40,6 +72,35 @@ jobs:
 
       - name: Test
         run: go test -race -cover ./...
+
+      # A skipped integration test looks exactly like a passing one in the
+      # summary. This fails the job if the database-backed tests did not
+      # actually run.
+      - name: Verify integration tests ran
+        run: |
+          output=$(go test -v -run 'Integration|Database|Deduplication|Scoping|Migrations' ./internal/... 2>&1)
+          if echo "$output" | grep -q "SKIP"; then
+            echo "::error::Integration tests skipped despite TOME_TEST_DATABASE_URL being set"
+            echo "$output" | grep "SKIP"
+            exit 1
+          fi
+
+  fuzz:
+    name: Fuzz URL canonicalization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      # Deduplication is the property the whole archive rests on, and the
+      # first minute of fuzzing found two real bugs. A short run on every
+      # change is cheap insurance; the seed corpus keeps both regressions.
+      - name: Fuzz
+        run: go test -fuzz FuzzCanonicalize -fuzztime 60s ./internal/urlcanon/
 
   lint:
     name: Lint

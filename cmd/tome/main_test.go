@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -116,5 +117,50 @@ func TestServeReportsEveryConfigProblem(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Errorf("stderr does not mention %s:\n%s", want, msg)
 		}
+	}
+}
+
+// `import-opml --dry-run` deliberately needs no database, so someone deciding
+// whether to trust this with a long-curated subscription list can see exactly
+// what it would do before configuring anything.
+func TestImportOPMLDryRunNeedsNoDatabase(t *testing.T) {
+	t.Setenv("TOME_DATABASE_URL", "")
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"import-opml", "--dry-run",
+		filepath.Join("..", "..", "internal", "feed", "testdata", "opml", "freshrss.opml"),
+	}, &stdout, &stderr)
+
+	if code != exitOK {
+		t.Fatalf("run() = %d, want %d\nstderr: %s", code, exitOK, stderr.String())
+	}
+
+	out := stdout.String()
+	for _, want := range []string{"dry run, nothing written", "7 subscriptions", "Example Engineering", "News/Local"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output does not contain %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestImportOPMLRejectsBadInvocations(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"no file", []string{"import-opml"}},
+		{"two files", []string{"import-opml", "a.opml", "b.opml"}},
+		{"missing file", []string{"import-opml", "--dry-run", "does-not-exist.opml"}},
+		{"not OPML", []string{"import-opml", "--dry-run", "main.go"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := run(tt.args, &stdout, &stderr); code != exitUsage {
+				t.Errorf("run(%q) = %d, want %d\nstderr: %s", tt.args, code, exitUsage, stderr.String())
+			}
+		})
 	}
 }

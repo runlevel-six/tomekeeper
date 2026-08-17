@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -41,6 +42,25 @@ type Config struct {
 	// ShutdownTimeout bounds graceful shutdown before in-flight requests are
 	// dropped.
 	ShutdownTimeout time.Duration
+
+	// Username is the single v1 user, seeded by `tome migrate`.
+	Username string
+
+	// ContactURL is embedded in the outbound User-Agent so that an operator
+	// who wants this archiver to stop can find out who to ask. Optional, but
+	// strongly encouraged before pointing it at anyone else's server.
+	ContactURL string
+
+	// PollMinInterval and PollMaxInterval bound how often a feed is polled.
+	PollMinInterval time.Duration
+	PollMaxInterval time.Duration
+
+	// FeedFailureThreshold is the number of consecutive failures after which a
+	// feed is disabled and surfaced for attention.
+	FeedFailureThreshold int
+
+	// WorkerConcurrency is how many jobs `tome worker` runs at once.
+	WorkerConcurrency int
 }
 
 // Defaults for every optional setting. Kept in one block so the reference
@@ -50,6 +70,12 @@ const (
 	defaultLogLevel        = "info"
 	defaultLogFormat       = "json"
 	defaultShutdownTimeout = 15 * time.Second
+
+	defaultUsername             = "tome"
+	defaultPollMinInterval      = 15 * time.Minute
+	defaultPollMaxInterval      = 24 * time.Hour
+	defaultFeedFailureThreshold = 20
+	defaultWorkerConcurrency    = 5
 )
 
 // LookupFunc matches os.LookupEnv. Taking it as a parameter keeps Load a pure
@@ -72,10 +98,48 @@ func Load(lookup LookupFunc) (*Config, error) {
 	}
 
 	cfg := &Config{
-		HTTPAddr:  get("HTTP_ADDR", defaultHTTPAddr),
-		LogFormat: get("LOG_FORMAT", defaultLogFormat),
+		HTTPAddr:   get("HTTP_ADDR", defaultHTTPAddr),
+		LogFormat:  get("LOG_FORMAT", defaultLogFormat),
+		Username:   get("USERNAME", defaultUsername),
+		ContactURL: get("CONTACT_URL", ""),
 	}
 	var problems []error
+
+	// Collected here so that each setting below can add a problem and move on
+	// rather than returning early.
+	duration := func(name string, def time.Duration) time.Duration {
+		raw := get(name, def.String())
+		d, err := time.ParseDuration(raw)
+		switch {
+		case err != nil:
+			problems = append(problems, fmt.Errorf(
+				"%s%s %q is not a duration, for example 15m or 24h: %w", Prefix, name, raw, err))
+			return def
+		case d <= 0:
+			problems = append(problems, fmt.Errorf(
+				"%s%s must be positive, got %s", Prefix, name, d))
+			return def
+		default:
+			return d
+		}
+	}
+
+	positiveInt := func(name string, def int) int {
+		raw := get(name, strconv.Itoa(def))
+		n, err := strconv.Atoi(raw)
+		switch {
+		case err != nil:
+			problems = append(problems, fmt.Errorf(
+				"%s%s %q is not a whole number", Prefix, name, raw))
+			return def
+		case n < 1:
+			problems = append(problems, fmt.Errorf(
+				"%s%s must be at least 1, got %d", Prefix, name, n))
+			return def
+		default:
+			return n
+		}
+	}
 
 	// TOME_DATABASE_URL — required.
 	raw := get("DATABASE_URL", "")
@@ -135,6 +199,28 @@ func Load(lookup LookupFunc) (*Config, error) {
 		cfg.ShutdownTimeout = d
 	}
 
+	// TOME_CONTACT_URL — optional, but must be usable if given, since it is
+	// published to every server this service contacts.
+	if cfg.ContactURL != "" {
+		u, err := url.Parse(cfg.ContactURL)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			problems = append(problems, fmt.Errorf(
+				"%sCONTACT_URL %q is not an absolute URL, for example https://example.com/about",
+				Prefix, cfg.ContactURL))
+		}
+	}
+
+	cfg.PollMinInterval = duration("POLL_MIN_INTERVAL", defaultPollMinInterval)
+	cfg.PollMaxInterval = duration("POLL_MAX_INTERVAL", defaultPollMaxInterval)
+	if cfg.PollMinInterval > cfg.PollMaxInterval {
+		problems = append(problems, fmt.Errorf(
+			"%sPOLL_MIN_INTERVAL (%s) is longer than %sPOLL_MAX_INTERVAL (%s)",
+			Prefix, cfg.PollMinInterval, Prefix, cfg.PollMaxInterval))
+	}
+
+	cfg.FeedFailureThreshold = positiveInt("FEED_FAILURE_THRESHOLD", defaultFeedFailureThreshold)
+	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
+
 	if len(problems) > 0 {
 		return nil, &Error{Problems: problems}
 	}
@@ -183,6 +269,12 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("log_level", c.LogLevel.String()),
 		slog.String("log_format", c.LogFormat),
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
+		slog.String("username", c.Username),
+		slog.String("contact_url", c.ContactURL),
+		slog.Duration("poll_min_interval", c.PollMinInterval),
+		slog.Duration("poll_max_interval", c.PollMaxInterval),
+		slog.Int("feed_failure_threshold", c.FeedFailureThreshold),
+		slog.Int("worker_concurrency", c.WorkerConcurrency),
 	)
 }
 

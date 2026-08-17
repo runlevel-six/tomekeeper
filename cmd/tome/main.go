@@ -14,8 +14,6 @@ import (
 	"syscall"
 
 	"github.com/runlevel-six/tomekeeper/internal/config"
-	"github.com/runlevel-six/tomekeeper/internal/logging"
-	"github.com/runlevel-six/tomekeeper/internal/server"
 	"github.com/runlevel-six/tomekeeper/internal/version"
 )
 
@@ -43,6 +41,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "serve":
 		return serve(args[1:], stderr)
 
+	case "worker":
+		return worker(args[1:], stderr)
+
+	case "migrate":
+		return migrate(args[1:], stdout, stderr)
+
+	case "import-opml":
+		return importOPML(args[1:], stdout, stderr)
+
 	case "version":
 		fmt.Fprintln(stdout, version.String())
 		return exitOK
@@ -58,45 +65,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// serve loads configuration, builds the logger and server, and blocks until a
-// termination signal arrives.
-func serve(args []string, stderr io.Writer) int {
-	if len(args) > 0 {
-		fmt.Fprintf(stderr, "tome serve: unexpected argument %q\n", args[0])
-		fmt.Fprintf(stderr, "tome serve takes no flags; it is configured entirely by %s* environment variables.\n", config.Prefix)
-		fmt.Fprintln(stderr, "See docs/reference/configuration.md.")
-		return exitUsage
-	}
-
-	cfg, err := config.Load(os.LookupEnv)
-	if err != nil {
-		// Written plainly to stderr, not through the structured logger: the
-		// logger's own configuration is part of what just failed to validate,
-		// and a human is reading this in a terminal or a crash-loop log.
-		fmt.Fprintf(stderr, "tome: %v\n\n", err)
-		fmt.Fprintln(stderr, "See docs/reference/configuration.md for every setting.")
-		return exitUsage
-	}
-
-	log := logging.New(stderr, cfg.LogFormat, cfg.LogLevel)
-	log.Info("starting", "version", version.Short(), "config", cfg)
-
-	// SIGTERM is what Kubernetes sends; SIGINT is what a terminal sends.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// No readiness checks are registered at M0 — there is no database
-	// connection until M1. /readyz therefore reports ready as soon as the
-	// process is serving, which is accurate for what this binary does today.
-	srv := server.New(cfg, log)
-
-	if err := srv.Run(ctx); err != nil {
-		log.Error("server failed", "error", err)
-		return exitFailure
-	}
-	return exitOK
-}
-
 func usage(w io.Writer) {
 	fmt.Fprint(w, `tome — self-hosted feed aggregator and article archive
 
@@ -104,11 +72,20 @@ Usage:
   tome <subcommand>
 
 Subcommands:
-  serve      Run the HTTP server (web UI, health endpoints)
-  version    Print build version and exit
-  help       Print this message
+  serve         Run the HTTP server (web UI, health endpoints)
+  worker        Run the background job pool (feed polling)
+  migrate       Apply database migrations and seed the user
+  import-opml   Add subscriptions from an OPML file
+  version       Print build version and exit
+  help          Print this message
 
 Configuration is read from `+config.Prefix+`-prefixed environment variables.
 `+config.Prefix+`DATABASE_URL is required. Full reference: docs/reference/configuration.md
 `)
+}
+
+// signalContext returns a context canceled by SIGINT or SIGTERM. SIGTERM is
+// what Kubernetes sends; SIGINT is what a terminal sends.
+func signalContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }

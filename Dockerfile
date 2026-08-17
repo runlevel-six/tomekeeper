@@ -7,8 +7,7 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 
 # Dependencies first, so the module cache layer survives source edits.
-# go.sum joins this line when the first dependency lands (M1).
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY cmd/ cmd/

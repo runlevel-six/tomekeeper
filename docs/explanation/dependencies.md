@@ -10,19 +10,28 @@ worse than the risk of the dependency.*
 
 ## Go module dependencies
 
-**None.** As of M0 `go.mod` has no `require` block.
+Four libraries as of M1, across six modules — River publishes its driver and
+type packages separately. Each is here because the standard library cannot do
+the job and doing it by hand would be worse than the risk of the dependency.
 
-This is not an aspiration to keep forever — feed parsing and article extraction
-are exactly the problems worth importing rather than writing. It is a statement
-that nothing so far has needed one:
+| Dependency | Why |
+|---|---|
+| `github.com/jackc/pgx/v5` | The PostgreSQL driver. `database/sql` cannot use the binary protocol or the Postgres-specific types this schema relies on, and pgx is the maintained choice in Go. Its `stdlib` subpackage also gives goose the `*sql.DB` it wants without a second connection pool. |
+| `github.com/pressly/goose/v3` | Schema migrations. Chosen over `golang-migrate` because it works as a *library* against an embedded `fs.FS`: the runtime image is distroless, with no shell and no filesystem to read `.sql` files from, so migrations have to travel inside the binary that expects them. |
+| `github.com/riverqueue/river` | Postgres-backed job queue, with `riverdriver/riverpgxv5` and `rivertype`. Writing a correct queue — visibility timeouts, retries with backoff, unique jobs, periodic schedules — is a project in itself, and this one keeps the promise of a single stateful dependency. |
+| `github.com/mmcdole/gofeed` | RSS, Atom, and JSON Feed parsing. The specifications are only half the problem; the other half is the decade of malformed real-world feeds this library already handles, which is a tax paid forever if written from scratch. |
+
+Still done with the standard library, deliberately:
 
 | What could have been imported | What is used instead |
 |---|---|
-| A CLI framework (`cobra`, `urfave/cli`) | A `switch` on `os.Args[1]`. There are three subcommands and no flags. A framework here would be more code to read, not less. |
-| A config library (`viper`, `envconfig`) | ~100 lines in `internal/config`. Reflection-driven loaders make the error messages worse, and the error messages are the whole point of validating at startup. |
-| A logging library (`zap`, `zerolog`) | `log/slog`. It is structured, it is in the standard library, and this service will never be logging at a rate where the performance difference is measurable. |
+| A CLI framework (`cobra`, `urfave/cli`) | A `switch` on `os.Args[1]` and one `flag.FlagSet` for the single command with a flag. |
+| A config library (`viper`, `envconfig`) | ~150 lines in `internal/config`. Reflection-driven loaders make the error messages worse, and the error messages are the point of validating at startup. |
+| A logging library (`zap`, `zerolog`) | `log/slog`. Structured, in the standard library, and this service will never log at a rate where the difference is measurable. |
 | An HTTP router (`chi`, `gorilla/mux`) | `net/http.ServeMux`, which has had method and wildcard patterns since Go 1.22. |
-| An assertion library (`testify`) | `if got != want { t.Errorf(...) }`. Verbose, no dependency, and the failure output says what was compared. |
+| An OPML library | ~100 lines of `encoding/xml` in `internal/feed/opml.go`. The format is small and the available libraries disagree with real exports about as often as they agree. |
+| An assertion library (`testify`) | `if got != want { t.Errorf(...) }`. No dependency, and the failure output says what was compared. |
+| A test-container library | `internal/dbtest`, which skips when `TOME_TEST_DATABASE_URL` is unset. CI supplies a service container; nothing needs to orchestrate Docker from inside a test. |
 
 ## Expected dependencies
 
@@ -32,10 +41,6 @@ with its justification, in the milestone that introduces it.
 
 | Dependency | Milestone | Why it will be needed |
 |---|---|---|
-| `jackc/pgx` | M1 | The PostgreSQL driver. `database/sql` alone cannot use the Postgres-specific types and the binary protocol this schema relies on. |
-| `riverqueue/river` | M1 | Postgres-backed job queue. Writing a correct one — visibility timeouts, retries, unique jobs — is a project in itself. |
-| A migration tool (`golang-migrate` or `goose`) | M1 | Ordered, versioned, irreversible-by-default schema changes. The choice between the two is recorded in the data model reference. |
-| `mmcdole/gofeed` | M1 | RSS, Atom, and JSON Feed parsing, including the malformed real-world feeds that make writing this yourself a permanent tax. |
 | `go-shiori/go-readability` and/or `markusmobius/go-trafilatura` | M2 | Article extraction. This is the problem the project exists to solve well, and both encode years of accumulated heuristics. |
 | `microcosm-cc/bluemonday` | M2 | HTML sanitization. Hand-rolled sanitizers are a documented source of XSS; this one is the Go ecosystem's reviewed answer. |
 | An image codec for AVIF/WebP | M3 | The standard library encodes neither, and the asset policy depends on modern codecs to keep the archive's storage growth tolerable. |

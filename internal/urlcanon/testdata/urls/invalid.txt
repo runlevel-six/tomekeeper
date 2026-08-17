@@ -1,0 +1,35 @@
+# URLs that must be rejected rather than canonicalized.
+#
+# One per line. A reference that cannot be canonicalized is unusable: storing
+# it raw would put a non-canonical key in articles.url_canonical and defeat the
+# deduplication every later milestone depends on.
+
+# Not absolute. A feed carrying these needs its own base URL resolved first,
+# which is the poller's job, not this function's.
+/relative/path
+article.html
+../up-one-level
+
+# No scheme.
+example.com/article
+//example.com/protocol-relative
+
+# Schemes this archive does not fetch.
+ftp://example.com/file
+mailto:someone@example.com
+javascript:alert(1)
+data:text/html,<h1>hi</h1>
+file:///etc/passwd
+
+# No host.
+https://
+https:///path
+
+# Empty and whitespace.
+
+
+# A host that normalizes to nothing. Found by FuzzCanonicalize: this used to
+# produce "http:///", a "canonical" form the function itself would reject.
+http://.
+http://..
+https://.

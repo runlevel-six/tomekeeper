@@ -9,8 +9,8 @@ commands and settings *are*, see [CLI](../reference/cli.md) and
 `tome` is a single Go binary with subcommands. Two of them are long-running:
 
 - `tome serve` — the HTTP surface: web UI, Fever API, health endpoints.
-- `tome worker` — the job pool: feed polling, fetching, extraction, assets.
-  *(M1.)*
+- `tome worker` — the job pool: feed polling now; fetching, extraction, and
+  assets from M2.
 
 They are deployed as two workloads built from one image. The alternative — one
 process doing both — is simpler to start and wrong to run: extraction is CPU-
@@ -80,17 +80,14 @@ become a crash loop that outlasts the original problem. Readiness failing is
 the correct response: stop sending traffic, keep the process alive, recover
 when the dependency does.
 
-At M0 there are no dependencies to check, so `/readyz` reports ready as soon as
-the process is serving. The mechanism exists now, unused, because retrofitting
-readiness onto a service that has been running without it means discovering
-every place that assumed it was always ready.
+`tome serve` registers one check, the database. The blob root joins it at M3.
 
 ## What runs where
 
 ```
                     ┌──────────────┐
    feeds ──poll──▶  │  worker      │ ──enqueue──┐
-                    │  (M1)        │            │
+                    │  scheduling  │            │
                     └──────────────┘            ▼
                                         ┌───────────────┐
                                         │  PostgreSQL   │
@@ -112,4 +109,49 @@ every place that assumed it was always ready.
                     └──────────────┘
 ```
 
-At M0, only `serve` exists, and only the health endpoints on it.
+At M1 the worker polls and records references; nothing fetches article pages
+yet, so articles sit at `fetch_status = 'pending'` waiting for M2.
+
+## Scheduling
+
+Polling is split into two jobs rather than one.
+
+`schedule_feeds` runs every minute and asks a single indexed question: which
+feeds have `next_poll_at` in the past? It enqueues a `poll_feed` job for each,
+up to a hundred at a time.
+
+`poll_feed` does the network work for one feed.
+
+The split matters because a poll is a network round trip that can take thirty
+seconds against a slow origin, while the scheduling decision is microseconds.
+One combined job would serialize every feed behind the slowest server in the
+list. Separating them also means the concurrency limit applies where the
+expense is, and a stuck feed delays only itself.
+
+The batch limit exists for the first import: a few hundred feeds all default to
+`next_poll_at = now()`, and without a bound the first scheduler run would
+enqueue every one of them at once. Nothing is lost — whatever does not fit is
+still due a minute later.
+
+A `poll_feed` job is unique per feed while one is pending or running. Without
+that, a scheduler run overlapping a slow poll would enqueue a second poll of the
+same feed, and the two would race to write the same conditional-GET validators
+while the origin server watched what looked a lot like hammering.
+
+## Adaptive polling
+
+A feed's interval is learned rather than configured. Each poll that finds
+nothing multiplies the interval by 1.5, up to a 24-hour ceiling; each poll that
+finds something halves it, down to a 15-minute floor. A feed that declares its
+own cadence through the syndication module is believed instead, still clamped.
+
+Halving rather than resetting to the floor is deliberate. Resetting means a
+feed that posts once a day climbs the entire ladder back to the ceiling every
+single day — about a dozen pointless requests per feed per day, which is
+precisely the impoliteness the interval exists to avoid. Halving converges on
+the feed's real cadence from both directions.
+
+Failures back off exponentially from the floor, and a feed is disabled after
+twenty consecutive failures. Disabled is not deleted: the feed keeps its last
+error, and surfacing it is the point. A feed reader that quietly stops
+collecting from a source is worse than one that stops loudly.

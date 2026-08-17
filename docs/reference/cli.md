@@ -26,6 +26,106 @@ logged at `error` and the process exits `1`.
 
 **Required configuration:** `TOME_DATABASE_URL`.
 
+### `tome worker`
+
+Runs the background job pool in the foreground until it receives `SIGINT` or
+`SIGTERM`.
+
+Takes no flags or positional arguments.
+
+The worker polls feeds. It runs as a separate process from `tome serve` because
+polling — and, from M2, extraction — is bursty and memory-hungry, and a backlog
+must not be able to make the reader unresponsive. Both are built from the same
+image.
+
+Two job types run at M1:
+
+| Job | Trigger | Work |
+|---|---|---|
+| `schedule_feeds` | every 60s, and once at startup | Selects up to 100 feeds where `next_poll_at <= now()` and `NOT disabled`, and enqueues a poll for each. |
+| `poll_feed` | enqueued by the scheduler | Conditional GET, parse, upsert articles and references, update the feed's polling state. |
+
+A `poll_feed` job is unique per feed while one is pending or running, so a slow
+poll cannot be overtaken by the next scheduler run.
+
+On a termination signal the worker stops accepting new jobs and lets running
+ones finish. A poll killed mid-write would leave a feed's stored validators
+inconsistent with what was actually ingested, and the next poll would then take
+a 304 for a feed whose items were never stored.
+
+**Required configuration:** `TOME_DATABASE_URL`. Behavior is shaped by
+`TOME_WORKER_CONCURRENCY`, `TOME_POLL_MIN_INTERVAL`, `TOME_POLL_MAX_INTERVAL`,
+`TOME_FEED_FAILURE_THRESHOLD`, and `TOME_CONTACT_URL`.
+
+### `tome migrate`
+
+Applies pending database migrations, then creates or renames the single v1 user
+from `TOME_USERNAME`. Both are idempotent, so running it on every deployment is
+correct.
+
+Takes no flags or positional arguments.
+
+Migrations never run automatically when `serve` or `worker` starts. They run
+here, as their own command, so that a rollout can be gated on them completing
+and so that two replicas starting at once cannot race each other.
+
+Two migration histories are applied: the application schema, embedded in the
+binary from `internal/db/migrations/`, and River's own job-queue schema, which
+River owns and versions itself.
+
+On success it prints the seeded user and exits `0`:
+
+```console
+$ tome migrate
+schema up to date; user "tome" is id 1
+```
+
+### `tome import-opml`
+
+Adds subscriptions from an OPML file exported by another feed reader.
+
+```
+tome import-opml [--dry-run] <file.opml>
+```
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Parse the file and print what would be imported. Touches no database and needs none, so it works before the service is set up. |
+
+An outline with an `xmlUrl` is a feed; an outline without one is a folder whose
+name becomes the category of everything beneath it. Nested folders are joined
+with `/`, so a feed in `News` → `Local` gets the category `News/Local`.
+Bookmarks, empty folders, and URLs that are not HTTP or HTTPS are skipped.
+
+Feed URLs are stored exactly as the exporting reader wrote them. They are
+deliberately **not** canonicalized: canonicalization is tuned for article links,
+where a `ref` or `source` parameter is tracking noise, but on a feed endpoint
+the same parameter may select which feed is served.
+
+Re-running an import is safe. Subscriptions are keyed by `(user, feed URL)`, so
+a second run updates titles and categories, creates no duplicates, and does not
+disturb polling state — stored validators, intervals, and failure counts are
+left alone.
+
+The user is selected by `TOME_USERNAME` and must already exist; run `tome
+migrate` first.
+
+```console
+$ tome import-opml --dry-run subscriptions.opml
+subscriptions.opml: 7 subscriptions (dry run, nothing written)
+
+CATEGORY    TITLE                FEED URL
+Technology  Example Engineering  https://engineering.example.com/feed.xml
+...
+
+$ tome import-opml subscriptions.opml
+subscriptions.opml: 7 added, 0 already subscribed
+```
+
+A subscription that fails to store is reported on stderr and the import
+continues; the command exits `1` if any failed, so one bad entry costs neither
+the other four hundred nor your awareness of it.
+
 ### `tome version`
 
 Prints the build identity to stdout and exits `0`.
@@ -76,9 +176,11 @@ fails. The whole probe is bounded at 3 seconds.
 {"status": "not ready", "checks": {"database": "connection refused"}}
 ```
 
-The `checks` field is omitted when no checks are registered. **At M0 no checks
-are registered**, so `/readyz` reports ready as soon as the process is serving.
-The database check arrives with M1, the blob root check with M3.
+`tome serve` registers one check, `database`, which pings the connection pool.
+A failing database therefore takes this instance out of the load balancer while
+leaving the process alive to recover. The blob root check arrives with M3.
+
+The `checks` field is omitted entirely when no checks are registered.
 
 Requests to both endpoints are logged at `debug` rather than `info`, so that
 orchestrator probes do not dominate the log.
@@ -101,11 +203,9 @@ among the things that may have just failed to validate.
 
 | Subcommand | Arrives with |
 |---|---|
-| `tome worker` — job worker pool | M1 |
-| `tome migrate` — apply database migrations | M1 |
 | `tome reextract` — re-run extraction over the archive | M2 |
-| `tome import` / `tome export` | M6 |
 | `tome reindex` — rebuild the search index | M4 |
+| `tome import` / `tome export` | M6 |
 
 These are listed in the implementation plan and are not yet accepted by the
 binary; invoking one exits `2` as an unknown subcommand.

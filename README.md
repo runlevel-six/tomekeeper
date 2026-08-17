@@ -9,34 +9,35 @@ item it ingests becomes an offline-readable article with its images, stored as
 files on disk that open in a browser with the service stopped and the database
 gone.
 
-**Status: early. Milestone 0 of 9.** The binary starts, validates its
-configuration, logs, and answers health probes. It does not yet poll feeds,
-fetch pages, or store anything. There is nothing here to use yet.
+**Status: early. Milestone 1 of 9.** It polls feeds on an adaptive schedule and
+records every article they carry, deduplicated across subscriptions. It does not
+yet fetch article pages or extract their text (M2), and there is no web
+interface (M4). Useful to watch; not yet useful to read.
 
 ## Quick start
 
 ```sh
+docker run -d --name tome-db -e POSTGRES_USER=tome -e POSTGRES_PASSWORD=tome \
+  -e POSTGRES_DB=tome -p 5432:5432 postgres:16-alpine
+
 git clone https://github.com/runlevel-six/tomekeeper.git
 cd tomekeeper
 task build
 
-export TOME_DATABASE_URL='postgres://tome:password@localhost:5432/tome?sslmode=disable'
-./bin/tome serve
+export TOME_DATABASE_URL='postgres://tome:tome@localhost:5432/tome?sslmode=disable'
+
+./bin/tome migrate                        # create the schema
+./bin/tome import-opml subscriptions.opml # your OPML from any other reader
+./bin/tome worker                         # start polling
 ```
 
 ```console
-$ curl -s localhost:8080/healthz
-{"status":"ok"}
+$ ./bin/tome serve &
+$ curl -s localhost:8080/readyz
+{"status":"ready","checks":{"database":"ok"}}
 ```
 
-Or with the container image:
-
-```sh
-task docker:build
-docker run --rm -p 8080:8080 \
-  -e TOME_DATABASE_URL='postgres://tome:password@db:5432/tome' \
-  tomekeeper:latest
-```
+The full walkthrough is [Tutorial 1](docs/tutorials/01-first-run.md).
 
 ## Documentation
 
@@ -46,14 +47,22 @@ docker run --rm -p 8080:8080 \
 ## Development
 
 ```sh
-task            # list tasks
-task check      # format, vet, lint, test, build — everything CI runs
-task test       # tests with the race detector
-task docker:smoke   # acceptance criteria against the container image
+task                  # list tasks
+task check            # format, vet, lint, test, build — everything CI runs
+task test             # unit tests; integration tests skip without a database
+task test:integration # all tests, failing if TOME_TEST_DATABASE_URL is unset
+task fuzz             # fuzz URL canonicalization
+task docker:smoke     # acceptance criteria against the container image
 ```
 
-Requires Go 1.26+ and [Task](https://taskfile.dev). Docker is needed only for
-the image tasks.
+Requires Go 1.26+ and [Task](https://taskfile.dev). Docker is needed for the
+image tasks and for a PostgreSQL to run the integration tests against:
+
+```sh
+docker run -d --name tome-test -e POSTGRES_USER=tome -e POSTGRES_PASSWORD=tome \
+  -e POSTGRES_DB=tome_test -p 5432:5432 postgres:16-alpine
+export TOME_TEST_DATABASE_URL='postgres://tome:tome@localhost:5432/tome_test?sslmode=disable'
+```
 
 ## Support
 

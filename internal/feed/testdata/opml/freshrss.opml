@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Subscriptions</title>
+    <dateCreated>Sat, 16 Aug 2026 12:00:00 +0000</dateCreated>
+  </head>
+  <body>
+    <outline text="Technology">
+      <outline type="rss" text="Example Engineering" title="Example Engineering"
+               xmlUrl="https://engineering.example.com/feed.xml"
+               htmlUrl="https://engineering.example.com/"/>
+      <outline type="rss" text="Another Dev Blog"
+               xmlUrl="https://dev.example.org/rss"
+               htmlUrl="https://dev.example.org/"/>
+    </outline>
+
+    <outline text="News">
+      <outline text="Local">
+        <outline type="rss" text="City Desk"
+                 xmlUrl="https://news.example.net/city/feed"
+                 htmlUrl="https://news.example.net/city"/>
+      </outline>
+      <outline type="rss" text="World Desk"
+               xmlUrl="https://news.example.net/world/feed"/>
+    </outline>
+
+    <!-- A subscription at the top level, with no folder. -->
+    <outline type="rss" text="Uncategorized Blog"
+             xmlUrl="https://blog.example.com/atom.xml"
+             htmlUrl="https://blog.example.com/"/>
+
+    <!-- Only the title attribute is populated; some readers do this. -->
+    <outline type="rss" title="Title Only"
+             xmlUrl="https://title-only.example.com/feed"/>
+
+    <!-- No name at all; the URL has to stand in. -->
+    <outline type="rss" xmlUrl="https://nameless.example.com/feed"/>
+
+    <!-- A duplicate of a feed already listed above, which readers produce when
+         the same feed sits in two folders. -->
+    <outline text="Duplicates">
+      <outline type="rss" text="Example Engineering (again)"
+               xmlUrl="https://engineering.example.com/feed.xml"/>
+    </outline>
+
+    <!-- A bookmark rather than a feed: no xmlUrl, no children. -->
+    <outline text="Just a link" type="link" url="https://example.com/bookmark"/>
+
+    <!-- A feed URL this service cannot poll. -->
+    <outline type="rss" text="Local file" xmlUrl="file:///home/someone/feed.xml"/>
+
+    <!-- An empty folder. -->
+    <outline text="Empty Folder"/>
+  </body>
+</opml>

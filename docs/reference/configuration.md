@@ -16,6 +16,12 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_LOG_LEVEL` | enum | `info` | no | Minimum level emitted. One of `debug`, `info`, `warn`, `error`. Case-insensitive. |
 | `TOME_LOG_FORMAT` | enum | `json` | no | Log output format. One of `json`, `text`. |
 | `TOME_SHUTDOWN_TIMEOUT` | duration | `15s` | no | Time allowed for in-flight requests to finish after a termination signal. Must be positive. Go duration syntax (`30s`, `1m`, `1m30s`). |
+| `TOME_USERNAME` | string | `tome` | no | The single v1 user, created by `tome migrate`. Changing it renames the existing user rather than creating a second one. |
+| `TOME_CONTACT_URL` | URL | — | no | Published in the outbound `User-Agent` as `tomekeeper/<version> (+<url>)`. Must be absolute if set. Strongly encouraged before pointing this at anyone else's server: it is how an operator finds out who to ask when they want it to stop. |
+| `TOME_POLL_MIN_INTERVAL` | duration | `15m` | no | Floor for the adaptive poll interval. No feed is polled more often. |
+| `TOME_POLL_MAX_INTERVAL` | duration | `24h` | no | Ceiling for the adaptive poll interval. Must be at least the floor. |
+| `TOME_FEED_FAILURE_THRESHOLD` | int | `20` | no | Consecutive failures after which a feed is disabled. At least 1. A disabled feed keeps its last error and is surfaced, never silently dropped. |
+| `TOME_WORKER_CONCURRENCY` | int | `5` | no | Jobs `tome worker` runs at once. At least 1. |
 
 ### Value handling
 
@@ -54,9 +60,25 @@ export TOME_DATABASE_URL='postgres://tome:password@localhost:5432/tome?sslmode=d
 export TOME_HTTP_ADDR='127.0.0.1:8080'
 export TOME_LOG_LEVEL='debug'
 export TOME_LOG_FORMAT='text'
+export TOME_CONTACT_URL='https://example.com/about'
 
-tome serve
+tome migrate
+tome worker
 ```
+
+## Which commands read what
+
+All settings are read by every subcommand, because configuration is validated
+as a whole. Only some affect a given command's behavior:
+
+| Setting | `serve` | `worker` | `migrate` | `import-opml` |
+|---|---|---|---|---|
+| `TOME_DATABASE_URL` | yes | yes | yes | yes (not for `--dry-run`) |
+| `TOME_HTTP_ADDR`, `TOME_SHUTDOWN_TIMEOUT` | yes | — | — | — |
+| `TOME_LOG_LEVEL`, `TOME_LOG_FORMAT` | yes | yes | yes | yes |
+| `TOME_USERNAME` | — | — | creates the user | selects the user |
+| `TOME_CONTACT_URL` | — | yes | — | — |
+| `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — |
 
 ## Not yet implemented
 
@@ -65,7 +87,6 @@ current code, and setting them has no effect:
 
 | Variable | Arrives with |
 |---|---|
-| `TOME_CONTACT_URL` — contact URL embedded in the outbound User-Agent | M2 |
 | `TOME_BLOB_ROOT` — filesystem root of the archive | M3 |
 
 This table exists so that a variable seen in an issue, a manifest, or the plan

@@ -1,0 +1,109 @@
+# Golden corpus for URL canonicalization.
+#
+# One case per line:  <input> => <expected canonical form>
+# Blank lines and lines beginning with # are ignored.
+#
+# Add a line here before fixing any deduplication bug. This file is the
+# specification; urlcanon.go is the implementation of it.
+
+# --- scheme and host are case-insensitive; the path is not ---
+HTTPS://Example.COM/Article => https://example.com/Article
+https://EXAMPLE.com/x => https://example.com/x
+HtTp://example.com/x => http://example.com/x
+https://example.com/CamelCase/Path => https://example.com/CamelCase/Path
+
+# --- default ports are not part of the identity ---
+http://example.com:80/x => http://example.com/x
+https://example.com:443/x => https://example.com/x
+http://example.com:8080/x => http://example.com:8080/x
+https://example.com:8443/x => https://example.com:8443/x
+
+# A non-default port for the *other* scheme is still significant.
+https://example.com:80/x => https://example.com:80/x
+
+# --- trailing dot on the host addresses the same server ---
+https://example.com./x => https://example.com/x
+
+# --- root path normalization ---
+https://example.com => https://example.com/
+https://example.com/ => https://example.com/
+
+# --- trailing slash on a non-root path ---
+https://example.com/article/ => https://example.com/article
+https://example.com/a/b/c/ => https://example.com/a/b/c
+https://example.com/article => https://example.com/article
+
+# An encoded slash is not a separator and must survive the trim.
+https://example.com/a%2Fb/ => https://example.com/a%2Fb
+
+# Repeated trailing slashes collapse in one pass. Found by FuzzCanonicalize:
+# trimming one slash per call made the function non-idempotent, so the same
+# article seen twice produced two keys.
+https://example.com/article// => https://example.com/article
+https://example.com/article/// => https://example.com/article
+http://example.com/// => http://example.com/
+http://example.com// => http://example.com/
+
+# --- percent-encoding is preserved ---
+https://example.com/caf%C3%A9 => https://example.com/caf%C3%A9
+https://example.com/a%20b => https://example.com/a%20b
+
+# --- tracking parameters are stripped ---
+https://example.com/x?utm_source=feedly => https://example.com/x
+https://example.com/x?utm_source=rss&utm_medium=feed&utm_campaign=spring => https://example.com/x
+https://example.com/x?fbclid=IwAR123 => https://example.com/x
+https://example.com/x?gclid=abc123 => https://example.com/x
+https://example.com/x?mc_cid=1&mc_eid=2 => https://example.com/x
+https://example.com/x?ref=hackernews => https://example.com/x
+https://example.com/x?source=twitter => https://example.com/x
+https://example.com/x?__twitter_impression=true => https://example.com/x
+https://example.com/x?igshid=abc => https://example.com/x
+
+# The long tail of vendor utm_* variants goes too.
+https://example.com/x?utm_brand=acme&utm_social_type=owned => https://example.com/x
+
+# Parameter names are matched case-insensitively.
+https://example.com/x?UTM_Source=feedly => https://example.com/x
+https://example.com/x?FBCLID=abc => https://example.com/x
+
+# --- meaningful parameters are preserved ---
+# This is the expensive direction to get wrong: collapsing these would merge
+# every article on a site into one row.
+https://example.com/?p=123 => https://example.com/?p=123
+https://example.com/index.php?story_id=99 => https://example.com/index.php?story_id=99
+https://example.com/view?id=7&page=2 => https://example.com/view?id=7&page=2
+https://example.com/x?q=search+terms => https://example.com/x?q=search+terms
+
+# Mixed: strip the noise, keep the identity.
+https://example.com/view?id=7&utm_source=rss => https://example.com/view?id=7
+https://example.com/view?utm_campaign=x&id=7&fbclid=y => https://example.com/view?id=7
+
+# --- query parameters are sorted, so order cannot create duplicates ---
+https://example.com/x?b=2&a=1 => https://example.com/x?a=1&b=2
+https://example.com/x?z=1&y=2&x=3 => https://example.com/x?x=3&y=2&z=1
+
+# A repeated parameter keeps all of its values.
+https://example.com/x?tag=a&tag=b => https://example.com/x?tag=a&tag=b
+
+# A valueless parameter is preserved; some CMSes route on it.
+https://example.com/x?print => https://example.com/x?print=
+
+# --- fragments address a place in the document, not a document ---
+https://example.com/article#section-2 => https://example.com/article
+https://example.com/article#:~:text=quoted => https://example.com/article
+https://example.com/article# => https://example.com/article
+
+# Except the legacy hashbang form, where the fragment selects the document.
+https://example.com/#!/2019/03/post-title => https://example.com/#!/2019/03/post-title
+
+# --- credentials are not part of a document's identity ---
+https://user:pass@example.com/x => https://example.com/x
+https://user@example.com/x => https://example.com/x
+
+# Surrounding whitespace, which feeds produce more often than you would think,
+# is covered by TestSyndicatedVariantsCollapse — this file's parser trims each
+# field, so it cannot express a case about padding.
+
+# --- combinations, as they actually arrive from feeds ---
+HTTPS://Example.com:443/Blog/Post/?utm_source=rss&utm_medium=feed&id=9#comments => https://example.com/Blog/Post?id=9
+http://example.com.:80/a/b/?fbclid=x => http://example.com/a/b
