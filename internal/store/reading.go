@@ -1,0 +1,428 @@
+package store
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// visibleArticles is the §2.8 access boundary, written once.
+//
+// An article is visible to a user when one of their feeds references it, or when
+// they starred it themselves. Both routes matter: a subscription is the usual
+// one, and `article_state` is how an article the user acted on stays reachable
+// even after the feed that introduced it is deleted.
+//
+// EXISTS rather than a join, so an article carried by three of the user's feeds
+// yields one row without a DISTINCT — and DISTINCT over a stream with an excerpt
+// column would mean sorting the whole result set to deduplicate rows that were
+// never duplicated in the first place.
+//
+// **Every query that embeds this must pass the user id as $1.** That coupling is
+// the price of having one definition instead of five; §2.8 is explicit that a
+// forgotten scope should be impossible rather than merely unlikely, and one
+// predicate that is obviously wrong when misused beats five that are subtly
+// right.
+const visibleArticles = `(
+	EXISTS (
+		SELECT 1 FROM feed_items fi
+		  JOIN feeds f ON f.id = fi.feed_id
+		 WHERE fi.article_id = a.id AND f.user_id = $1
+	)
+	OR EXISTS (
+		SELECT 1 FROM article_state st
+		 WHERE st.article_id = a.id AND st.user_id = $1
+	)
+)`
+
+// ExcerptLength is how much of the body a stream row carries.
+//
+// Enough for two or three lines under a headline. The stream is the view a reader
+// scans, so it must not pull whole articles: at 10,000 rows the difference between
+// 320 characters and a full body is the difference between a page and a download.
+const ExcerptLength = 320
+
+// StreamOrder is the reading order: newest first, by publication where the feed
+// supplied one and by arrival otherwise.
+//
+// COALESCE rather than published_at alone because a feed that omits dates would
+// otherwise sort its entire archive to the bottom, and rather than first_seen_at
+// alone because a first poll ingests a decade of history in one second and would
+// present it in whatever order the feed happened to list it.
+const streamOrder = `COALESCE(a.published_at, a.first_seen_at) DESC, a.id DESC`
+
+// StreamQuery selects and pages through a reader's articles.
+type StreamQuery struct {
+	// UnreadOnly restricts the stream to articles not yet read.
+	UnreadOnly bool
+
+	// StarredOnly restricts the stream to starred articles.
+	StarredOnly bool
+
+	// FeedID, when non-zero, restricts the stream to one of the user's feeds.
+	FeedID FeedID
+
+	// TagID, when non-zero, restricts the stream to one of the user's tags.
+	TagID TagID
+
+	// Limit caps the page. Zero means DefaultStreamLimit.
+	Limit int
+
+	// Before pages backwards through the order above. Both fields come from the
+	// last row of the previous page; zero values start at the beginning.
+	//
+	// Keyset rather than OFFSET, because a reader marking things read while
+	// scrolling changes the result set under an offset and silently skips rows.
+	BeforeSort time.Time
+	BeforeID   ArticleID
+}
+
+// DefaultStreamLimit is the page size when a query does not choose one.
+const DefaultStreamLimit = 50
+
+// MaxStreamLimit caps what a caller can ask for, so a handcrafted query
+// parameter cannot ask for the whole archive in one page.
+const MaxStreamLimit = 200
+
+// StreamItem is one row of a stream.
+type StreamItem struct {
+	ArticleID    ArticleID
+	Title        string
+	Author       string
+	SiteName     string
+	URLCanonical string
+	PublishedAt  *time.Time
+	FirstSeenAt  time.Time
+	SortAt       time.Time
+	WordCount    int
+	Excerpt      string
+	Read         bool
+	Starred      bool
+	AssetsStatus string
+	FeedTitle    string
+	HasBody      bool
+}
+
+// Stream returns a page of the user's articles, newest first.
+func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]StreamItem, error) {
+	limit := q.Limit
+	switch {
+	case limit <= 0:
+		limit = DefaultStreamLimit
+	case limit > MaxStreamLimit:
+		limit = MaxStreamLimit
+	}
+
+	// $1 is the user id, as visibleArticles requires.
+	args := []any{userID}
+	var where []string
+	where = append(where, visibleArticles)
+
+	add := func(clause string, value any) {
+		args = append(args, value)
+		where = append(where, strings.ReplaceAll(clause, "?", "$"+strconv.Itoa(len(args))))
+	}
+
+	if q.UnreadOnly {
+		// COALESCE, because an article nobody has touched has no state row at all
+		// and is unread by definition.
+		where = append(where, `NOT COALESCE(st.read, false)`)
+	}
+	if q.StarredOnly {
+		where = append(where, `COALESCE(st.starred, false)`)
+	}
+	if q.FeedID != 0 {
+		add(`EXISTS (SELECT 1 FROM feed_items fi2 JOIN feeds f2 ON f2.id = fi2.feed_id
+		             WHERE fi2.article_id = a.id AND f2.id = ? AND f2.user_id = $1)`, q.FeedID)
+	}
+	if q.TagID != 0 {
+		add(`EXISTS (SELECT 1 FROM article_tags at2 JOIN tags t2 ON t2.id = at2.tag_id
+		             WHERE at2.article_id = a.id AND t2.id = ? AND t2.user_id = $1)`, q.TagID)
+	}
+	if !q.BeforeSort.IsZero() {
+		args = append(args, q.BeforeSort, q.BeforeID)
+		where = append(where, fmt.Sprintf(
+			`(COALESCE(a.published_at, a.first_seen_at), a.id) < ($%d, $%d)`,
+			len(args)-1, len(args)))
+	}
+
+	args = append(args, limit)
+
+	query := `
+		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.author, ''), COALESCE(a.site_name, ''),
+		       a.url_canonical, a.published_at, a.first_seen_at,
+		       COALESCE(a.published_at, a.first_seen_at) AS sort_at,
+		       a.assets_status,
+		       COALESCE(c.word_count, 0), left(COALESCE(c.content_text, ''), ` +
+		strconv.Itoa(ExcerptLength) + `), (c.id IS NOT NULL),
+		       COALESCE(st.read, false), COALESCE(st.starred, false),
+		       COALESCE(feed.title, '')
+		FROM articles a
+		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		-- One feed title per article, chosen deterministically. A syndicated story
+		-- reaches the reader through whichever of their feeds saw it first, and
+		-- that is the honest attribution to show.
+		LEFT JOIN LATERAL (
+			SELECT f3.title
+			FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
+			WHERE fi3.article_id = a.id AND f3.user_id = $1
+			ORDER BY fi3.seen_at, fi3.id
+			LIMIT 1
+		) feed ON true
+		WHERE ` + strings.Join(where, "\n		  AND ") + `
+		ORDER BY ` + streamOrder + `
+		LIMIT $` + strconv.Itoa(len(args))
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing the stream for user %d: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var out []StreamItem
+	for rows.Next() {
+		var it StreamItem
+		if err := rows.Scan(
+			&it.ArticleID, &it.Title, &it.Author, &it.SiteName,
+			&it.URLCanonical, &it.PublishedAt, &it.FirstSeenAt, &it.SortAt,
+			&it.AssetsStatus, &it.WordCount, &it.Excerpt, &it.HasBody,
+			&it.Read, &it.Starred, &it.FeedTitle,
+		); err != nil {
+			return nil, fmt.Errorf("scanning a stream row: %w", err)
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ArticleView is one article as a reader sees it, with that reader's state.
+type ArticleView struct {
+	Article Article
+	Content Content
+	HasBody bool
+	Read    bool
+	Starred bool
+	Tags    []Tag
+}
+
+// ArticleForUser returns an article the user is allowed to read.
+//
+// An article outside their visibility is reported as not found rather than
+// forbidden. The distinction matters: "forbidden" confirms the article exists,
+// which is precisely what §2.8 says one user must not be able to infer about
+// another's saved URLs.
+func (s *Store) ArticleForUser(ctx context.Context, userID UserID, id ArticleID) (ArticleView, error) {
+	var (
+		v       ArticleView
+		content Content
+		hasBody bool
+	)
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT a.id, a.url_canonical, a.url_original,
+		       COALESCE(a.title, ''), COALESCE(a.author, ''),
+		       COALESCE(a.site_name, ''), COALESCE(a.language, ''),
+		       a.published_at, a.first_seen_at,
+		       a.fetch_status, COALESCE(a.fetch_error, ''), a.assets_status,
+		       COALESCE(a.raw_blob_sha, ''), COALESCE(a.raw_blob_path, ''),
+		       (c.id IS NOT NULL),
+		       COALESCE(c.extractor_name, ''), COALESCE(c.extractor_version, ''),
+		       COALESCE(c.content_origin, ''), COALESCE(c.immutable, false),
+		       COALESCE(c.content_html, ''), COALESCE(c.content_text, ''),
+		       COALESCE(c.word_count, 0),
+		       COALESCE(st.read, false), COALESCE(st.starred, false)
+		FROM articles a
+		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE a.id = $2 AND `+visibleArticles,
+		userID, id,
+	).Scan(
+		&v.Article.ID, &v.Article.URLCanonical, &v.Article.URLOriginal,
+		&v.Article.Title, &v.Article.Author,
+		&v.Article.SiteName, &v.Article.Language,
+		&v.Article.PublishedAt, &v.Article.FirstSeenAt,
+		&v.Article.FetchStatus, &v.Article.FetchError, &v.Article.AssetsStatus,
+		&v.Article.RawBlobSHA, &v.Article.RawBlobPath,
+		&hasBody,
+		&content.ExtractorName, &content.ExtractorVersion,
+		&content.ContentOrigin, &content.Immutable,
+		&content.HTML, &content.Text, &content.WordCount,
+		&v.Read, &v.Starred,
+	)
+	if err != nil {
+		return ArticleView{}, fmt.Errorf("reading article %d for user %d: %w", id, userID, err)
+	}
+
+	v.Content = content
+	v.HasBody = hasBody
+
+	tags, err := s.TagsForArticle(ctx, userID, id)
+	if err != nil {
+		return ArticleView{}, err
+	}
+	v.Tags = tags
+
+	return v, nil
+}
+
+// SetRead marks an article read or unread for one user.
+//
+// Reports whether a row was written. False means the article is not visible to
+// this user, which callers should treat exactly as a missing article: allowing a
+// state row against an arbitrary id would let one user confirm what another has
+// archived, one insert at a time.
+func (s *Store) SetRead(ctx context.Context, userID UserID, id ArticleID, read bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO article_state (user_id, article_id, read, read_at)
+		SELECT $1, a.id, $3, CASE WHEN $3 THEN now() END
+		FROM articles a
+		WHERE a.id = $2 AND `+visibleArticles+`
+		ON CONFLICT (user_id, article_id) DO UPDATE
+		SET read = EXCLUDED.read,
+		    -- Keep the first time it was read rather than the latest, and clear it
+		    -- when it goes back to unread so the column never claims a read that
+		    -- was undone.
+		    read_at = CASE WHEN EXCLUDED.read
+		                   THEN COALESCE(article_state.read_at, now())
+		                   ELSE NULL END`,
+		userID, id, read)
+	if err != nil {
+		return false, fmt.Errorf("marking article %d read=%v for user %d: %w", id, read, userID, err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// SetStarred stars or unstars an article for one user.
+//
+// Starring also records saved_at, which is what keeps a starred article reachable
+// after the feed that introduced it is gone. Unstarring leaves saved_at alone: the
+// reader did save it once, and forgetting that would quietly drop the article out
+// of their archive.
+func (s *Store) SetStarred(ctx context.Context, userID UserID, id ArticleID, starred bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO article_state (user_id, article_id, starred, saved_at)
+		SELECT $1, a.id, $3, CASE WHEN $3 THEN now() END
+		FROM articles a
+		WHERE a.id = $2 AND `+visibleArticles+`
+		ON CONFLICT (user_id, article_id) DO UPDATE
+		SET starred = EXCLUDED.starred,
+		    saved_at = CASE WHEN EXCLUDED.starred
+		                    THEN COALESCE(article_state.saved_at, now())
+		                    ELSE article_state.saved_at END`,
+		userID, id, starred)
+	if err != nil {
+		return false, fmt.Errorf("marking article %d starred=%v for user %d: %w", id, starred, userID, err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// UnreadCounts is the per-feed unread tally the feed list shows.
+type UnreadCounts struct {
+	Total  int64
+	ByFeed map[FeedID]int64
+}
+
+// UnreadCountsFor returns unread totals for one user.
+func (s *Store) UnreadCountsFor(ctx context.Context, userID UserID) (UnreadCounts, error) {
+	counts := UnreadCounts{ByFeed: make(map[FeedID]int64)}
+
+	// Counted per feed and then summed in Go rather than with a second query,
+	// because an article carried by two of the user's feeds is unread in both and
+	// must be one article in the total.
+	rows, err := s.pool.Query(ctx, `
+		SELECT f.id, count(DISTINCT a.id)
+		FROM feeds f
+		  JOIN feed_items fi ON fi.feed_id = f.id
+		  JOIN articles a ON a.id = fi.article_id
+		  LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE f.user_id = $1 AND NOT COALESCE(st.read, false)
+		GROUP BY f.id`, userID)
+	if err != nil {
+		return UnreadCounts{}, fmt.Errorf("counting unread for user %d: %w", userID, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			id FeedID
+			n  int64
+		)
+		if err := rows.Scan(&id, &n); err != nil {
+			return UnreadCounts{}, fmt.Errorf("scanning an unread count: %w", err)
+		}
+		counts.ByFeed[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return UnreadCounts{}, err
+	}
+
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM articles a
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE `+visibleArticles+` AND NOT COALESCE(st.read, false)`,
+		userID).Scan(&counts.Total); err != nil {
+		return UnreadCounts{}, fmt.Errorf("counting unread total for user %d: %w", userID, err)
+	}
+
+	return counts, nil
+}
+
+// NeedsAttention is one entry in the failed-fetch queue (§5.7).
+type NeedsAttention struct {
+	ArticleID    ArticleID
+	URLCanonical string
+	Title        string
+	FeedTitle    string
+	FetchStatus  string
+	FetchError   string
+	AssetsStatus string
+	FirstSeenAt  time.Time
+}
+
+// NeedsAttentionFor lists the user's articles that did not come through cleanly.
+//
+// Selects on fetch_status, never on assets_status. That is deliberate and was
+// learned the hard way: articles whose extraction produced nothing are settled to
+// assets_status='none', and before that fix 346 of 1,365 sat at 'pending'
+// forever. fetch_status is where the reason lives, and 'skipped' belongs here
+// beside 'failed' — a page withheld by robots.txt is a gap in the archive the
+// reader should see, not an error to bury.
+func (s *Store) NeedsAttentionFor(ctx context.Context, userID UserID, limit int) ([]NeedsAttention, error) {
+	if limit <= 0 || limit > MaxStreamLimit {
+		limit = DefaultStreamLimit
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.url_canonical, COALESCE(a.title, ''),
+		       COALESCE(feed.title, ''),
+		       a.fetch_status, COALESCE(a.fetch_error, ''), a.assets_status,
+		       a.first_seen_at
+		FROM articles a
+		LEFT JOIN LATERAL (
+			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
+			WHERE fi3.article_id = a.id AND f3.user_id = $1
+			ORDER BY fi3.seen_at, fi3.id LIMIT 1
+		) feed ON true
+		WHERE `+visibleArticles+`
+		  AND (a.fetch_status IN ('failed', 'skipped') OR a.assets_status = 'partial')
+		ORDER BY a.first_seen_at DESC, a.id DESC
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing articles needing attention for user %d: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var out []NeedsAttention
+	for rows.Next() {
+		var n NeedsAttention
+		if err := rows.Scan(&n.ArticleID, &n.URLCanonical, &n.Title, &n.FeedTitle,
+			&n.FetchStatus, &n.FetchError, &n.AssetsStatus, &n.FirstSeenAt); err != nil {
+			return nil, fmt.Errorf("scanning an attention row: %w", err)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
