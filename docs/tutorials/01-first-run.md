@@ -5,10 +5,10 @@ some feeds, and watch it collect articles.
 
 It takes about 20 minutes. You will need Docker and Go 1.26 or later.
 
-> **What you will have at the end:** a running service that polls your feeds and
-> records every article it finds. It does not yet fetch or display the article
-> text — that arrives in the next milestone. What you can verify here is
-> ingestion, which is the foundation everything else sits on.
+> **What you will have at the end:** a running service that polls your feeds,
+> fetches each linked page, keeps the original, and extracts the readable
+> article from it. There is no web interface yet — that is M4 — so the last step
+> reads the archive with SQL.
 
 ## Step 1: Start PostgreSQL
 
@@ -47,14 +47,19 @@ You now have `./bin/tome`. Confirm it:
 
 ## Step 3: Configure it
 
-Every setting is an environment variable. Set the four that matter here:
+Every setting is an environment variable. Set the five that matter here:
 
 ```sh
 export TOME_DATABASE_URL='postgres://tome:tome@localhost:5432/tome?sslmode=disable'
 export TOME_LOG_FORMAT='text'
 export TOME_LOG_LEVEL='info'
 export TOME_CONTACT_URL='https://example.com/about'
+export TOME_BLOB_ROOT="$PWD/archive"
 ```
+
+`TOME_BLOB_ROOT` is where fetched pages are stored. It must be an absolute path,
+which is why this uses `$PWD` rather than a relative one — the archive should
+not move because you started the service from a different directory.
 
 `TOME_LOG_FORMAT=text` makes the output readable in a terminal; the default is
 JSON, which is what you want in production.
@@ -133,9 +138,17 @@ Within a few seconds you should see something like:
 ```
 level=INFO msg="worker started"
 level=INFO msg="polled feed" feed_id=1 items=10 new_items=10 new_articles=10 next_interval=30m0s
+level=INFO msg="fetched article" article_id=1 bytes=48210 stored_bytes=9433 path=articles/2026/08/…
+level=INFO msg="extracted article" article_id=1 extractor=trafilatura words=1204 characters=7331
 ```
 
-`new_articles=10` means ten articles are now in your archive.
+Three things are happening. The feed is polled; each new article's page is
+fetched and the original stored, compressed, on disk; and the readable body is
+extracted from that stored copy.
+
+Note `extractor=trafilatura`. That is the first rung of the extraction ladder
+that produced an acceptable result — if a site needs a hand-written rule, this
+is where you will see `readability` or a very short body instead.
 
 Leave it running and watch. Poll it a second time — wait a minute — and you
 will see nothing new, because the feed has not changed. That is the conditional
@@ -173,14 +186,42 @@ FROM feeds;
 `has_etag` being true is why the second poll transferred nothing. `poll_interval`
 will have adjusted itself based on what the poll found.
 
-One more thing worth noticing:
+Now the part M2 added — the article text itself:
+
+```sql
+SELECT a.title, c.extractor_name, c.word_count, left(c.content_text, 300)
+FROM articles a
+JOIN article_content c ON c.article_id = a.id AND c.is_current
+ORDER BY c.extracted_at DESC
+LIMIT 3;
+```
+
+And where the originals went:
 
 ```sql
 SELECT fetch_status, count(*) FROM articles GROUP BY fetch_status;
 ```
 
-Everything is `pending`. Ingestion has done its job and handed off; fetching and
-extracting the article text is the next milestone's work.
+```sh
+find archive/articles -name 'raw.html.gz' | head -3
+zcat "$(find archive/articles -name 'raw.html.gz' | head -1)" | head -20
+```
+
+Those files are the point. The extracted body in the database is a *view* over
+them, so a better extractor later can be applied to everything already
+collected — see [Reprocess the
+archive](../how-to/reprocess-the-archive.md).
+
+Anything at `fetch_status = 'failed'` or `'skipped'` is worth a look:
+
+```sql
+SELECT url_canonical, fetch_status, fetch_error
+FROM articles WHERE fetch_status IN ('failed', 'skipped');
+```
+
+`skipped` means the site's `robots.txt` said no. `failed` usually means a
+paywall or a JavaScript-rendered page — the cases [a domain
+rule](../how-to/add-a-domain-rule.md) exists for.
 
 ## Step 8: Run the server
 
@@ -209,14 +250,19 @@ process is fine and only its dependency is not.
 
 ```sh
 docker rm -f tome-db
+rm -rf archive
 ```
 
-That deletes the database and everything in it.
+That deletes the database and the stored pages.
 
 ## What next
 
 - [How to troubleshoot a failing feed](../how-to/troubleshoot-a-failing-feed.md)
   — when a subscription stops producing articles
+- [How to add a domain rule](../how-to/add-a-domain-rule.md) — when a site
+  extracts badly
+- [Extraction and versioning](../explanation/extraction-and-versioning.md) — why
+  the original pages are kept
 - [Why articles are the root entity](../explanation/why-articles-are-the-root-entity.md)
   — what those canonical URLs are actually for
 - [Configuration](../reference/configuration.md) — every setting, including the

@@ -4,10 +4,10 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
+	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/db"
+	"github.com/runlevel-six/tomekeeper/internal/extract"
 	"github.com/runlevel-six/tomekeeper/internal/feed"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/jobs"
@@ -17,7 +17,7 @@ import (
 
 // worker runs the background job pool until a termination signal arrives.
 //
-// This is a separate process from `tome serve` because polling and, later,
+// This is a separate process from `tome serve` because polling, fetching, and
 // extraction are bursty and memory-hungry, and a backlog of them must not be
 // able to make the reader unresponsive.
 func worker(args []string, stderr io.Writer) int {
@@ -41,29 +41,58 @@ func worker(args []string, stderr io.Writer) int {
 	}
 	defer pool.Close()
 
-	client, err := jobs.NewWorkerClient(pool, store.New(pool),
-		newPoller(cfg, pool, log), cfg.WorkerConcurrency, log)
+	blobs, err := blob.NewFilesystem(cfg.BlobRoot)
+	if err != nil {
+		log.Error("cannot open the blob store", "error", err)
+		return exitFailure
+	}
+
+	s := store.New(pool)
+	client := newHTTPClient(cfg)
+
+	// Per-domain rate limits come from domain rules, loaded once at startup.
+	if err := jobs.ApplyDomainRateLimits(ctx, s, client, log); err != nil {
+		log.Error("cannot load domain rules", "error", err)
+		return exitFailure
+	}
+
+	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
+		Pool:        pool,
+		Store:       s,
+		Poller:      newPoller(cfg, s, client, log),
+		Client:      client,
+		Blobs:       blobs,
+		Extractor:   extract.New(),
+		Log:         log,
+		Concurrency: cfg.WorkerConcurrency,
+	})
 	if err != nil {
 		log.Error("cannot start the worker", "error", err)
 		return exitFailure
 	}
 
-	if err := jobs.Run(ctx, client, log); err != nil {
+	if err := jobs.Run(ctx, riverClient, log); err != nil {
 		log.Error("worker failed", "error", err)
 		return exitFailure
 	}
 	return exitOK
 }
 
-// newPoller builds the feed poller from configuration. Shared by the worker
-// and by anything else that needs to poll on demand.
-func newPoller(cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) *feed.Poller {
+// newHTTPClient builds the single outbound client from configuration.
+func newHTTPClient(cfg *config.Config) *httpclient.Client {
+	return httpclient.New(httpclient.Options{
+		UserAgent:   httpclient.UserAgent(version.Short(), cfg.ContactURL),
+		DefaultRPS:  cfg.FetchRPS,
+		Concurrency: cfg.FetchConcurrency,
+	})
+}
+
+// newPoller builds the feed poller from configuration.
+func newPoller(cfg *config.Config, s *store.Store, client *httpclient.Client, log *slog.Logger) *feed.Poller {
 	policy := feed.IntervalPolicy{
 		Min:    cfg.PollMinInterval,
 		Max:    cfg.PollMaxInterval,
 		Growth: feed.DefaultIntervalPolicy().Growth,
 	}
-	client := httpclient.New(httpclient.UserAgent(version.Short(), cfg.ContactURL))
-
-	return feed.NewPoller(store.New(pool), client, policy, cfg.FeedFailureThreshold, log)
+	return feed.NewPoller(s, client, policy, cfg.FeedFailureThreshold, log)
 }

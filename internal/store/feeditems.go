@@ -12,6 +12,12 @@ type FeedItemParams struct {
 	GUID      string
 	Title     string
 	Summary   string
+
+	// Content is the feed's own body (content:encoded), kept for the last rung
+	// of the extraction ladder. It is sometimes the entire article, and it is
+	// the only surviving copy when a site goes down between publication and
+	// the next poll.
+	Content string
 }
 
 // InsertFeedItem records that a feed carried a reference to an article,
@@ -31,11 +37,11 @@ func (s *Store) InsertFeedItem(ctx context.Context, userID UserID, p FeedItemPar
 	}
 
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO feed_items (feed_id, article_id, guid, feed_title, feed_summary)
-		SELECT $1, $2, $3, NULLIF($4, ''), NULLIF($5, '')
+		INSERT INTO feed_items (feed_id, article_id, guid, feed_title, feed_summary, feed_content)
+		SELECT $1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($7, '')
 		WHERE EXISTS (SELECT 1 FROM feeds WHERE id = $1 AND user_id = $6)
 		ON CONFLICT (feed_id, guid) DO NOTHING`,
-		p.FeedID, p.ArticleID, p.GUID, p.Title, p.Summary, userID)
+		p.FeedID, p.ArticleID, p.GUID, p.Title, p.Summary, userID, p.Content)
 	if err != nil {
 		return false, fmt.Errorf("inserting feed item %s: %w", p.GUID, err)
 	}

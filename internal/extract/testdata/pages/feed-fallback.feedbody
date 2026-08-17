@@ -1,0 +1,7 @@
+<p>The fetch failed, but the feed carried the whole piece, so the archive keeps
+that instead of keeping nothing at all. A feed body is a worse source than the
+page — it usually lacks images and the canonical structure — but it is very much
+better than an empty row where an article should be.</p>
+<p>This rung exists because the alternative is losing the article entirely when
+a site goes down between publication and the next poll, which is exactly when
+archiving matters most and exactly when fetching is least likely to work.</p>

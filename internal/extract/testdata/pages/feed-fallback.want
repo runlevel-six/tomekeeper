@@ -1,0 +1,7 @@
+url: https://down.example.com/posts/still-have-it
+extractor: feed_body
+feed_body: feed-fallback.feedbody
+min_chars: 300
+
+the feed carried the whole piece
+losing the article entirely when

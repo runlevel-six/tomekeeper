@@ -10,7 +10,7 @@ worse than the risk of the dependency.*
 
 ## Go module dependencies
 
-Four libraries as of M1, across six modules — River publishes its driver and
+Nine libraries as of M2, across eleven modules — River publishes its driver and
 type packages separately. Each is here because the standard library cannot do
 the job and doing it by hand would be worse than the risk of the dependency.
 
@@ -20,6 +20,12 @@ the job and doing it by hand would be worse than the risk of the dependency.
 | `github.com/pressly/goose/v3` | Schema migrations. Chosen over `golang-migrate` because it works as a *library* against an embedded `fs.FS`: the runtime image is distroless, with no shell and no filesystem to read `.sql` files from, so migrations have to travel inside the binary that expects them. |
 | `github.com/riverqueue/river` | Postgres-backed job queue, with `riverdriver/riverpgxv5` and `rivertype`. Writing a correct queue — visibility timeouts, retries with backoff, unique jobs, periodic schedules — is a project in itself, and this one keeps the promise of a single stateful dependency. |
 | `github.com/mmcdole/gofeed` | RSS, Atom, and JSON Feed parsing. The specifications are only half the problem; the other half is the decade of malformed real-world feeds this library already handles, which is a tax paid forever if written from scratch. |
+| `github.com/markusmobius/go-trafilatura` | The primary article extractor. This is the problem the project exists to solve well, and it encodes years of accumulated heuristics that cannot be reproduced by reading a specification. It is also the heaviest dependency here — it pulls a WebAssembly runtime for its language detection — which is the price of the accuracy. |
+| `github.com/go-shiori/go-readability` | The fallback extractor. It fails differently from trafilatura, particularly on older table-heavy layouts, and running both against a page already in memory costs milliseconds. |
+| `github.com/microcosm-cc/bluemonday` | HTML sanitization. Hand-rolled sanitizers are a documented source of cross-site scripting, and this archive renders markup written by arbitrary websites in the reader's own browser for a decade. This is the Go ecosystem's reviewed answer. |
+| `github.com/PuerkitoBio/goquery` | CSS selector matching, for domain rules and for URL resolution in extracted bodies. Already in the tree as a transitive dependency of the extractors, so using it directly adds nothing. |
+| `github.com/temoto/robotstxt` | robots.txt parsing. The format has more edge cases than it appears to — wildcard paths, longest-match precedence, agent matching — and getting them wrong means either ignoring a site's wishes or refusing pages it never restricted. |
+| `golang.org/x/time/rate` | The per-host token bucket. A correct rate limiter with a burst allowance is not hard, but this one is already in the extended standard library and already correct. |
 
 Still done with the standard library, deliberately:
 
@@ -41,8 +47,6 @@ with its justification, in the milestone that introduces it.
 
 | Dependency | Milestone | Why it will be needed |
 |---|---|---|
-| `go-shiori/go-readability` and/or `markusmobius/go-trafilatura` | M2 | Article extraction. This is the problem the project exists to solve well, and both encode years of accumulated heuristics. |
-| `microcosm-cc/bluemonday` | M2 | HTML sanitization. Hand-rolled sanitizers are a documented source of XSS; this one is the Go ecosystem's reviewed answer. |
 | An image codec for AVIF/WebP | M3 | The standard library encodes neither, and the asset policy depends on modern codecs to keep the archive's storage growth tolerable. |
 | `chromedp` | M8 | Driving a headless browser for the small set of domains that render their content in JavaScript. |
 

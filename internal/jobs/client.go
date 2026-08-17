@@ -11,7 +11,10 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/runlevel-six/tomekeeper/internal/blob"
+	"github.com/runlevel-six/tomekeeper/internal/extract"
 	"github.com/runlevel-six/tomekeeper/internal/feed"
+	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
@@ -31,34 +34,49 @@ func (ScheduleFeedsArgs) InsertOpts() river.InsertOpts {
 	}
 }
 
+// Deps is everything the worker pool needs.
+type Deps struct {
+	Pool      *pgxpool.Pool
+	Store     *store.Store
+	Poller    *feed.Poller
+	Client    *httpclient.Client
+	Blobs     blob.Store
+	Extractor *extract.Extractor
+	Log       *slog.Logger
+
+	Concurrency int
+}
+
 // NewWorkerClient builds a River client that works jobs.
 //
-// This is the worker side. `tome serve` does not run one at M1 because it has
-// nothing to enqueue yet; when it does, it will build an insert-only client
-// with no Queues configured.
-func NewWorkerClient(
-	pool *pgxpool.Pool,
-	s *store.Store,
-	poller *feed.Poller,
-	concurrency int,
-	log *slog.Logger,
-) (*river.Client[pgx.Tx], error) {
+// This is the worker side. `tome serve` does not run one, and when it needs to
+// enqueue work it will build an insert-only client with no Queues configured.
+func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	workers := river.NewWorkers()
 
-	river.AddWorker(workers, &PollFeedWorker{poller: poller})
+	river.AddWorker(workers, &PollFeedWorker{poller: d.Poller})
+	river.AddWorker(workers, &FetchArticleWorker{
+		store: d.Store, client: d.Client, blobs: d.Blobs, log: d.Log,
+	})
+	river.AddWorker(workers, &ExtractArticleWorker{
+		store: d.Store, blobs: d.Blobs, extractor: d.Extractor, log: d.Log,
+	})
 
-	// The scheduler needs the client in order to enqueue, and the client needs
+	// The schedulers need the client in order to enqueue, and the client needs
 	// the workers in order to be constructed. River's documented way out of
-	// the cycle is to register the worker first and fill in its client
+	// the cycle is to register the workers first and fill in their client
 	// afterwards, before the client is started.
-	scheduler := &ScheduleFeedsWorker{store: s, log: log}
-	river.AddWorker(workers, scheduler)
+	feedScheduler := &ScheduleFeedsWorker{store: d.Store, log: d.Log}
+	river.AddWorker(workers, feedScheduler)
 
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Logger:  log,
+	fetchScheduler := &ScheduleFetchesWorker{store: d.Store, log: d.Log}
+	river.AddWorker(workers, fetchScheduler)
+
+	client, err := river.NewClient(riverpgxv5.New(d.Pool), &river.Config{
+		Logger:  d.Log,
 		Workers: workers,
 		Queues: map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: concurrency},
+			river.QueueDefault: {MaxWorkers: d.Concurrency},
 		},
 		PeriodicJobs: []*river.PeriodicJob{
 			river.NewPeriodicJob(
@@ -68,14 +86,44 @@ func NewWorkerClient(
 				// begins polling without waiting out the first interval.
 				&river.PeriodicJobOpts{RunOnStart: true},
 			),
+			river.NewPeriodicJob(
+				river.PeriodicInterval(ScheduleInterval),
+				func() (river.JobArgs, *river.InsertOpts) { return ScheduleFetchesArgs{}, nil },
+				&river.PeriodicJobOpts{RunOnStart: true},
+			),
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating river client: %w", err)
 	}
 
-	scheduler.client = client
+	feedScheduler.client = client
+	fetchScheduler.client = client
 	return client, nil
+}
+
+// ApplyDomainRateLimits loads per-domain rate limits into the HTTP client.
+//
+// Called once at worker startup. A rule added later takes effect on the next
+// restart, which is acceptable for something edited by hand a few times a
+// year; the alternative is polling the table on every fetch.
+func ApplyDomainRateLimits(ctx context.Context, s *store.Store, c *httpclient.Client, log *slog.Logger) error {
+	rules, err := s.System().ListDomainRules(ctx)
+	if err != nil {
+		return err
+	}
+
+	var applied int
+	for _, r := range rules {
+		if r.RateLimitRPS > 0 {
+			c.SetHostRate(r.Domain, r.RateLimitRPS)
+			applied++
+		}
+	}
+	if applied > 0 {
+		log.Info("applied per-domain rate limits", "domains", applied)
+	}
+	return nil
 }
 
 // Run starts the worker client and blocks until ctx is canceled, then stops it

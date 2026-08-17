@@ -88,10 +88,35 @@ type PollFeedWorker struct {
 
 // Work implements river.Worker.
 func (w *PollFeedWorker) Work(ctx context.Context, job *river.Job[PollFeedArgs]) error {
-	_, err := w.poller.Poll(ctx, store.UserID(job.Args.UserID), store.FeedID(job.Args.FeedID))
-	// The poller records a feed's own failures against the feed and returns
-	// nil, so anything returned here is our fault and worth a retry.
-	return err
+	result, err := w.poller.Poll(ctx, store.UserID(job.Args.UserID), store.FeedID(job.Args.FeedID))
+	if err != nil {
+		// The poller records a feed's own failures against the feed and
+		// returns nil, so anything returned here is our fault and worth a
+		// retry.
+		return err
+	}
+	if len(result.NewArticleIDs) == 0 {
+		return nil
+	}
+
+	// Fetching is a separate job per article: one slow origin must not hold up
+	// the rest of the feed, and a fetch that fails should retry on its own
+	// schedule rather than re-polling the feed.
+	client := river.ClientFromContext[pgx.Tx](ctx)
+	if client == nil {
+		return fmt.Errorf("no river client in context; cannot enqueue fetches")
+	}
+
+	params := make([]river.InsertManyParams, 0, len(result.NewArticleIDs))
+	for _, id := range result.NewArticleIDs {
+		params = append(params, river.InsertManyParams{
+			Args: FetchArticleArgs{ArticleID: int64(id)},
+		})
+	}
+	if _, err := client.InsertMany(ctx, params); err != nil {
+		return fmt.Errorf("enqueueing %d article fetches: %w", len(params), err)
+	}
+	return nil
 }
 
 // ScheduleFeedsWorker enqueues a poll for every feed whose time has come.
@@ -145,5 +170,76 @@ func (w *ScheduleFeedsWorker) Work(ctx context.Context, _ *river.Job[ScheduleFee
 		w.log.Info("scheduler batch was full; remaining feeds wait for the next run",
 			"batch_size", scheduleBatchSize)
 	}
+	return nil
+}
+
+// ScheduleFetchesArgs asks for unfetched articles to be enqueued.
+type ScheduleFetchesArgs struct{}
+
+// Kind implements river.JobArgs.
+func (ScheduleFetchesArgs) Kind() string { return "schedule_fetches" }
+
+// InsertOpts keeps overlapping scheduler runs from piling up.
+func (ScheduleFetchesArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		UniqueOpts: river.UniqueOpts{
+			ByState: []rivertype.JobState{
+				rivertype.JobStateAvailable,
+				rivertype.JobStatePending,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+			},
+		},
+	}
+}
+
+// ScheduleFetchesWorker enqueues a fetch for every article still pending.
+//
+// The poller enqueues a fetch as it discovers each article, so in steady state
+// this finds nothing. It exists for the two cases that matter anyway: the
+// backlog left by M1, which ingested articles before there was a fetcher, and
+// any article whose fetch job was lost to a crash. Without it, an article that
+// slipped through would sit at 'pending' forever with nothing ever looking at
+// it again.
+type ScheduleFetchesWorker struct {
+	river.WorkerDefaults[ScheduleFetchesArgs]
+
+	store  *store.Store
+	client *river.Client[pgx.Tx]
+	log    *slog.Logger
+}
+
+// Work implements river.Worker.
+func (w *ScheduleFetchesWorker) Work(ctx context.Context, _ *river.Job[ScheduleFetchesArgs]) error {
+	pending, err := w.store.System().PendingFetch(ctx, scheduleBatchSize)
+	if err != nil {
+		return err
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	params := make([]river.InsertManyParams, 0, len(pending))
+	for _, id := range pending {
+		params = append(params, river.InsertManyParams{
+			Args: FetchArticleArgs{ArticleID: int64(id)},
+		})
+	}
+
+	results, err := w.client.InsertMany(ctx, params)
+	if err != nil {
+		return fmt.Errorf("enqueueing %d article fetches: %w", len(params), err)
+	}
+
+	var inserted int
+	for _, r := range results {
+		if !r.UniqueSkippedAsDuplicate {
+			inserted++
+		}
+	}
+
+	w.log.Debug("scheduled article fetches",
+		"pending", len(pending), "enqueued", inserted, "already_queued", len(pending)-inserted)
 	return nil
 }

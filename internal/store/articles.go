@@ -24,6 +24,9 @@ type Article struct {
 	PublishedAt  *time.Time
 	FirstSeenAt  time.Time
 	FetchStatus  string
+	FetchError   string
+	RawBlobSHA   string
+	RawBlobPath  string
 }
 
 // ArticleParams is the set of fields a reference can contribute about an

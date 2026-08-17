@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -61,6 +62,17 @@ type Config struct {
 
 	// WorkerConcurrency is how many jobs `tome worker` runs at once.
 	WorkerConcurrency int
+
+	// FetchRPS is the default per-host request rate. A domain rule may raise
+	// or lower it for one host.
+	FetchRPS float64
+
+	// FetchConcurrency caps outbound requests in flight across all hosts.
+	FetchConcurrency int
+
+	// BlobRoot is the filesystem root of the archive. Raw fetched pages are
+	// stored under it from M2; extracted articles and assets from M3.
+	BlobRoot string
 }
 
 // Defaults for every optional setting. Kept in one block so the reference
@@ -76,6 +88,9 @@ const (
 	defaultPollMaxInterval      = 24 * time.Hour
 	defaultFeedFailureThreshold = 20
 	defaultWorkerConcurrency    = 5
+	defaultFetchRPS             = 1.0
+	defaultFetchConcurrency     = 10
+	defaultBlobRoot             = "/var/lib/tomekeeper"
 )
 
 // LookupFunc matches os.LookupEnv. Taking it as a parameter keeps Load a pure
@@ -102,6 +117,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 		LogFormat:  get("LOG_FORMAT", defaultLogFormat),
 		Username:   get("USERNAME", defaultUsername),
 		ContactURL: get("CONTACT_URL", ""),
+		BlobRoot:   get("BLOB_ROOT", defaultBlobRoot),
 	}
 	var problems []error
 
@@ -220,6 +236,30 @@ func Load(lookup LookupFunc) (*Config, error) {
 
 	cfg.FeedFailureThreshold = positiveInt("FEED_FAILURE_THRESHOLD", defaultFeedFailureThreshold)
 	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
+	cfg.FetchConcurrency = positiveInt("FETCH_CONCURRENCY", defaultFetchConcurrency)
+
+	// TOME_FETCH_RPS — the per-host politeness budget. Fractional rates are
+	// the useful ones: 0.5 is one request every two seconds.
+	rawRPS := get("FETCH_RPS", strconv.FormatFloat(defaultFetchRPS, 'g', -1, 64))
+	rps, err := strconv.ParseFloat(rawRPS, 64)
+	switch {
+	case err != nil:
+		problems = append(problems, fmt.Errorf(
+			"%sFETCH_RPS %q is not a number", Prefix, rawRPS))
+	case rps <= 0:
+		problems = append(problems, fmt.Errorf(
+			"%sFETCH_RPS must be greater than zero, got %v", Prefix, rps))
+	default:
+		cfg.FetchRPS = rps
+	}
+
+	// TOME_BLOB_ROOT — an absolute path, because a relative one would resolve
+	// against whatever directory the process happened to start in, and the
+	// archive would end up somewhere different on every deployment.
+	if !filepath.IsAbs(cfg.BlobRoot) {
+		problems = append(problems, fmt.Errorf(
+			"%sBLOB_ROOT %q must be an absolute path", Prefix, cfg.BlobRoot))
+	}
 
 	if len(problems) > 0 {
 		return nil, &Error{Problems: problems}
@@ -275,6 +315,9 @@ func (c *Config) LogValue() slog.Value {
 		slog.Duration("poll_max_interval", c.PollMaxInterval),
 		slog.Int("feed_failure_threshold", c.FeedFailureThreshold),
 		slog.Int("worker_concurrency", c.WorkerConcurrency),
+		slog.Float64("fetch_rps", c.FetchRPS),
+		slog.Int("fetch_concurrency", c.FetchConcurrency),
+		slog.String("blob_root", c.BlobRoot),
 	)
 }
 

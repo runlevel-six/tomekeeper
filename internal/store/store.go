@@ -43,6 +43,10 @@ func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+// Pool exposes the underlying connection pool for components that manage
+// their own transactions, such as the River client.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+
 // System returns the cross-user operations.
 //
 // Everything reachable here ignores user scoping by design. It is for

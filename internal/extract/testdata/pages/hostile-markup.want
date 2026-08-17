@@ -1,0 +1,5 @@
+url: https://example.com/posts/2026/ordinary
+min_chars: 400
+
+This paragraph carries an inline event handler
+The body text itself is ordinary

@@ -38,24 +38,33 @@ polling — and, from M2, extraction — is bursty and memory-hungry, and a back
 must not be able to make the reader unresponsive. Both are built from the same
 image.
 
-Two job types run at M1:
+Five job types run:
 
 | Job | Trigger | Work |
 |---|---|---|
 | `schedule_feeds` | every 60s, and once at startup | Selects up to 100 feeds where `next_poll_at <= now()` and `NOT disabled`, and enqueues a poll for each. |
-| `poll_feed` | enqueued by the scheduler | Conditional GET, parse, upsert articles and references, update the feed's polling state. |
+| `poll_feed` | enqueued by the scheduler | Conditional GET, parse, upsert articles and references, enqueue a fetch per new article, update polling state. |
+| `schedule_fetches` | every 60s, and once at startup | Enqueues a fetch for up to 100 articles still at `fetch_status = 'pending'`. In steady state it finds nothing; it exists for the M1 backlog and for fetches lost to a crash. |
+| `fetch_article` | enqueued per new article | Fetches the page subject to robots.txt and rate limiting, stores the gzipped original in the blob store, enqueues extraction. |
+| `extract_article` | enqueued after a fetch, or by `tome reextract` | Runs the extraction ladder over the stored page. Touches no network. |
 
-A `poll_feed` job is unique per feed while one is pending or running, so a slow
-poll cannot be overtaken by the next scheduler run.
+Every job is unique per subject while one is pending or running, so a slow poll
+cannot be overtaken by the next scheduler run, and three feeds carrying the same
+story do not each fetch the page.
+
+Per-domain rate limits are read from `domain_rules` once at startup. A rule
+added later takes effect on the next restart.
 
 On a termination signal the worker stops accepting new jobs and lets running
 ones finish. A poll killed mid-write would leave a feed's stored validators
 inconsistent with what was actually ingested, and the next poll would then take
 a 304 for a feed whose items were never stored.
 
-**Required configuration:** `TOME_DATABASE_URL`. Behavior is shaped by
-`TOME_WORKER_CONCURRENCY`, `TOME_POLL_MIN_INTERVAL`, `TOME_POLL_MAX_INTERVAL`,
-`TOME_FEED_FAILURE_THRESHOLD`, and `TOME_CONTACT_URL`.
+**Required configuration:** `TOME_DATABASE_URL`, and a writable
+`TOME_BLOB_ROOT`. Behavior is shaped by `TOME_WORKER_CONCURRENCY`,
+`TOME_POLL_MIN_INTERVAL`, `TOME_POLL_MAX_INTERVAL`,
+`TOME_FEED_FAILURE_THRESHOLD`, `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY`, and
+`TOME_CONTACT_URL`.
 
 ### `tome migrate`
 
@@ -125,6 +134,64 @@ subscriptions.opml: 7 added, 0 already subscribed
 A subscription that fails to store is reported on stderr and the import
 continues; the command exits `1` if any failed, so one bad entry costs neither
 the other four hundred nor your awareness of it.
+
+### `tome reextract`
+
+Queues re-extraction of stored pages at the current extractor version. Makes no
+requests to any site.
+
+```
+tome reextract [--since-version V] [--limit N] [--dry-run]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--since-version` | the compiled-in version | Select articles whose current body came from a version other than this. Pass `0` to select everything, which is what you want after adding a domain rule. |
+| `--limit` | `0` (no limit) | Stop after queueing this many articles. |
+| `--dry-run` | off | Count without queueing. |
+
+Two kinds of article are never selected: bodies flagged `immutable`, which are
+excluded by the query rather than skipped in a loop, and articles with no
+stored page, which have nothing to re-extract from.
+
+The command only queues. `tome worker` does the work, so a reprocess of the
+whole archive competes with normal polling rather than monopolizing the machine,
+and it survives a restart because the queue lives in Postgres.
+
+See [Reprocess the archive](../how-to/reprocess-the-archive.md).
+
+### `tome domain-rule`
+
+Manages per-domain extraction overrides.
+
+```
+tome domain-rule list
+tome domain-rule show <domain>
+tome domain-rule set <domain> [flags]
+tome domain-rule rm <domain>
+```
+
+Flags for `set`:
+
+| Flag | Description |
+|---|---|
+| `--selector <css>` | CSS selector for the article body. Extraction uses it instead of the heuristics, and it overrides the ratio check. |
+| `--strip <css>` | Selector removed before extraction. Repeatable. |
+| `--rate <rps>` | Per-host request rate, overriding `TOME_FETCH_RPS`. |
+| `--requires-js` | Marks the domain as needing a headless render. No effect until M8. |
+| `--notes <text>` | Why the rule exists. |
+
+Rules apply to subdomains: a rule for `example.com` covers `blog.example.com`
+unless that subdomain has a rule of its own, in which case the more specific one
+wins. `show` names which rule matched, so an inherited one is not a surprise.
+
+A rule changes nothing already stored until the affected articles are
+reprocessed with `tome reextract`.
+
+Rules are global and admin-only. How to extract a site's articles is a technical
+fact about that site, identical for every reader.
+
+See [Add a domain rule](../how-to/add-a-domain-rule.md).
 
 ### `tome version`
 
@@ -203,7 +270,6 @@ among the things that may have just failed to validate.
 
 | Subcommand | Arrives with |
 |---|---|
-| `tome reextract` — re-run extraction over the archive | M2 |
 | `tome reindex` — rebuild the search index | M4 |
 | `tome import` / `tome export` | M6 |
 

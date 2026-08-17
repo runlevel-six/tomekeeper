@@ -1,0 +1,9 @@
+url: https://blog.example.org/rate-limiting
+min_chars: 700
+
+A token bucket is the right default
+The important parameter is not the rate but the scope
+Honoring Retry-After is the other half
+!Newsletter signup
+!Do not sell my information
+!Advertise with us

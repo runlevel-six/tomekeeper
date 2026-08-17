@@ -77,7 +77,9 @@ The root entity. A feed item, a manual save, and an imported entry are all
 | `title`, `author`, `site_name`, `language` | `text` | Nullable. Filled from whichever reference first supplied each; existing values are never overwritten. |
 | `published_at` | `timestamptz` | |
 | `first_seen_at` | `timestamptz` | |
-| `raw_blob_sha`, `raw_fetched_at` | | The stored raw fetch (M2). Null for imports with no original. |
+| `raw_blob_sha` | `text` | SHA-256 of the original fetched bytes. Null for imports with no original. |
+| `raw_blob_path` | `text` | Where the gzipped page is in the blob store. Stored rather than derived: a title can change on a later poll, and a derived path would then point at nothing. |
+| `raw_fetched_at` | `timestamptz` | |
 | `fetch_status` | `text` | `pending`, `ok`, `failed`, `skipped`. Constrained by `CHECK`. M1 leaves everything `pending`. |
 | `fetch_error` | `text` | |
 | `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized (M3). |
@@ -87,6 +89,10 @@ shared by every user, so "how did this arrive" has no single answer.
 Per-reference provenance lives in `feed_items`, `import_records`, and
 `article_state.saved_at`; per-body provenance lives in
 `article_content.content_origin`.
+
+Additional indexes from M2: `articles_awaiting_extraction_idx` on
+`(first_seen_at) WHERE fetch_status = 'ok' AND raw_blob_sha IS NOT NULL`, the
+extract worker's hot path.
 
 ### `article_content`
 
@@ -109,7 +115,10 @@ itself. Extraction quality only improves, so bodies are regenerable.
 | `tsv` | `tsvector` | Generated from `content_text`. |
 
 Indexes: `article_content_current_idx`, a unique index on `(article_id) WHERE
-is_current`; `article_content_tsv_idx`, a GIN index on `tsv`.
+is_current`; `article_content_tsv_idx`, a GIN index on `tsv`;
+`article_content_version_idx` on `(extractor_version) WHERE is_current AND NOT
+immutable`, which is what keeps `tome reextract --since-version` from scanning
+the whole archive.
 
 #### Search language
 
@@ -140,6 +149,7 @@ A reference from one feed to one article.
 | `article_id` | `bigint` | References `articles`. |
 | `guid` | `text` | The feed's identifier, falling back to the canonical URL when absent. Unique per feed. |
 | `feed_title`, `feed_summary` | `text` | As the feed gave them, kept separate from the extracted article's own title. |
+| `feed_content` | `text` | The feed's own body (`content:encoded`), used by the extraction ladder's last rung. Distinct from the summary: this is sometimes the whole article, and is the only copy when a site goes down between publication and the next poll. |
 | `seen_at` | `timestamptz` | |
 
 ### `article_state`
@@ -166,9 +176,21 @@ articles is stored once.
 
 ### `domain_rules`
 
-Per-domain extraction overrides: `content_selector`, `strip_selectors`,
-`requires_js`, `user_agent`, `rate_limit_rps`, `notes`. Global and admin-only.
-Unused until M2.
+Per-domain extraction overrides.
+
+| Column | Type | Notes |
+|---|---|---|
+| `domain` | `text` | Unique. Lowercased on write. A rule applies to subdomains unless a more specific rule exists. |
+| `content_selector` | `text` | CSS selector for the article body. Overrides the heuristics and the ratio check. |
+| `strip_selectors` | `text[]` | Removed before extraction. |
+| `requires_js` | `boolean` | Needs a headless render. No effect until M8. |
+| `user_agent` | `text` | Reserved; not yet read. |
+| `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. |
+| `notes` | `text` | Why the rule exists. |
+
+Global and admin-only: how to extract a site's articles is a technical fact
+about that site, identical for every reader. Managed with
+[`tome domain-rule`](cli.md#tome-domain-rule).
 
 ### `tags`, `article_tags`, `highlights`
 

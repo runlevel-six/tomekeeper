@@ -22,6 +22,9 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_POLL_MAX_INTERVAL` | duration | `24h` | no | Ceiling for the adaptive poll interval. Must be at least the floor. |
 | `TOME_FEED_FAILURE_THRESHOLD` | int | `20` | no | Consecutive failures after which a feed is disabled. At least 1. A disabled feed keeps its last error and is surfaced, never silently dropped. |
 | `TOME_WORKER_CONCURRENCY` | int | `5` | no | Jobs `tome worker` runs at once. At least 1. |
+| `TOME_FETCH_RPS` | float | `1` | no | Default per-host request rate. Fractional values are the useful ones: `0.5` is one request every two seconds. A domain rule's `--rate` overrides it for one host. |
+| `TOME_FETCH_CONCURRENCY` | int | `10` | no | Outbound requests in flight across all hosts. Protects this machine; the per-host rate is what protects the sites. |
+| `TOME_BLOB_ROOT` | path | `/var/lib/tomekeeper` | no | Filesystem root of the archive. Must be absolute — a relative path would resolve against whatever directory the process started in, and the archive would move between deployments. |
 
 ### Value handling
 
@@ -79,15 +82,20 @@ as a whole. Only some affect a given command's behavior:
 | `TOME_USERNAME` | — | — | creates the user | selects the user |
 | `TOME_CONTACT_URL` | — | yes | — | — |
 | `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — |
+| `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — |
+| `TOME_BLOB_ROOT` | — | yes | — | — |
 
-## Not yet implemented
+## Storage
 
-The following are described in the implementation plan but are not read by any
-current code, and setting them has no effect:
+`TOME_BLOB_ROOT` must be writable by the worker and readable by the server, and
+it must be on persistent storage — it holds the archive, and the database is an
+index over it rather than the other way round.
 
-| Variable | Arrives with |
-|---|---|
-| `TOME_BLOB_ROOT` — filesystem root of the archive | M3 |
+At M2 it contains the raw fetched pages:
 
-This table exists so that a variable seen in an issue, a manifest, or the plan
-can be identified as "not wired up yet" rather than "misspelled".
+```
+<root>/articles/2026/08/the-article-slug-a1b2c3/raw.html.gz
+```
+
+Extracted articles, their images, and `meta.json` join them at M3, in the same
+directories.

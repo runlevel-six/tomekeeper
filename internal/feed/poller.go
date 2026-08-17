@@ -70,13 +70,20 @@ func NewPoller(s Store, c *httpclient.Client, policy IntervalPolicy, disableAfte
 
 // Result summarizes one poll.
 type Result struct {
-	NotModified  bool
-	Skipped      bool // the feed is disabled
-	TotalItems   int
-	NewItems     int // references new to this feed
-	NewArticles  int // articles new to the archive
-	NextInterval time.Duration
-	Disabled     bool // the feed was disabled by this failure
+	NotModified bool
+	Skipped     bool // the feed is disabled
+	TotalItems  int
+	NewItems    int // references new to this feed
+	NewArticles int // articles new to the archive
+
+	// NewArticleIDs are the articles this poll added to the archive.
+	//
+	// The poller returns them rather than enqueueing the fetches itself, so
+	// that this package knows nothing about the job queue. The worker turns
+	// them into fetch_article jobs.
+	NewArticleIDs []store.ArticleID
+	NextInterval  time.Duration
+	Disabled      bool // the feed was disabled by this failure
 }
 
 // Poll fetches a feed and records its entries.
@@ -97,7 +104,14 @@ func (p *Poller) Poll(ctx context.Context, userID store.UserID, feedID store.Fee
 
 	log := p.log.With("feed_id", int64(feedID), "feed_url", f.FeedURL)
 
-	resp, err := p.client.Get(ctx, f.FeedURL, conditionalHeaders(f))
+	resp, err := p.client.Do(ctx, httpclient.Request{
+		URL:    f.FeedURL,
+		Header: conditionalHeaders(f),
+		// A feed is a subscription the reader asked for, published in a format
+		// whose whole purpose is automated consumption. Article and asset
+		// fetches are subject to robots.txt; this is not. See §5.3.
+		SkipRobots: true,
+	})
 	if err != nil {
 		return p.recordFailure(ctx, userID, f, err.Error(), log)
 	}
@@ -212,6 +226,7 @@ func (p *Poller) ingest(ctx context.Context, userID store.UserID, f store.Feed,
 		}
 		if created {
 			result.NewArticles++
+			result.NewArticleIDs = append(result.NewArticleIDs, articleID)
 		}
 
 		inserted, err := p.store.InsertFeedItem(ctx, userID, store.FeedItemParams{
@@ -220,6 +235,7 @@ func (p *Poller) ingest(ctx context.Context, userID store.UserID, f store.Feed,
 			GUID:      guid,
 			Title:     strings.TrimSpace(item.Title),
 			Summary:   strings.TrimSpace(item.Description),
+			Content:   strings.TrimSpace(item.Content),
 		})
 		if err != nil {
 			return Result{}, err

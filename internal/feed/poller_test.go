@@ -26,7 +26,7 @@ func discardLogger() *slog.Logger {
 // newPoller wires a Poller against a test server and an in-memory store.
 func newPoller(t *testing.T, s *fakeStore) *feed.Poller {
 	t.Helper()
-	return feed.NewPoller(s, httpclient.New("tomekeeper/test"),
+	return feed.NewPoller(s, httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1}),
 		feed.DefaultIntervalPolicy(), 20, discardLogger())
 }
 
@@ -523,7 +523,10 @@ func TestPollSendsHonestUserAgent(t *testing.T) {
 	defer srv.Close()
 
 	poller := feed.NewPoller(newFakeStore(testFeed(srv.URL)),
-		httpclient.New(httpclient.UserAgent("1.2.3", "https://example.com/about")),
+		httpclient.New(httpclient.Options{
+			UserAgent:   httpclient.UserAgent("1.2.3", "https://example.com/about"),
+			MaxAttempts: 1,
+		}),
 		feed.DefaultIntervalPolicy(), 20, discardLogger())
 
 	if _, err := poller.Poll(t.Context(), testUserID, testFeedID); err != nil {

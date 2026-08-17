@@ -50,6 +50,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "import-opml":
 		return importOPML(args[1:], stdout, stderr)
 
+	case "reextract":
+		return reextract(args[1:], stdout, stderr)
+
+	case "domain-rule":
+		return domainRule(args[1:], stdout, stderr)
+
 	case "version":
 		fmt.Fprintln(stdout, version.String())
 		return exitOK
@@ -73,9 +79,11 @@ Usage:
 
 Subcommands:
   serve         Run the HTTP server (web UI, health endpoints)
-  worker        Run the background job pool (feed polling)
+  worker        Run the background job pool (polling, fetching, extraction)
   migrate       Apply database migrations and seed the user
   import-opml   Add subscriptions from an OPML file
+  reextract     Re-extract stored pages at the current extractor version
+  domain-rule   Manage per-domain extraction overrides
   version       Print build version and exit
   help          Print this message
 

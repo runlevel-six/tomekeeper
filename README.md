@@ -9,10 +9,11 @@ item it ingests becomes an offline-readable article with its images, stored as
 files on disk that open in a browser with the service stopped and the database
 gone.
 
-**Status: early. Milestone 1 of 9.** It polls feeds on an adaptive schedule and
-records every article they carry, deduplicated across subscriptions. It does not
-yet fetch article pages or extract their text (M2), and there is no web
-interface (M4). Useful to watch; not yet useful to read.
+**Status: early. Milestone 2 of 9.** It polls feeds, fetches the linked pages
+politely, keeps the originals, and extracts readable article bodies from them.
+Images are not yet localized (M3) and there is no web interface (M4) — for now
+the archive is readable by querying Postgres. Useful to run; not yet pleasant to
+read.
 
 ## Quick start
 
@@ -26,9 +27,12 @@ task build
 
 export TOME_DATABASE_URL='postgres://tome:tome@localhost:5432/tome?sslmode=disable'
 
+export TOME_BLOB_ROOT="$PWD/archive"
+export TOME_CONTACT_URL='https://example.com/about'   # be contactable
+
 ./bin/tome migrate                        # create the schema
 ./bin/tome import-opml subscriptions.opml # your OPML from any other reader
-./bin/tome worker                         # start polling
+./bin/tome worker                         # poll, fetch, extract
 ```
 
 ```console

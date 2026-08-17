@@ -1,0 +1,11 @@
+url: https://quarterly.example.net/notes/archives
+extractor: domain_rule
+selector: div[data-role="story-body"]
+strip: .promo
+strip: .legal
+min_chars: 300
+
+The measure that matters for an archive
+localizing assets is not an optimization
+!Subscribe today and save forty percent
+!Terms and conditions apply

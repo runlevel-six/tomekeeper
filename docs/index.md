@@ -7,12 +7,11 @@ stores the result as files on disk that outlive the application.
 
 The binary is `tome`.
 
-> **Status: M1 (ingest).** The service polls feeds on an adaptive schedule and
-> records every article it finds, deduplicated across subscriptions. It does not
-> yet fetch article pages or extract their text — that is M2 — and there is no
-> web interface until M4. Sections of this documentation appear as the
-> milestones that introduce them land; nothing here describes behavior that does
-> not exist.
+> **Status: M2 (fetch and extract).** The service polls feeds, fetches the
+> linked pages politely, stores the originals, and extracts readable article
+> bodies from them. Images are not yet localized and there is no web interface —
+> those are M3 and M4. Sections of this documentation appear as the milestones
+> that introduce them land; nothing here describes behavior that does not exist.
 
 ## The four kinds of document
 
@@ -32,6 +31,9 @@ you are new.
 Recipes for a specific task, assuming you already know roughly what you are
 doing.
 
+- [Add a domain rule](how-to/add-a-domain-rule.md) — fixing a site that
+  extracts badly
+- [Reprocess the archive](how-to/reprocess-the-archive.md)
 - [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md)
 
 ### Reference — information
@@ -50,6 +52,9 @@ rejected. Design rationale lives here and nowhere else.
 - [Architecture](explanation/architecture.md) — the shape of the system
 - [Why articles are the root entity](explanation/why-articles-are-the-root-entity.md)
   — the decision the archive rests on
+- [Extraction and versioning](explanation/extraction-and-versioning.md) — why
+  bodies are regenerable and raw pages are kept
+- [Politeness and rate limiting](explanation/politeness-and-rate-limiting.md)
 - [Dependencies](explanation/dependencies.md) — every dependency, and why
 
 ## Quick orientation
@@ -63,4 +68,6 @@ rejected. Design rationale lives here and nowhere else.
 | Understand the schema | [Data model](reference/data-model.md) |
 | Understand why there are two Deployments | [Architecture](explanation/architecture.md) |
 | Understand why duplicates collapse | [Why articles are the root entity](explanation/why-articles-are-the-root-entity.md) |
+| Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
+| Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
 | Understand why a dependency is present | [Dependencies](explanation/dependencies.md) |

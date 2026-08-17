@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Notes on Rate Limiting</title></head>
+<body>
+<div id="wrapper">
+  <div id="header"><div class="logo">EXAMPLE</div><div class="menu">Home | Archive | Contact | Advertise with us</div></div>
+  <div id="main">
+    <div class="post">
+      <div class="post-title">Notes on Rate Limiting</div>
+      <div class="post-body">
+        <p>A token bucket is the right default for polite fetching because it
+        permits a burst and then settles into a steady rate. That shape matches
+        how servers actually experience load: a handful of requests arriving
+        together is unremarkable, while a sustained stream from one client is
+        what gets noticed and blocked.</p>
+        <p>The important parameter is not the rate but the scope. Limiting
+        globally protects your own machine from doing too much work at once, and
+        limits nothing that any individual server experiences. Limiting per host
+        is what keeps you welcome, because a server only sees the traffic you
+        send to it.</p>
+        <p>Honoring Retry-After is the other half. A server that tells you when
+        to come back has given you the exact information you need, and ignoring
+        it converts a temporary throttle into a permanent ban with remarkable
+        efficiency.</p>
+      </div>
+    </div>
+  </div>
+  <div id="sidebar"><div class="widget">Newsletter signup: get our best posts weekly</div></div>
+  <div id="footer">Advertise with us. Privacy policy. Do not sell my information.</div>
+</div>
+</body>
+</html>

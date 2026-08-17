@@ -1,0 +1,419 @@
+package jobs_test
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+
+	"github.com/runlevel-six/tomekeeper/internal/blob"
+	"github.com/runlevel-six/tomekeeper/internal/dbtest"
+	"github.com/runlevel-six/tomekeeper/internal/extract"
+	"github.com/runlevel-six/tomekeeper/internal/feed"
+	"github.com/runlevel-six/tomekeeper/internal/httpclient"
+	"github.com/runlevel-six/tomekeeper/internal/jobs"
+	"github.com/runlevel-six/tomekeeper/internal/store"
+)
+
+// These require a live PostgreSQL and skip without TOME_TEST_DATABASE_URL.
+
+const articlePage = `<!DOCTYPE html>
+<html lang="en">
+<head><title>The Archived Article</title>
+  <meta property="og:site_name" content="Example Journal">
+  <meta name="author" content="Dana Okonkwo">
+</head>
+<body>
+  <nav>Home About Subscribe now for unlimited access to everything</nav>
+  <article>
+    <h1>The Archived Article</h1>
+    <p>An archive is only worth having if what it holds can still be read years
+    later, which means the bytes have to be kept rather than a link to them. A
+    link is a promise that someone else will keep the bytes, and that promise
+    is broken often enough to be worth not relying on.</p>
+    <p>Keeping the original fetch is what makes every later improvement to
+    extraction apply to the whole archive rather than only to what arrives
+    afterwards. Without it, a better extractor helps only the future.</p>
+    <p>That is the entire argument for storing raw pages, and it is why this
+    costs disk space that a feed reader would not spend.</p>
+  </article>
+  <footer>Copyright 2026. All rights reserved. Privacy policy.</footer>
+</body>
+</html>`
+
+// runPipeline starts a worker, runs fn, and waits for the queue to drain.
+func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpclient.Client,
+	fn func(context.Context, *river.Client[pgx.Tx]),
+) {
+	t.Helper()
+
+	pool := s.Pool()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
+		Pool:        pool,
+		Store:       s,
+		Poller:      feed.NewPoller(s, client, feed.DefaultIntervalPolicy(), 20, log),
+		Client:      client,
+		Blobs:       blobs,
+		Extractor:   extract.New(),
+		Log:         log,
+		Concurrency: 2,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkerClient() = %v", err)
+	}
+
+	ctx := t.Context()
+	if err := riverClient.Start(ctx); err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	t.Cleanup(func() {
+		stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		_ = riverClient.Stop(stopCtx)
+	})
+
+	fn(ctx, riverClient)
+}
+
+// waitFor polls until cond is true or the deadline passes.
+//
+// The pipeline is asynchronous by design — fetch and extract are separate jobs
+// precisely so neither blocks the other — so the test waits on the outcome
+// rather than on a call returning.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+// The M2 pipeline end to end: a pending article is fetched, its raw page is
+// stored, and the ladder produces a body.
+func TestFetchAndExtractPipeline(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, articlePage)
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: srv.URL + "/the-article",
+		Title:        "The Archived Article",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
+		// The periodic scheduler picks the article up on its startup run, so
+		// nothing needs to be enqueued by hand — which also proves the
+		// scheduler works.
+		waitFor(t, "the article to be fetched and extracted", func() bool {
+			_, err := s.CurrentContent(ctx, articleID)
+			return err == nil
+		})
+	})
+
+	ctx := t.Context()
+
+	article, err := s.GetArticle(ctx, articleID)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchOK {
+		t.Errorf("FetchStatus = %q, want %q", article.FetchStatus, store.FetchOK)
+	}
+	if article.RawBlobSHA == "" {
+		t.Error("no content hash was recorded for the raw page")
+	}
+	if article.RawBlobPath == "" {
+		t.Fatal("no blob path was recorded for the raw page")
+	}
+
+	// The raw page is on disk, gzipped, and recoverable. This is what makes
+	// `tome reextract` possible without re-fetching (§2.2).
+	if ok, err := blobs.Exists(ctx, article.RawBlobPath); err != nil || !ok {
+		t.Errorf("the raw page is not in the blob store at %s: %v", article.RawBlobPath, err)
+	}
+	if !strings.HasSuffix(article.RawBlobPath, "raw.html.gz") {
+		t.Errorf("raw blob path = %q, want it to end in raw.html.gz", article.RawBlobPath)
+	}
+	if !strings.HasPrefix(article.RawBlobPath, "articles/") {
+		t.Errorf("raw blob path = %q, want it under articles/", article.RawBlobPath)
+	}
+
+	content, err := s.CurrentContent(ctx, articleID)
+	if err != nil {
+		t.Fatalf("CurrentContent() = %v", err)
+	}
+	if content.ExtractorVersion != extract.Version {
+		t.Errorf("extractor version = %q, want the current %q", content.ExtractorVersion, extract.Version)
+	}
+	if content.ContentOrigin != store.OriginFetched {
+		t.Errorf("content origin = %q, want %q", content.ContentOrigin, store.OriginFetched)
+	}
+	if !strings.Contains(content.Text, "An archive is only worth having") {
+		t.Errorf("the body is missing the article text:\n%s", content.Text)
+	}
+	for _, chrome := range []string{"Subscribe now for unlimited access", "All rights reserved"} {
+		if strings.Contains(content.Text, chrome) {
+			t.Errorf("the body contains page chrome: %q", chrome)
+		}
+	}
+	if content.WordCount == 0 {
+		t.Error("WordCount = 0")
+	}
+
+	// The page usually knows more about itself than the feed did.
+	if article.Author == "" && article.SiteName == "" {
+		t.Error("no metadata was recovered from the page")
+	}
+}
+
+// A page that cannot be fetched is recorded as failed, with the reason, rather
+// than being retried forever or silently dropped.
+func TestFetchFailureIsRecorded(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: srv.URL + "/gone",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
+		waitFor(t, "the fetch failure to be recorded", func() bool {
+			a, err := s.GetArticle(ctx, articleID)
+			return err == nil && a.FetchStatus == store.FetchFailed
+		})
+	})
+
+	article, err := s.GetArticle(t.Context(), articleID)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchFailed {
+		t.Errorf("FetchStatus = %q, want %q", article.FetchStatus, store.FetchFailed)
+	}
+
+	// Nothing was extracted, and that is the correct outcome.
+	if _, err := s.CurrentContent(t.Context(), articleID); err == nil {
+		t.Error("a body was stored for an article that could not be fetched")
+	}
+}
+
+// robots.txt refusing a path is not a failure: it will not change on retry,
+// and skipped keeps the failed-fetch queue meaningful.
+func TestRobotsDisallowedArticleIsSkipped(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			_, _ = io.WriteString(w, "User-agent: *\nDisallow: /private/\n")
+			return
+		}
+		_, _ = io.WriteString(w, articlePage)
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: srv.URL + "/private/article",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
+		waitFor(t, "the article to be skipped", func() bool {
+			a, err := s.GetArticle(ctx, articleID)
+			return err == nil && a.FetchStatus == store.FetchSkipped
+		})
+	})
+
+	article, err := s.GetArticle(t.Context(), articleID)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if !strings.Contains(article.FetchError, "robots") {
+		t.Errorf("fetch error = %q, want it to name robots.txt", article.FetchError)
+	}
+}
+
+// A domain rule rescues a page the heuristics get wrong, and reextract applies
+// it to an article that is already stored — without re-fetching.
+func TestDomainRuleAppliedByReextract(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	const promoHeavy = `<!DOCTYPE html><html lang="en"><head><title>Notes</title></head><body>
+	  <div class="promo">Subscribe today and save forty percent on an annual membership. Members get
+	  unlimited access to the full archive, the weekly newsletter, exclusive events, and the complete
+	  back catalogue going back decades. Cancel any time, no questions asked, money back in full.</div>
+	  <div data-role="story-body">
+	    <p>The measure that matters for an archive is not how many pages were saved but how many still
+	    render years later. A saved page that depends on a stylesheet from a lapsed domain is a saved
+	    page in name only, and that is why localizing assets is not an optimization.</p>
+	  </div>
+	</body></html>`
+
+	var fetches int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		fetches++
+		_, _ = io.WriteString(w, promoHeavy)
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: srv.URL + "/notes",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
+		waitFor(t, "the first extraction", func() bool {
+			_, err := s.CurrentContent(ctx, articleID)
+			return err == nil
+		})
+
+		fetchesBefore := fetches
+
+		// Now a rule is written for the domain, and the article is
+		// re-extracted from the *stored* page.
+		u := mustParseHost(t, srv.URL)
+		if err := s.System().UpsertDomainRule(ctx, store.DomainRule{
+			Domain:          u,
+			ContentSelector: `div[data-role="story-body"]`,
+			StripSelectors:  []string{".promo"},
+		}); err != nil {
+			t.Fatalf("UpsertDomainRule() = %v", err)
+		}
+
+		// Exactly what `tome reextract` does: confirm the article is a
+		// candidate, then queue a forced extraction.
+		candidates, err := s.System().ReextractCandidates(ctx, "never-matches", 0, 100)
+		if err != nil {
+			t.Fatalf("ReextractCandidates() = %v", err)
+		}
+		if !containsArticle(candidates, articleID) {
+			t.Fatal("the article was not offered as a reextract candidate")
+		}
+		if err := jobs.EnqueueExtraction(ctx, riverClient, articleID, true); err != nil {
+			t.Fatalf("EnqueueExtraction() = %v", err)
+		}
+
+		waitFor(t, "the re-extraction to use the rule", func() bool {
+			c, err := s.CurrentContent(ctx, articleID)
+			return err == nil && c.ExtractorName == extract.NameDomainRule
+		})
+
+		// The whole point: reprocessing costs no requests to the origin.
+		if fetches != fetchesBefore {
+			t.Errorf("re-extraction made %d further requests, want 0", fetches-fetchesBefore)
+		}
+	})
+
+	content, err := s.CurrentContent(t.Context(), articleID)
+	if err != nil {
+		t.Fatalf("CurrentContent() = %v", err)
+	}
+	if strings.Contains(content.Text, "Subscribe today") {
+		t.Errorf("the rule's strip selector was not applied:\n%s", content.Text)
+	}
+	if !strings.Contains(content.Text, "The measure that matters") {
+		t.Errorf("the rule did not select the article body:\n%s", content.Text)
+	}
+}
+
+func mustParseHost(t *testing.T, rawURL string) string {
+	t.Helper()
+
+	after, ok := strings.CutPrefix(rawURL, "http://")
+	if !ok {
+		t.Fatalf("unexpected test server URL %q", rawURL)
+	}
+	host, _, _ := strings.Cut(after, "/")
+	if h, _, found := strings.Cut(host, ":"); found {
+		return h
+	}
+	return host
+}
+
+func containsArticle(candidates []store.ReextractCandidate, id store.ArticleID) bool {
+	for _, c := range candidates {
+		if c.ArticleID == id {
+			return true
+		}
+	}
+	return false
+}
