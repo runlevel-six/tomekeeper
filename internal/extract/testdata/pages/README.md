@@ -76,7 +76,7 @@ see `internal/dbtest` for the same pattern and the same reasoning.
 `TestCorpus` logs its case counts on every run:
 
 ```
-corpus: 6 committed fixtures, 31 private pages
+corpus: 7 committed fixtures, 31 private pages
 ```
 
 Watch that second number. A corpus that stops being found looks identical to a
@@ -84,7 +84,7 @@ passing suite.
 
 ## Adding a page to the committed fixtures
 
-Do this when the page demonstrates a *structural* case the existing six do not
-cover, and when its content can be published — hand-written markup, or a page
+Do this when the page demonstrates a *structural* case the existing fixtures do
+not cover, and when its content can be published — hand-written markup, or a page
 whose terms clearly allow redistribution. Keep it small. Anything saved from a
 site you simply happen to read belongs in the private corpus instead.

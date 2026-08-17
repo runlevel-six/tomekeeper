@@ -37,7 +37,9 @@ import (
 // `tome reextract --since-version <n>` uses it to find everything produced by
 // older behavior. Forgetting to bump it means an improvement silently never
 // reaches the archive it was written for.
-const Version = "1"
+// Version 2 (2026-08-17): the ratio check is skipped for bodies past longBody.
+// See the constant for the measurement that prompted it.
+const Version = "2"
 
 // Extractor names recorded on content rows.
 const (
@@ -47,7 +49,7 @@ const (
 	NameFeedBody    = "feed_body"
 )
 
-// Acceptance thresholds (§5.4). A result must clear both to end the ladder.
+// Acceptance thresholds (§5.4).
 const (
 	// minChars is the shortest body worth calling an article. Below this it is
 	// almost always a paywall stub, a cookie notice, or a navigation shell.
@@ -57,6 +59,28 @@ const (
 	// for. It catches the opposite failure: an extractor that returns the
 	// whole page including navigation looks successful by length alone.
 	minRatio = 0.25
+
+	// longBody is the length past which the ratio check no longer applies.
+	//
+	// The ratio exists to catch a navigation fragment mistaken for the article,
+	// and a fragment is short. Past this length the text is prose, and demanding
+	// that it also be a fixed share of the page punishes sites whose chrome is
+	// simply large.
+	//
+	// Measured against the real feed list on 2026-08-17: on a Hugo/Docsy
+	// documentation theme the sidebar alone is roughly 40,000 characters of
+	// visible text, so whole-page visible length sat at 45,000–54,000 for every
+	// article while the posts themselves ran 3,500–13,300. Every one scored under
+	// 0.25 and was rejected — the ratio was measuring post length against sidebar
+	// size, which is not a property of the extraction at all. 42 of 50 articles
+	// fell through to the feed body as a result.
+	//
+	// The asymmetry that sets the value: a false reject stores a truncated feed
+	// summary while the full page sits on disk unread, which is precisely the
+	// failure §1 exists to prevent. A false accept stores a short-but-real body
+	// that §2.2 lets us re-extract later. So the absolute floor wins, and it is
+	// set low enough to clear the whole measured range.
+	longBody = 2000
 )
 
 // Rule is a per-domain override from the domain_rules table.
@@ -310,10 +334,17 @@ func (e *Extractor) finish(name, body, text string, pageURL *url.URL, meta metad
 }
 
 // acceptable implements the §5.4 threshold: long enough in absolute terms, and
-// a large enough share of the page to be the article rather than the chrome.
+// — for bodies short enough that the question is open — a large enough share of
+// the page to be the article rather than the chrome.
 func acceptable(text string, visibleLen int) bool {
 	if len(text) < minChars {
 		return false
+	}
+	if len(text) >= longBody {
+		// Long enough to be prose on its own terms. See longBody: on a
+		// chrome-heavy site the ratio measures the page's furniture, not the
+		// quality of the extraction.
+		return true
 	}
 	if visibleLen <= 0 {
 		// The page's visible text could not be measured, so the ratio is

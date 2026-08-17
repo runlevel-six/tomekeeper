@@ -71,6 +71,39 @@ A domain rule overrides the ratio check. A rule is a human saying "the body is
 here", and the entire reason one exists is that the heuristics were wrong about
 this site.
 
+### The ratio check stops applying to long bodies
+
+Past 2,000 characters the ratio is not consulted at all. This is a correction
+made against real data rather than an original design choice, and it is worth
+recording why.
+
+A documentation site carries its entire table of contents on every page. On one
+measured against the real feed list, the sidebar alone came to roughly 40,000
+characters of visible text, so whole-page visible length sat between 45,000 and
+54,000 for every article while the posts themselves ran 3,500 to 13,300
+characters. Every single one scored below 0.25 and was rejected. **42 of 50
+articles fell through to the feed body**, with the full page sitting on disk the
+whole time.
+
+The ratio was not measuring the quality of the extraction. It was measuring the
+length of the post against the length of the sidebar — a property of the site's
+template, which changes whenever the site adds a documentation section.
+
+What settles the threshold is that the two failure modes are not symmetric:
+
+- A **false reject** stores a truncated feed summary and discards a good body.
+  That is the failure the whole project exists to prevent, and it is silent —
+  nothing logs an error and the article looks present.
+- A **false accept** stores a short but real body. Because the raw page is kept
+  (§2.2 above), it can be extracted again later with better heuristics.
+
+One is recoverable and one is not, so the absolute length wins where it can.
+Below 2,000 characters the question is genuinely open — a short run of text on a
+sparse page really can be a cookie notice — and there the ratio still decides.
+`testdata/pages/chrome-heavy.html` locks the behavior in: with the length
+exemption removed, that fixture fails with `no extractor produced acceptable
+content`, which is exactly what the real pages did.
+
 ### The feed body rung
 
 The last rung is not compared against the page at all, because it is a
@@ -89,7 +122,7 @@ Every body records the extractor that produced it and the version of the
 extraction *behavior*, a constant in the code:
 
 ```go
-const Version = "1"
+const Version = "2"
 ```
 
 **Bump it whenever extraction output could change** — a new rung, a changed
@@ -97,6 +130,17 @@ threshold, a different sanitization policy, an upgraded extractor library.
 `tome reextract --since-version <n>` finds everything produced by older
 behavior and queues it. Forgetting to bump it means an improvement silently
 never reaches the archive it was written for.
+
+| Version | Change |
+|---|---|
+| `1` | The ladder as originally specified. |
+| `2` | The ratio check no longer applies to bodies past 2,000 characters (2026-08-17). |
+
+Note what the version does **not** cover: adding or editing a *domain rule*
+changes extraction output without changing this constant, so `reextract` will not
+select the affected articles on its own. Use `--since-version 0`, which matches
+every body because no body carries version `0`. There is currently no way to
+reprocess a single domain.
 
 A new body does not overwrite the old one; it **demotes** it. `is_current`
 moves to the new row and the previous one stays. That costs a row and buys the

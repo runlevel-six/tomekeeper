@@ -30,7 +30,7 @@ someone finally needs it is the format that loses the archive.
   "starred": false,
   "archived": false,
   "extractor": "trafilatura",
-  "extractor_version": "1",
+  "extractor_version": "2",
   "word_count": 1204,
   "assets": [
     {
