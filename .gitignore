@@ -18,6 +18,7 @@
 # explicitly.
 /.claude/settings.local.json
 
-# The implementation plan is a working document, not a shipped artifact.
-# Remove this line if it should be published with the repository.
+# Working documents, not shipped artifacts. Remove these lines if they should
+# be published with the repository.
 /docs/plan.md
+/docs/pending-decisions.md

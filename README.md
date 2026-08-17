@@ -85,4 +85,6 @@ There is no roadmap commitment and no release cadence.
 
 ## License
 
-Not yet chosen. Until one is added, no license is granted.
+[GNU AGPL-3.0](LICENSE). Use it, fork it, run it. If you run a modified version
+as a network service, the license requires you to offer those modifications to
+its users.
