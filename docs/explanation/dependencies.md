@@ -10,7 +10,7 @@ worse than the risk of the dependency.*
 
 ## Go module dependencies
 
-Nine libraries as of M2, across eleven modules — River publishes its driver and
+Twelve libraries as of M3, across fourteen modules — River publishes its driver and
 type packages separately. Each is here because the standard library cannot do
 the job and doing it by hand would be worse than the risk of the dependency.
 
@@ -26,6 +26,9 @@ the job and doing it by hand would be worse than the risk of the dependency.
 | `github.com/PuerkitoBio/goquery` | CSS selector matching, for domain rules and for URL resolution in extracted bodies. Already in the tree as a transitive dependency of the extractors, so using it directly adds nothing. |
 | `github.com/temoto/robotstxt` | robots.txt parsing. The format has more edge cases than it appears to — wildcard paths, longest-match precedence, agent matching — and getting them wrong means either ignoring a site's wishes or refusing pages it never restricted. |
 | `golang.org/x/time/rate` | The per-host token bucket. A correct rate limiter with a burst allowance is not hard, but this one is already in the extended standard library and already correct. |
+| `github.com/gen2brain/avif` | AVIF encoding, which is where most of the archive's storage saving comes from. Pure Go via a WebAssembly runtime, so it works under `CGO_ENABLED=0` and the image stays distroless-static — the libaom bindings would have cost that. It reuses the same wazero runtime trafilatura already pulls in. |
+| `github.com/HugoSmits86/nativewebp` | WebP encoding, as the fallback when AVIF encoding fails. Pure Go, for the same reason. It is lossless-only, which is why the pipeline discards any transcode larger than its source. |
+| `golang.org/x/image` | WebP *decoding*, and the CatmullRom scaler used to downscale. The standard library has neither. |
 
 Still done with the standard library, deliberately:
 
@@ -47,7 +50,6 @@ with its justification, in the milestone that introduces it.
 
 | Dependency | Milestone | Why it will be needed |
 |---|---|---|
-| An image codec for AVIF/WebP | M3 | The standard library encodes neither, and the asset policy depends on modern codecs to keep the archive's storage growth tolerable. |
 | `chromedp` | M8 | Driving a headless browser for the small set of domains that render their content in JavaScript. |
 
 ## Build and CI dependencies

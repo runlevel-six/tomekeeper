@@ -6,9 +6,10 @@ some feeds, and watch it collect articles.
 It takes about 20 minutes. You will need Docker and Go 1.26 or later.
 
 > **What you will have at the end:** a running service that polls your feeds,
-> fetches each linked page, keeps the original, and extracts the readable
-> article from it. There is no web interface yet — that is M4 — so the last step
-> reads the archive with SQL.
+> fetches each linked page, extracts the readable article, downloads its images,
+> and writes the result as a page you can open in a browser with everything
+> switched off. There is no web interface yet — that is M4 — so you will read the
+> first article by opening a file.
 
 ## Step 1: Start PostgreSQL
 
@@ -140,11 +141,17 @@ level=INFO msg="worker started"
 level=INFO msg="polled feed" feed_id=1 items=10 new_items=10 new_articles=10 next_interval=30m0s
 level=INFO msg="fetched article" article_id=1 bytes=48210 stored_bytes=9433 path=articles/2026/08/…
 level=INFO msg="extracted article" article_id=1 extractor=trafilatura words=1204 characters=7331
+level=INFO msg="localized assets" article_id=1 found=3 localized=3 failed=0 status=ok
 ```
 
-Three things are happening. The feed is polled; each new article's page is
-fetched and the original stored, compressed, on disk; and the readable body is
-extracted from that stored copy.
+Four things are happening. The feed is polled; each new article's page is
+fetched and the original stored, compressed, on disk; the readable body is
+extracted from that stored copy; and the article's images are downloaded,
+downscaled, and written into the archive.
+
+Image encoding is the slow part — a few seconds per picture — so an
+illustrated article takes a moment to finish. It runs in the background and
+nothing waits on it.
 
 Note `extractor=trafilatura`. That is the first rung of the extraction ladder
 that produced an acceptable result — if a site needs a hand-written rule, this
@@ -223,7 +230,55 @@ FROM articles WHERE fetch_status IN ('failed', 'skipped');
 paywall or a JavaScript-rendered page — the cases [a domain
 rule](../how-to/add-a-domain-rule.md) exists for.
 
-## Step 8: Run the server
+And what it all costs:
+
+```sh
+./bin/tome archive stats
+```
+
+## Step 8: Open an article with everything switched off
+
+This is the part that makes it an archive rather than a cache.
+
+Stop the worker if it is still running, and stop the database too:
+
+```sh
+docker stop tome-db
+```
+
+Now find an archived article and open it:
+
+```sh
+find archive/articles -name index.html | head -5
+xdg-open "$(find archive/articles -name index.html | head -1)"   # or: open, on macOS
+```
+
+The article renders, with its images, with no service running and no database
+at all. Nothing is fetched from the network to display it — the page has inline
+styles, no scripts, and its images resolve by relative path into
+`archive/assets/`.
+
+Look at what is beside it:
+
+```sh
+ls "$(dirname "$(find archive/articles -name index.html | head -1)")"
+```
+
+```
+index.html   meta.json   raw.html.gz
+```
+
+`meta.json` is the article's record, readable in any text editor.
+`raw.html.gz` is exactly what the server sent, kept so that a better extractor
+later can be applied to articles already collected.
+
+Start the database again before continuing:
+
+```sh
+docker start tome-db
+```
+
+## Step 9: Run the server
 
 In another terminal, with the same environment variables:
 
@@ -261,6 +316,8 @@ That deletes the database and the stored pages.
   — when a subscription stops producing articles
 - [How to add a domain rule](../how-to/add-a-domain-rule.md) — when a site
   extracts badly
+- [Why the filesystem is the archive](../explanation/why-the-filesystem-is-the-archive.md)
+  — what you just did in step 8, and why it is the point
 - [Extraction and versioning](../explanation/extraction-and-versioning.md) — why
   the original pages are kept
 - [Why articles are the root entity](../explanation/why-articles-are-the-root-entity.md)

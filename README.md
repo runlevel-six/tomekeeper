@@ -9,11 +9,11 @@ item it ingests becomes an offline-readable article with its images, stored as
 files on disk that open in a browser with the service stopped and the database
 gone.
 
-**Status: early. Milestone 2 of 9.** It polls feeds, fetches the linked pages
-politely, keeps the originals, and extracts readable article bodies from them.
-Images are not yet localized (M3) and there is no web interface (M4) — for now
-the archive is readable by querying Postgres. Useful to run; not yet pleasant to
-read.
+**Status: early. Milestone 3 of 9.** It polls feeds, fetches the linked pages
+politely, extracts readable bodies, localizes the images, and writes each
+article as a standalone page — open `index.html` from a file manager with this
+service stopped and the database gone, and the article renders with its images.
+There is no web interface yet (M4), so reading today means opening files.
 
 ## Quick start
 
@@ -32,7 +32,10 @@ export TOME_CONTACT_URL='https://example.com/about'   # be contactable
 
 ./bin/tome migrate                        # create the schema
 ./bin/tome import-opml subscriptions.opml # your OPML from any other reader
-./bin/tome worker                         # poll, fetch, extract
+./bin/tome worker                         # poll, fetch, extract, localize images
+
+# Then open any archived article straight from disk:
+find "$TOME_BLOB_ROOT/articles" -name index.html | head -1
 ```
 
 ```console

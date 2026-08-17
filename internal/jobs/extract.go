@@ -159,8 +159,19 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 		// so a fetched body is stored beside it rather than over it. Promoting
 		// one over the other is a deliberate human act.
 		log.Info("stored alongside an immutable body rather than replacing it")
+		// The current body is unchanged, so its images are already localized
+		// and its files already written.
+		return nil
 	}
-	return nil
+
+	// Localizing images and writing the article's files is a separate job:
+	// downloading a dozen images is slow and impolite to repeat, and it must
+	// not be able to cost the extraction that just succeeded.
+	client := river.ClientFromContext[pgx.Tx](ctx)
+	if client == nil {
+		return fmt.Errorf("no river client in context; cannot enqueue asset localization")
+	}
+	return EnqueueLocalization(ctx, client, id)
 }
 
 // alreadyCurrent reports whether this article already has a body from the

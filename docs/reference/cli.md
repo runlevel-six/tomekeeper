@@ -38,15 +38,17 @@ polling — and, from M2, extraction — is bursty and memory-hungry, and a back
 must not be able to make the reader unresponsive. Both are built from the same
 image.
 
-Five job types run:
+Seven job types run:
 
 | Job | Trigger | Work |
 |---|---|---|
 | `schedule_feeds` | every 60s, and once at startup | Selects up to 100 feeds where `next_poll_at <= now()` and `NOT disabled`, and enqueues a poll for each. |
 | `poll_feed` | enqueued by the scheduler | Conditional GET, parse, upsert articles and references, enqueue a fetch per new article, update polling state. |
-| `schedule_fetches` | every 60s, and once at startup | Enqueues a fetch for up to 100 articles still at `fetch_status = 'pending'`. In steady state it finds nothing; it exists for the M1 backlog and for fetches lost to a crash. |
+| `schedule_fetches` | every 60s, and once at startup | Enqueues a fetch for up to 100 articles still at `fetch_status = 'pending'`. In steady state it finds nothing; it exists for backlogs and for jobs lost to a crash. |
 | `fetch_article` | enqueued per new article | Fetches the page subject to robots.txt and rate limiting, stores the gzipped original in the blob store, enqueues extraction. |
 | `extract_article` | enqueued after a fetch, or by `tome reextract` | Runs the extraction ladder over the stored page. Touches no network. |
+| `schedule_assets` | every 60s, and once at startup | Enqueues localization for up to 100 articles still at `assets_status = 'pending'`. |
+| `localize_assets` | enqueued after extraction | Downloads the article's images with the article as `Referer`, downscales and transcodes them, rewrites the body to point into the archive, and writes `index.html` and `meta.json`. |
 
 Every job is unique per subject while one is pending or running, so a slow poll
 cannot be overtaken by the next scheduler run, and three feeds carrying the same
@@ -192,6 +194,23 @@ Rules are global and admin-only. How to extract a site's articles is a technical
 fact about that site, identical for every reader.
 
 See [Add a domain rule](../how-to/add-a-domain-rule.md).
+
+### `tome archive`
+
+Reports on what the archive holds.
+
+```
+tome archive stats
+```
+
+Counts articles, bodies, and images; reports bytes and the deduplication
+saving; and estimates cost per thousand articles. Raw pages live on the
+filesystem rather than in the database, so the command prints the `du` commands
+that size them rather than guessing.
+
+This exists because M3's acceptance criterion asks for storage across 1,000
+real articles to be measured and recorded. See [Storage
+layout](storage-layout.md#measuring-your-archive).
 
 ### `tome version`
 

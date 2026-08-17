@@ -7,11 +7,13 @@ stores the result as files on disk that outlive the application.
 
 The binary is `tome`.
 
-> **Status: M2 (fetch and extract).** The service polls feeds, fetches the
-> linked pages politely, stores the originals, and extracts readable article
-> bodies from them. Images are not yet localized and there is no web interface —
-> those are M3 and M4. Sections of this documentation appear as the milestones
-> that introduce them land; nothing here describes behavior that does not exist.
+> **Status: M3 (assets and the filesystem archive).** The service polls feeds,
+> fetches the linked pages politely, extracts readable bodies, localizes the
+> images, and writes each article as a standalone page that opens in a browser
+> with nothing running. There is no web interface yet — that is M4 — so reading
+> today means opening files or querying Postgres. Sections of this documentation
+> appear as the milestones that introduce them land; nothing here describes
+> behavior that does not exist.
 
 ## The four kinds of document
 
@@ -43,6 +45,8 @@ Dry, complete descriptions of the machinery. Look things up here.
 - [Configuration](reference/configuration.md) — every environment variable
 - [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint
 - [Data model](reference/data-model.md) — the schema and its constraints
+- [Storage layout](reference/storage-layout.md) — the on-disk archive
+- [Export format](reference/export-format.md) — what `meta.json` contains
 
 ### Explanation — understanding
 
@@ -55,6 +59,7 @@ rejected. Design rationale lives here and nowhere else.
 - [Extraction and versioning](explanation/extraction-and-versioning.md) — why
   bodies are regenerable and raw pages are kept
 - [Politeness and rate limiting](explanation/politeness-and-rate-limiting.md)
+- [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md)
 - [Dependencies](explanation/dependencies.md) — every dependency, and why
 
 ## Quick orientation
@@ -70,4 +75,6 @@ rejected. Design rationale lives here and nowhere else.
 | Understand why duplicates collapse | [Why articles are the root entity](explanation/why-articles-are-the-root-entity.md) |
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
 | Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
+| Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
+| Read an article without this service running | [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md) |
 | Understand why a dependency is present | [Dependencies](explanation/dependencies.md) |

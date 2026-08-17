@@ -169,10 +169,21 @@ unread state is the absence of a row.
 
 ### `assets` and `article_assets`
 
-Content-addressed images, shared globally. `assets` is keyed by the SHA-256 of
-the **original** bytes, so deduplication is stable across transcoder changes.
-`article_assets` is the many-to-many join, which is how one image used by ten
-articles is stored once.
+Content-addressed images, shared globally.
+
+| Column | Type | Notes |
+|---|---|---|
+| `sha256` | `text` | Primary key. Of the **original** bytes, before resizing or transcoding, so deduplication survives an encoder change. |
+| `media_type` | `text` | Of the stored file: usually `image/avif`. |
+| `byte_size` | `bigint` | Of the stored file, not the source. |
+| `width`, `height` | `int` | After downscaling. |
+| `fs_path` | `text` | Store-relative, `assets/sha256/a1/b2/…`. |
+| `source_url` | `text` | Where it came from. Also used to avoid re-downloading an image already fetched for another article. |
+| `fetched_at` | `timestamptz` | |
+
+`article_assets` is the many-to-many join, and is how one image used by ten
+articles is stored once and referenced ten times. See [Storage
+layout](storage-layout.md#the-assets-tree).
 
 ### `domain_rules`
 

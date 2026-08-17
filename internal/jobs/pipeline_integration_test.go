@@ -1,18 +1,29 @@
 package jobs_test
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/runlevel-six/tomekeeper/internal/archive"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/dbtest"
 	"github.com/runlevel-six/tomekeeper/internal/extract"
@@ -416,4 +427,183 @@ func containsArticle(candidates []store.ReextractCandidate, id store.ArticleID) 
 		}
 	}
 	return false
+}
+
+// The M3 acceptance criterion: the same image across ten articles stores once.
+//
+// Two properties are asserted, and they are different. Storage deduplication
+// comes from content-addressing and would hold even if the image were fetched
+// ten times. Fetch deduplication comes from the source-URL lookup and is what
+// the origin server experiences.
+func TestSameImageAcrossArticlesStoresOnce(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	var imageFetches int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/robots.txt":
+			http.NotFound(w, r)
+		case strings.HasSuffix(r.URL.Path, ".png"):
+			atomic.AddInt32(&imageFetches, 1)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(testImagePNG(t))
+		default:
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, articleWithImage(srvURLFor(r)))
+		}
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	const articles = 10
+	ids := make([]store.ArticleID, 0, articles)
+	for i := range articles {
+		id, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+			URLCanonical: fmt.Sprintf("%s/article-%d", srv.URL, i),
+			Title:        fmt.Sprintf("Article %d", i),
+		})
+		if err != nil {
+			t.Fatalf("UpsertArticle() = %v", err)
+		}
+		ids = append(ids, id)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
+		waitFor(t, "every article to be localized", func() bool {
+			for _, id := range ids {
+				a, err := s.GetArticle(ctx, id)
+				if err != nil || a.AssetsStatus == store.AssetsPending {
+					return false
+				}
+			}
+			return true
+		})
+	})
+
+	ctx := t.Context()
+
+	st, err := s.System().Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats() = %v", err)
+	}
+
+	if st.Assets != 1 {
+		t.Errorf("the archive holds %d images for %d articles sharing one, want 1", st.Assets, articles)
+	}
+	if st.AssetLinks != articles {
+		t.Errorf("%d article-to-image references, want %d", st.AssetLinks, articles)
+	}
+	if got := atomic.LoadInt32(&imageFetches); got != 1 {
+		t.Errorf("the origin served the image %d times, want 1", got)
+	}
+
+	// And exactly one file on disk.
+	var files int
+	root := blobs.Root()
+	if err := filepath.WalkDir(filepath.Join(root, "assets"), func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			files++
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walking the assets tree: %v", err)
+	}
+	if files != 1 {
+		t.Errorf("the assets tree holds %d files, want 1", files)
+	}
+
+	// Every article's page must still resolve its image — sharing a file must
+	// not mean nine articles point at nothing.
+	for _, id := range ids {
+		article, err := s.GetArticle(ctx, id)
+		if err != nil {
+			t.Fatalf("GetArticle() = %v", err)
+		}
+		dir := blob.ArticleDir(article.FirstSeenAt, article.Title, article.URLCanonical)
+		assertImagesResolve(t, filepath.Join(root, dir, archive.IndexFile))
+	}
+}
+
+// assertImagesResolve opens an archived page from disk, with nothing running,
+// and checks every image reference against the filesystem.
+func assertImagesResolve(t *testing.T, indexPath string) {
+	t.Helper()
+
+	f, err := os.Open(indexPath)
+	if err != nil {
+		t.Fatalf("opening %s: %v", indexPath, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	doc, err := goquery.NewDocumentFromReader(f)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", indexPath, err)
+	}
+
+	images := doc.Find("img[src]")
+	if images.Length() == 0 {
+		t.Errorf("%s has no images", indexPath)
+	}
+
+	images.Each(func(_ int, img *goquery.Selection) {
+		src, _ := img.Attr("src")
+		if strings.HasPrefix(src, "http") {
+			t.Errorf("%s: image %q was not localized", indexPath, src)
+			return
+		}
+		resolved := filepath.Join(filepath.Dir(indexPath), filepath.FromSlash(src))
+		if _, err := os.Stat(resolved); err != nil {
+			t.Errorf("%s: image %q does not resolve: %v", indexPath, src, err)
+		}
+	})
+}
+
+// testImagePNG is a photograph-like image big enough to clear the size policy.
+func testImagePNG(t *testing.T) []byte {
+	t.Helper()
+
+	const w, h = 400, 300
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.Set(x, y, color.RGBA{uint8(x % 251), uint8(y % 241), uint8((x * y) % 239), 255})
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encoding the test image: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func articleWithImage(base string) string {
+	return `<!DOCTYPE html><html lang="en"><head><title>Shared Image</title></head><body>
+	<article>
+	<h1>Shared Image</h1>
+	<p>Ten articles reference the same illustration, and the archive should hold
+	exactly one copy of it. Storing ten would be the single most expensive
+	mistake available here, because images are most of what an archive weighs
+	and syndicated stories repeat them constantly across sources.</p>
+	<p><img src="` + base + `/shared-illustration.png" alt="An illustration"></p>
+	<p>The deduplication is by content address, computed over the original bytes
+	before any resizing or transcoding, so changing the encoder later does not
+	turn one image into two.</p>
+	</article></body></html>`
+}
+
+// srvURLFor reconstructs the test server's base URL from a request.
+func srvURLFor(r *http.Request) string {
+	return "http://" + r.Host
 }

@@ -25,6 +25,7 @@ type Article struct {
 	FirstSeenAt  time.Time
 	FetchStatus  string
 	FetchError   string
+	AssetsStatus string
 	RawBlobSHA   string
 	RawBlobPath  string
 }

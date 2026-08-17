@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/runlevel-six/tomekeeper/internal/archive"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/extract"
 	"github.com/runlevel-six/tomekeeper/internal/feed"
@@ -61,6 +62,10 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	river.AddWorker(workers, &ExtractArticleWorker{
 		store: d.Store, blobs: d.Blobs, extractor: d.Extractor, log: d.Log,
 	})
+	river.AddWorker(workers, &LocalizeAssetsWorker{
+		store: d.Store, client: d.Client, blobs: d.Blobs,
+		archive: archive.NewWriter(d.Blobs), log: d.Log,
+	})
 
 	// The schedulers need the client in order to enqueue, and the client needs
 	// the workers in order to be constructed. River's documented way out of
@@ -71,6 +76,9 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 
 	fetchScheduler := &ScheduleFetchesWorker{store: d.Store, log: d.Log}
 	river.AddWorker(workers, fetchScheduler)
+
+	assetScheduler := &ScheduleAssetsWorker{store: d.Store, log: d.Log}
+	river.AddWorker(workers, assetScheduler)
 
 	client, err := river.NewClient(riverpgxv5.New(d.Pool), &river.Config{
 		Logger:  d.Log,
@@ -91,6 +99,11 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 				func() (river.JobArgs, *river.InsertOpts) { return ScheduleFetchesArgs{}, nil },
 				&river.PeriodicJobOpts{RunOnStart: true},
 			),
+			river.NewPeriodicJob(
+				river.PeriodicInterval(ScheduleInterval),
+				func() (river.JobArgs, *river.InsertOpts) { return ScheduleAssetsArgs{}, nil },
+				&river.PeriodicJobOpts{RunOnStart: true},
+			),
 		},
 	})
 	if err != nil {
@@ -99,6 +112,7 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 
 	feedScheduler.client = client
 	fetchScheduler.client = client
+	assetScheduler.client = client
 	return client, nil
 }
 

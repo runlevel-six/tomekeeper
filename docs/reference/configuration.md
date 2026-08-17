@@ -91,11 +91,15 @@ as a whole. Only some affect a given command's behavior:
 it must be on persistent storage — it holds the archive, and the database is an
 index over it rather than the other way round.
 
-At M2 it contains the raw fetched pages:
+It contains an article directory per article and a shared, content-addressed
+tree of images:
 
 ```
+<root>/articles/2026/08/the-article-slug-a1b2c3/index.html
+<root>/articles/2026/08/the-article-slug-a1b2c3/meta.json
 <root>/articles/2026/08/the-article-slug-a1b2c3/raw.html.gz
+<root>/assets/sha256/a1/b2/a1b2c3….avif
 ```
 
-Extracted articles, their images, and `meta.json` join them at M3, in the same
-directories.
+See [Storage layout](storage-layout.md) for what each file is and how much it
+costs. Size it with `tome archive stats` and `du -sh "$TOME_BLOB_ROOT"`.

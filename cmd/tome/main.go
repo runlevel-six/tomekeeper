@@ -56,6 +56,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "domain-rule":
 		return domainRule(args[1:], stdout, stderr)
 
+	case "archive":
+		return archiveCmd(args[1:], stdout, stderr)
+
 	case "version":
 		fmt.Fprintln(stdout, version.String())
 		return exitOK
@@ -84,6 +87,7 @@ Subcommands:
   import-opml   Add subscriptions from an OPML file
   reextract     Re-extract stored pages at the current extractor version
   domain-rule   Manage per-domain extraction overrides
+  archive       Report on what the archive holds
   version       Print build version and exit
   help          Print this message
 

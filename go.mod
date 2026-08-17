@@ -3,24 +3,33 @@ module github.com/runlevel-six/tomekeeper
 go 1.26
 
 require (
+	github.com/HugoSmits86/nativewebp v1.3.0
+	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/gen2brain/avif v0.6.0
+	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/markusmobius/go-trafilatura v1.12.2
+	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/mmcdole/gofeed v1.4.1
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/riverqueue/river v0.43.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.43.0
 	github.com/riverqueue/river/rivertype v0.43.0
+	github.com/temoto/robotstxt v1.1.2
+	golang.org/x/image v0.45.0
+	golang.org/x/net v0.57.0
+	golang.org/x/time v0.15.0
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/RadhiFadlillah/whatlanggo v0.0.0-20240916001553-aac1f0f737fc // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/elliotchance/pie/v2 v2.9.0 // indirect
 	github.com/forPelevin/gomoji v1.2.0 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
-	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/hablullah/go-hijri v1.0.2 // indirect
@@ -32,19 +41,16 @@ require (
 	github.com/markusmobius/go-dateparser v1.2.3 // indirect
 	github.com/markusmobius/go-domdistiller v0.0.0-20240926050704-25b8d046ffb4 // indirect
 	github.com/markusmobius/go-htmldate v1.9.1 // indirect
-	github.com/markusmobius/go-trafilatura v1.12.2 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.23 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 	github.com/riverqueue/river/riverdriver v0.43.0 // indirect
 	github.com/riverqueue/river/rivershared v0.43.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
-	github.com/temoto/robotstxt v1.1.2 // indirect
-	github.com/tetratelabs/wazero v1.8.1 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -54,9 +60,7 @@ require (
 	github.com/yosssi/gohtml v0.0.0-20201013000340-ee4748c638f4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
