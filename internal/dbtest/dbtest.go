@@ -51,10 +51,10 @@ func Setup(t *testing.T) *pgxpool.Pool {
 		t.Skipf("%s is not set; skipping integration test", EnvVar)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
+	connectCtx, cancelConnect := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancelConnect()
 
-	pool, err := db.Open(ctx, url)
+	pool, err := db.Open(connectCtx, url)
 	if err != nil {
 		t.Fatalf("connecting to the test database: %v", err)
 	}
@@ -63,14 +63,27 @@ func Setup(t *testing.T) *pgxpool.Pool {
 	// Hold the lock before migrating or truncating anything.
 	lock(t, pool)
 
+	// A fresh deadline, started *after* the wait for the lock.
+	//
+	// This used to share one 30-second context with the connect above, which meant
+	// the clock was already running while this test queued behind another
+	// package's. A test that waited its turn for longer than that then acquired the
+	// lock and immediately failed the truncate with "context deadline exceeded" —
+	// reported against whichever test was unlucky, in a package that had done
+	// nothing wrong, and only when the suite was busy enough to queue. The lock
+	// wait has its own generous budget precisely so that queueing is not an error;
+	// reusing the caller's deadline for the work afterwards threw that away.
+	workCtx, cancelWork := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancelWork()
+
 	migrateOnce.Do(func() {
-		migrateErr = db.Migrate(ctx, pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		migrateErr = db.Migrate(workCtx, pool, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	})
 	if migrateErr != nil {
 		t.Fatalf("migrating the test database: %v", migrateErr)
 	}
 
-	truncate(ctx, t, pool)
+	truncate(workCtx, t, pool)
 	return pool
 }
 

@@ -95,7 +95,18 @@ func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpcli
 	fn(ctx, riverClient)
 }
 
-// waitFor polls until cond is true or the deadline passes.
+// waitForBudget is how long a postcondition has to become true.
+//
+// Generous on purpose. The longest of these waits on ten articles' images being
+// transcoded, which is real AVIF encoding at `TOME_IMAGE_CONCURRENCY` of one —
+// it takes around 17 seconds alone on a developer's machine, and the whole suite
+// runs package binaries concurrently under `-race` while sharing one database
+// behind an advisory lock. A budget under a small multiple of the isolated time
+// is not a correctness check, it is a machine-speed check, and it fails on
+// whichever run happened to be busiest.
+const waitForBudget = 2 * time.Minute
+
+// waitFor polls until cond is true or the budget passes.
 //
 // The pipeline is asynchronous by design — fetch and extract are separate jobs
 // precisely so neither blocks the other — so the test waits on the outcome
@@ -103,7 +114,7 @@ func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpcli
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(waitForBudget)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
