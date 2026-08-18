@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "url": "https://example.com/posts/first",
+    "title": "The first record, which is complete",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>A body long enough to be worth storing.</p>"
+  },
+  {
+    "id": 2,
+    "url": "https://example.com/posts/second",
+    "title": "The second record, cut off mid-

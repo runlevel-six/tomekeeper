@@ -170,6 +170,115 @@ A subscription that fails to store is reported on stderr and the import
 continues; the command exits `1` if any failed, so one bad entry costs neither
 the other four hundred nor your awareness of it.
 
+### `tome import`
+
+Imports a reading library exported from another system. Articles, not
+subscriptions — `tome import-opml` is the one for feeds.
+
+```
+tome import [--dry-run] [--format NAME] <export-file>
+```
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Print the report and write nothing. |
+| `--format` | The source format. Detected from the file when omitted. |
+
+| Format | Source |
+|---|---|
+| `wallabag` | A Wallabag JSON export: **Settings → Export → JSON**. |
+
+Formats are detected by the field names in the file's first record, not by its
+name, because a browser saves an export as whatever it likes. A file nothing
+recognizes is refused with the list of formats this build reads.
+
+**The command always reads the file twice.** The first pass reports what
+importing would do; only then does the second write. That costs one extra read of
+a file measured in megabytes and buys two things: a truncated or corrupt export
+fails before anything has been written, and nobody is surprised by what an import
+did to a library they have been keeping for ten years. `--dry-run` simply stops
+after the first pass.
+
+Unlike `tome import-opml --dry-run`, this needs a database even for a dry run.
+The three numbers that make the report worth reading — new, already imported,
+already in the archive by another route — are all questions about the archive, and
+a report that could not answer them would be a list of what is in a file you
+already have.
+
+```console
+$ tome import --dry-run wallabag.json
+wallabag.json: 385 records from wallabag (dry run, nothing written)
+
+  new               385
+  already imported  0
+  duplicate URLs    0
+  without a body    43   42 of these hold wallabag's own fetch-failure message; this archive will fetch them itself
+  with images       201  2135 images to fetch and archive, 21 not usable addresses
+  tags              0
+  highlights        0
+
+Images are fetched by the worker after the import, not now. Until it gets to
+them, articles show their text with the images missing.
+
+$ tome import wallabag.json
+...
+imported 385 articles: 341 bodies stored, 44 queued for fetching
+```
+
+#### What an import does to the archive
+
+| | |
+|---|---|
+| **Deduplicates by canonical URL** | A record whose URL a feed already carried becomes another reference to that article, not a second copy. One article, one body, one set of images. |
+| **Stores the body immutably** | `content_origin` is `import:wallabag` and `immutable` is true, because an imported body may be the only surviving copy of a page that is gone. `tome reextract` skips it and no later fetch replaces it. |
+| **Marks it saved** | Imports appear under **Saved**, dated when the source saved them rather than when you imported them, so a ten-year library keeps its own chronology. Saved also means [retention](retention.md) never releases it. |
+| **Queues a fetch anyway** | Every imported article is left at `fetch_status = 'pending'`, so this archive fetches the page for itself: the ones the source never held get a body, and the rest get their original page stored beside the imported one. |
+| **Adds, never removes** | Tags and highlights are additive, and read and starred are OR-ed with what you already have. See below. |
+
+#### Re-running an import
+
+Safe, and the intended way to recover from one that stopped halfway. Records are
+keyed on `(user, source, source id)` in `import_records`, and the record is
+written *last* — so a run interrupted between an article and its record leaves
+the record absent, and the next run finishes the job.
+
+A second run does not:
+
+- create duplicate articles, bodies, tags, or highlights;
+- remove a tag you added here;
+- take back read or starred state. Both are OR-ed with what is already stored, so
+  an article imported unread and read here stays read.
+
+A source record with no stable id still imports; it simply cannot be recognized
+by id later, and deduplicates by URL instead.
+
+#### What the report is telling you
+
+**"without a body"** is usually larger than expected, and the annotation is the
+important part. Wallabag writes a sentence of its own prose into the content field
+when its fetch failed — *"wallabag can't retrieve contents for this article"* — and
+an importer that took the field at face value would store that sentence as the
+article's permanent, immutable body. Those records are imported with no body and
+queued for this archive to fetch instead, which is an improvement on the library
+rather than a loss from it. In the maintainer's own export it is 42 of 385.
+
+**Images are the slow part, and they happen afterwards.** Wallabag only downloads
+images when `download_images` is enabled on that instance; with it off — the
+common case — every `<img>` in an imported body still points at the site it came
+from. The import stores those references and the worker localizes them on its own
+schedule, so an article can arrive readable but pictureless for a while. If the
+exporting instance *did* download its images, they live inside that installation
+and cannot be reached from here at all; the report says so, with a count.
+
+**Unreadable records are counted and listed with their position**, and the rest
+still import. A record in a 6MB single-line export cannot be found any other way.
+A failure that ends the *file* — a truncation, or a syntax error that leaves the
+parser's position unknown — stops the import instead, because everything past it
+is unknown rather than merely broken.
+
+The user is selected by `TOME_USERNAME` and must already exist; run `tome migrate`
+first. The command exits `1` if any record failed to import.
+
 ### `tome reextract`
 
 Queues re-extraction of stored pages at the current extractor version. Makes no
@@ -530,7 +639,7 @@ among the things that may have just failed to validate.
 
 | Subcommand | Status |
 |---|---|
-| `tome import` / `tome export` | Planned. The intermediate representation they will use already exists — see [Export format](export-format.md). |
+| `tome export` | Planned. The format it will emit already exists and is what `tome import` reads — see [Export format](export-format.md). The archive is not locked in meanwhile: every article is already written to disk as a standalone page with its `meta.json` beside it. |
 | `tome reindex` — rebuild the search index | Not currently needed: the search index is a generated column PostgreSQL maintains itself. |
 
 Invoking either exits `2` as an unknown subcommand. They are named here so that

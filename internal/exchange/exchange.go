@@ -95,6 +95,17 @@ type Article struct {
 	// WordCount is derived and stored anyway, because a reader browsing the
 	// archive without this service running has no other way to get it.
 	WordCount int `json:"word_count,omitempty"`
+
+	// PlaceholderBody records that the source had a body field and it held the
+	// source's own failure message rather than an article, so ContentHTML was left
+	// empty deliberately rather than for want of anything to put there.
+	//
+	// Never serialized: it is a fact about a file being read, not about the
+	// article, and writing it into meta.json would be recording somebody else's
+	// software failing in this archive's permanent record. It exists so an import
+	// report can tell "your reader never had this page" apart from "your reader had
+	// no body field at all", which are different pieces of news.
+	PlaceholderBody bool `json:"-"`
 }
 
 // Highlight is a passage a reader marked, with an optional note.

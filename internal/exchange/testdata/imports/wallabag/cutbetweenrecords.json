@@ -1,0 +1,21 @@
+[
+  {
+    "id": 1,
+    "url": "https://example.com/posts/complete",
+    "title": "A whole record",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>Nothing wrong with this one.</p>"
+  },
+  {
+    "id": 2,
+    "url": "https://example.com/posts/also-complete",
+    "title": "Another whole record",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>Nor this one. The file simply stops here, with no closing bracket.</p>"
+  }

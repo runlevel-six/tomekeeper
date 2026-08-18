@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "url": "https://example.com/posts/fine",
+    "title": "Readable",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>This record is fine.</p>"
+  },
+  {
+    "id": 2,
+    "url": "https://example.com/posts/bad-field",
+    "title": "Unreadable field",
+    "is_archived": "sometimes",
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>The archived flag is not a flag.</p>"
+  },
+  {
+    "id": 3,
+    "url": "https://example.com/posts/also-fine",
+    "title": "Readable again",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>This record is also fine.</p>"
+  }
+]

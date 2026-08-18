@@ -27,6 +27,11 @@ What is there:
   for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
+- **Bringing a library with you.** `tome import` reads a Wallabag JSON export:
+  deduplicated against what your feeds already carried, dated when you saved each
+  page rather than when you imported it, safe to re-run, and it reports what it
+  will do before it does it — including the pages your old reader never actually
+  held, which it queues to fetch for itself.
 - **Installable.** Add it to a home screen and it draws its own navigation — a tab
   bar, a way back from every article, previous/next, a reload control, and the
   unread count in the title and on the app icon — because a standalone window
@@ -45,9 +50,9 @@ What is there:
   PostgreSQL, a migration Job and a nightly backup CronJob, plus Prometheus metrics
   on their own port — deliberately not the port the reader is on.
 
-**Not built yet:** mobile-client sync (the Fever API), importing from other
-read-later tools, exporting, headless rendering for JavaScript-only sites, and
-more than one user account. Those are planned, roughly in that order.
+**Not built yet:** mobile-client sync (the Fever API), importing from read-later
+tools other than Wallabag, exporting, headless rendering for JavaScript-only
+sites, and more than one user account. Those are planned, roughly in that order.
 
 ## Quick start
 

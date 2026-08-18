@@ -38,6 +38,9 @@ type Expired struct {
 //
 // The three conditions, in the order they matter:
 //
+//   - The body can be got back. An immutable body — an import, which may be the
+//     only copy of a page that is gone — is never released, because for that one
+//     the whole premise of retention does not hold.
 //   - Somebody has finished with it. Without this an article nobody ever opened
 //     would expire the moment it aged past the cutoff, which is the opposite of
 //     what a reading backlog is for.
@@ -61,6 +64,16 @@ func (s *Store) ExpirableArticles(ctx context.Context, cutoff time.Time, limit i
 		FROM articles a
 		WHERE a.content_expired_at IS NULL
 		  AND EXISTS (SELECT 1 FROM article_content c WHERE c.article_id = a.id)
+
+		  -- Never an immutable body. An imported one may be the only surviving copy
+		  -- of a page that no longer exists, so releasing it is not "it can be
+		  -- fetched again" — it is losing the article. In practice such a body also
+		  -- carries saved_at and is blocked by the claim check below, but that is a
+		  -- different column set by a different code path: this is the guard that
+		  -- states the rule where the rule lives.
+		  AND NOT EXISTS (
+		    SELECT 1 FROM article_content c
+		    WHERE c.article_id = a.id AND c.immutable)
 
 		  -- Somebody finished with it, long enough ago.
 		  AND EXISTS (

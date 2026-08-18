@@ -48,6 +48,10 @@ const (
 	NameReadability = "readability"
 	NameFeedBody    = "feed_body"
 	NamePageImages  = "page_images"
+
+	// NameImported marks a body that arrived already extracted from another
+	// system. No rung produced it, and none should ever replace it.
+	NameImported = "imported"
 )
 
 // Acceptance thresholds.
@@ -203,6 +207,41 @@ func (e *Extractor) Extract(in Input) (Result, error) {
 	}
 
 	return Result{}, ErrNoContent
+}
+
+// CleanImported prepares a body that arrived already extracted from another
+// system.
+//
+// Not a rung and not part of the ladder: there is nothing to choose between and
+// no threshold to clear. What it does is run an imported body through exactly the
+// steps every rung's output goes through — resolve references against the
+// article's own URL, then sanitize — because the archive renders stored bodies as
+// trusted HTML on the reader's own origin, and it does so for a decade.
+//
+// Going through the same policy rather than a second one built for importers is
+// the whole point. A body from someone else's reader is markup an arbitrary
+// website authored, no different in kind from a page this archive fetched itself,
+// and it is *older*: a decade-old save can carry script that predates every
+// mitigation. An importer with its own allowlist would be a second policy to keep
+// in step with this one, and the failure mode of them drifting apart is a stored
+// script running with the session cookie of whoever opens the article.
+//
+// Rejects nothing. Length thresholds exist to choose between rungs, and a caller
+// with one already-extracted body has no choice to make — deciding whether the
+// body is worth having at all is the importer's job, and it is one an importer can
+// do better, because it knows what its source puts in the field when a fetch
+// failed.
+func (e *Extractor) CleanImported(body, articleURL string) Result {
+	// A URL that will not parse costs the body its relative references, not the
+	// import. An imported article's URL comes from another system's database and
+	// may be a decade of drift away from anything parseable.
+	pageURL, err := url.Parse(articleURL)
+	if err != nil {
+		pageURL = nil
+	}
+
+	text := strings.TrimSpace(textOf([]byte(body)))
+	return e.finish(NameImported, body, text, pageURL, metadata{})
 }
 
 // feedAdvantage is how many times richer the feed body must be before it is

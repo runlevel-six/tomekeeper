@@ -1,0 +1,101 @@
+[
+  {
+    "id": 101,
+    "url": "https://example.com/posts/the-ordinary-case",
+    "given_url": "https://example.com/posts/the-ordinary-case?utm_source=newsletter",
+    "title": "The ordinary case",
+    "domain_name": "example.com",
+    "language": "en_US",
+    "published_by": ["A Writer", "Another Writer"],
+    "created_at": "2019-03-04T09:15:00+00:00",
+    "updated_at": "2019-03-04T09:15:00+00:00",
+    "published_at": "2019-03-01T00:00:00+00:00",
+    "is_archived": 1,
+    "is_starred": 1,
+    "mimetype": "text/html; charset=UTF-8",
+    "http_status": "200",
+    "reading_time": 4,
+    "tags": ["reading", "archives"],
+    "annotations": [
+      {
+        "quote": "The best time to keep a copy is when you still have one.",
+        "text": "This is the whole argument.",
+        "created_at": "2019-03-05T11:00:00+00:00"
+      }
+    ],
+    "content": "<h2>The ordinary case</h2><p>The best time to keep a copy is when you still have one.</p><p><img src=\"https://cdn.example.com/figure-1.png\" alt=\"a figure\"></p><p><img src=\"/relative/figure-2.png\" alt=\"a relative figure\"></p>"
+  },
+  {
+    "id": 102,
+    "url": "https://example.org/notes/wallabag-never-got-this",
+    "given_url": "https://example.org/notes/wallabag-never-got-this",
+    "title": "A page the source never held",
+    "domain_name": "example.org",
+    "created_at": "2020-07-19T22:04:11+00:00",
+    "updated_at": "2020-07-19T22:04:11+00:00",
+    "is_archived": 0,
+    "is_starred": 0,
+    "http_status": "500",
+    "tags": [],
+    "annotations": [],
+    "content": "wallabag can't retrieve contents for this article. Please <a href=\"https://doc.wallabag.org/en/user/errors_during_fetching.html#how-can-i-help-to-fix-that\">troubleshoot this issue</a>.\n"
+  },
+  {
+    "id": 103,
+    "url": "https://example.net/essays/booleans-as-booleans",
+    "title": "Flags written as flags",
+    "domain_name": "example.net",
+    "language": "en",
+    "created_at": "2016-11-02 08:30:00",
+    "updated_at": "2016-11-02 08:30:00",
+    "is_archived": true,
+    "is_starred": false,
+    "tags": [
+      { "label": "Tags As Objects", "slug": "tags-as-objects" },
+      { "slug": "label-missing" }
+    ],
+    "annotations": [],
+    "content": "<p>An older export writes its flags as JSON booleans and its dates without a zone. Both are read.</p>"
+  },
+  {
+    "id": 104,
+    "url": "https://example.com/posts/markup-from-2011",
+    "title": "Markup from a less careful era",
+    "domain_name": "example.com",
+    "created_at": "2011-05-30T14:00:00+00:00",
+    "updated_at": "2011-05-30T14:00:00+00:00",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [],
+    "content": "<p>Before the interesting part.</p><script>alert('this must not survive')</script><p onclick=\"steal()\">After it.</p><iframe src=\"https://tracker.example/frame\"></iframe><img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"><img src=\"denied:data:image/gif;base64,R0lGODlh\"><a href=\"javascript:void(0)\">not a link</a>"
+  },
+  {
+    "id": 105,
+    "url": "https://example.com/posts/nothing-here",
+    "title": "No body field at all",
+    "domain_name": "example.com",
+    "created_at": "2021-01-01T00:00:00+00:00",
+    "updated_at": "2021-01-01T00:00:00+00:00",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": []
+  },
+  {
+    "id": 106,
+    "url": "https://example.coop/library/localized-images",
+    "title": "Images the source downloaded for itself",
+    "domain_name": "example.coop",
+    "created_at": "2022-02-02T12:00:00+00:00",
+    "updated_at": "2022-02-02T12:00:00+00:00",
+    "published_at": "not a date at all",
+    "is_archived": 0,
+    "is_starred": 0,
+    "tags": [],
+    "annotations": [
+      { "quote": "   ", "text": "a highlight with no quoted text" }
+    ],
+    "content": "<p>This instance had image downloading switched on.</p><img src=\"/assets/images/9/8/98f8b7f0/a-picture.jpg\"><img src=\"https://example.coop/assets/images/its-own-layout.png\">"
+  }
+]

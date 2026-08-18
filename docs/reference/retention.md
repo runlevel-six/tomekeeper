@@ -28,6 +28,7 @@ has finished with it. Any one of these keeps it, for everyone:
 | **Starred** | Never expires. |
 | **Kept** | Never expires. The ⬡ control on any article, for pages worth holding onto without having liked them. |
 | **Saved by hand** | Never expires. Anything added from **Saved**. |
+| **Imported** | Never expires, twice over. An imported body is `immutable` — it may be the only surviving copy of a page that is gone, so "it can be fetched again" does not hold and releasing it would lose the article, not reclaim space. Imports are also marked saved, so the rule above applies as well. |
 | **Read recently** | Not until it is older than the configured window. |
 | **Read, but with no recorded time** | Never expires. Possible for anything marked read before read timestamps existed; the ambiguity resolves toward keeping. |
 

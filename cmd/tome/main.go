@@ -50,6 +50,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "import-opml":
 		return importOPML(args[1:], stdout, stderr)
 
+	case "import":
+		return importArticles(args[1:], stdout, stderr)
+
 	case "reextract":
 		return reextract(args[1:], stdout, stderr)
 
@@ -85,6 +88,7 @@ Subcommands:
   worker        Run the background job pool (polling, fetching, extraction)
   migrate       Apply database migrations and seed the user
   import-opml   Add subscriptions from an OPML file
+  import        Import a reading library exported from another system
   reextract     Re-extract stored pages at the current extractor version
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds

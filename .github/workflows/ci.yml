@@ -86,7 +86,7 @@ jobs:
       # actually run.
       - name: Verify integration tests ran
         run: |
-          output=$(go test -v -tags nodynamic -run 'Integration|Database|Deduplication|Scoping|Migrations' ./internal/... 2>&1)
+          output=$(go test -v -tags nodynamic -run 'Integration|Database|Deduplication|Scoping|Migrations|Import' ./internal/... 2>&1)
           if echo "$output" | grep -q "SKIP"; then
             echo "::error::Integration tests skipped despite TOME_TEST_DATABASE_URL being set"
             echo "$output" | grep "SKIP"
