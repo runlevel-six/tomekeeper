@@ -96,12 +96,37 @@ docker run -d --name "$DB_CONTAINER" --network "$NETWORK" \
   -e POSTGRES_USER=tome -e POSTGRES_PASSWORD=smoke -e POSTGRES_DB=tome \
   postgres:16-alpine >/dev/null
 
+# Over TCP, and with a real query, deliberately.
+#
+# The official image initializes by starting a *temporary* server, creating the
+# database, and shutting it down again before starting the real one. That
+# temporary server listens on the unix socket only, so `pg_isready` with no host
+# reports ready in the middle of initialization — this loop broke out of the wait
+# during that window and then failed its own verification 200ms later, as the
+# temporary server was being shut down. It looked like a 30-second timeout that
+# had actually taken two seconds.
+#
+# Checking over TCP avoids it because listen_addresses is empty until the real
+# server starts. The SELECT is belt and braces: it is the thing the next step
+# actually needs to work, so it is the honest thing to wait for.
+# PGPASSWORD comes from the container's own environment rather than being
+# repeated here: over TCP the image authenticates with scram, so without it psql
+# would sit waiting for a password nobody is going to type.
+db_ready() {
+  docker exec "$DB_CONTAINER" pg_isready -h 127.0.0.1 -U tome -d tome >/dev/null 2>&1 &&
+    docker exec "$DB_CONTAINER" sh -c \
+      'PGPASSWORD="$POSTGRES_PASSWORD" psql -w -h 127.0.0.1 -U tome -d tome -tAc "SELECT 1"' \
+      >/dev/null 2>&1
+}
+
+ready=false
 for _ in $(seq 1 60); do
-  docker exec "$DB_CONTAINER" pg_isready -U tome >/dev/null 2>&1 && break
+  if db_ready; then ready=true; break; fi
   sleep 0.5
 done
-docker exec "$DB_CONTAINER" pg_isready -U tome >/dev/null 2>&1 \
-  || fail "PostgreSQL did not become ready within 30s"
+if [ "$ready" != true ]; then
+  fail "PostgreSQL did not become ready within 30s"
+fi
 pass "PostgreSQL is ready"
 
 echo "==> Applying migrations from the image"
