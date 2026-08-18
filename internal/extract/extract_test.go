@@ -100,8 +100,10 @@ func TestCorpus(t *testing.T) {
 				}
 			}
 			if n := duplicateImages(got.HTML); n > 0 {
-				t.Errorf("the stored body repeats %d image(s); a selector matching an element "+
-					"inside another match will do this:\n%s", n, truncate(got.HTML))
+				t.Errorf("the stored body repeats %d picture(s). Two things cause this: a "+
+					"selector matching an element inside another match, and a site shipping "+
+					"several sizes of one image for different screens with the extras hidden "+
+					"by CSS that this archive does not keep:\n%s", n, truncate(got.HTML))
 			}
 			// The assertions that catch the regression worth catching: an
 			// extractor that starts including navigation or cookie banners
@@ -399,6 +401,11 @@ func loadCase(t *testing.T, dir, name, wantPath string) corpusCase {
 				inHeaders = false
 				continue
 			}
+			// Comments are allowed among the headers as well as below them, so a
+			// header can carry the reason it exists next to the header itself.
+			if strings.HasPrefix(strings.TrimSpace(line), "#") {
+				continue
+			}
 			key, value, ok := strings.Cut(line, ":")
 			if !ok {
 				t.Fatalf("%s: header line without a colon: %q", name, line)
@@ -494,15 +501,36 @@ func countImages(body string) int {
 	return len(imgSrcPattern.FindAllString(body, -1))
 }
 
-// duplicateImages counts sources that appear more than once.
+// sizeVariant matches the width×height suffix a CDN appends to a resized image:
+// `photo-640x427.jpg` is `photo.jpg` at another size.
+var sizeVariant = regexp.MustCompile(`-\d+x\d+(\.\w+)$`)
+
+// samePicture reduces an image URL to the picture it shows.
+//
+// Two sizes of one photograph are one picture to a reader, and telling them apart
+// is what let a real duplicate reach production: a site shipped a 640px and a
+// 1152px copy of its lead image in the same link, hiding one with a CSS class that
+// means nothing once the stylesheet is gone. Both rendered, the exact sources
+// differed, and a check comparing them byte for byte said everything was fine.
+func samePicture(src string) string {
+	if i := strings.Index(src, "?"); i >= 0 {
+		src = src[:i]
+	}
+	if i := strings.LastIndex(src, "/"); i >= 0 {
+		src = src[i+1:]
+	}
+	return sizeVariant.ReplaceAllString(src, "$1")
+}
+
+// duplicateImages counts pictures that appear more than once.
 //
 // A body is a document, and a document does not show the same picture twice in a
-// row. This catches the one way a domain rule can produce that: a selector list
-// naming an element and something inside it.
+// row. Two ways that happens: a selector list naming an element and something
+// inside it, and a site serving several sizes of one image for different screens.
 func duplicateImages(body string) int {
 	seen := map[string]int{}
 	for _, m := range imgSrcPattern.FindAllStringSubmatch(body, -1) {
-		seen[m[1]]++
+		seen[samePicture(m[1])]++
 	}
 	repeats := 0
 	for _, n := range seen {
@@ -608,5 +636,58 @@ func TestTextHasBoundariesAtBlockEdges(t *testing.T) {
 	inline := extract.TextForTest([]byte(`<p>a <em>single</em> word: un<strong>break</strong>able</p>`))
 	if collapsed := strings.Join(strings.Fields(inline), " "); collapsed != "a single word: unbreakable" {
 		t.Errorf("inline markup introduced a boundary: %q", collapsed)
+	}
+}
+
+// The duplicate-image check counts pictures rather than URLs.
+//
+// It did not, and that is how a repeated lead image reached a reader: a site shipped
+// two sizes of one photograph in the same link and hid one with a CSS class, which
+// means nothing in an archive that keeps the HTML and drops the stylesheet. The
+// sources differed by a size suffix, so a byte-for-byte comparison reported no
+// duplicate at all.
+func TestDuplicateImagesCountsPicturesNotURLs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{
+			name: "the same URL twice",
+			body: `<img src="https://cdn.example.com/photo.jpg"><img src="https://cdn.example.com/photo.jpg">`,
+			want: 1,
+		},
+		{
+			name: "two sizes of one picture",
+			body: `<img src="https://cdn.example.com/photo-640x427.jpg">` +
+				`<img src="https://cdn.example.com/photo-1152x648.jpg">`,
+			want: 1,
+		},
+		{
+			name: "a size variant and the original",
+			body: `<img src="https://cdn.example.com/photo-640x427.jpg">` +
+				`<img src="https://cdn.example.com/photo.jpg">`,
+			want: 1,
+		},
+		{
+			name: "genuinely different pictures",
+			body: `<img src="https://cdn.example.com/first-640x427.jpg">` +
+				`<img src="https://cdn.example.com/second-640x427.jpg">`,
+			want: 0,
+		},
+		{
+			// Two files whose names differ by more than a size are two pictures,
+			// even when one looks like a variant of the other.
+			name: "similar names, different pictures",
+			body: `<img src="https://cdn.example.com/ship40_1.jpg">` +
+				`<img src="https://cdn.example.com/ship40_2.jpg">`,
+			want: 0,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := duplicateImages(tc.body); got != tc.want {
+				t.Errorf("duplicateImages() = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }

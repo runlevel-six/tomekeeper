@@ -78,6 +78,32 @@ tome domain-rule set \
 Check the article's own length before and after. If the text roughly triples, the
 page was one of these.
 
+### The same picture twice
+
+If an image appears twice in the stored article, the usual cause is not your
+selector: it is the site shipping several sizes of one picture and hiding the extras
+with CSS.
+
+```html
+<a href="/photo-full.jpg">
+  <img src="/photo-640x427.jpg"  class="… hidden">    <!-- hidden on the site -->
+  <img src="/photo-1152x648.jpg" class="intro-image"> <!-- the one you see -->
+</a>
+```
+
+This archive stores the markup and renders it in its own styles, deliberately — so a
+class that only meant something alongside the site's stylesheet means nothing here,
+and both copies appear. Strip the hidden one:
+
+```sh
+tome domain-rule set --selector '…' --strip 'img.hidden' example.com
+```
+
+`img.hidden` rather than `.hidden`, deliberately: a site that hides a *text* block at
+some screen width is hiding it from that layout, not from the article, and stripping
+all hidden elements would delete content that a "read more" control was going to
+reveal.
+
 To check what the extractors currently do with the page you already have
 stored, without going back to the network:
 

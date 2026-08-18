@@ -4,6 +4,9 @@ selector: div.relative > div.ars-lightbox, .post-content
 strip: .ad-wrapper
 strip: .ars-interlude-container
 strip: .author-mini-bio
+# An image the site hides with CSS is not a second picture, and the stylesheet that
+# hid it is not part of what is stored.
+strip: img.hidden
 min_chars: 2000
 min_images: 2
 

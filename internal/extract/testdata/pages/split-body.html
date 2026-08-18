@@ -20,7 +20,13 @@
       <div class="ars-lightbox">
         <div class="ars-lightbox-item">
           <a class="cursor-zoom-in" href="/images/lead-full.jpg">
-            <img src="/images/lead.jpg" alt="A painted backdrop lit from behind">
+            <!-- Two sizes of one photograph in one link, with the small one hidden
+                 by a CSS class. That class means nothing here: this archive keeps
+                 the markup and drops the stylesheet, so both would render and a
+                 reader would see the picture twice. A real site does exactly this,
+                 and it reached a reader before a fixture had the shape. -->
+            <img src="/images/lead-640x427.jpg" class="object-cover hidden" alt="A painted backdrop lit from behind">
+            <img src="/images/lead-1152x648.jpg" class="intro-image" alt="A painted backdrop lit from behind">
           </a>
         </div>
       </div>
