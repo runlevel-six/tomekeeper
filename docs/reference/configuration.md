@@ -21,6 +21,7 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_SESSION_KEY` | string | — | no | Secret that session cookies are sealed with. Unset means one is generated at startup, so sessions work but do not survive a restart — `tome serve` warns when this happens. Generate with `openssl rand -base64 32`. Any length is accepted and stretched with HKDF, which does not manufacture entropy: a short secret is a weak secret. |
 | `TOME_COOKIE_SECURE` | bool | `true` | no | Sets the `Secure` attribute on the session cookie, so it is only sent over HTTPS. Leave it on. Turn it off **only** when serving plain HTTP on a trusted network — browsers treat `localhost` as secure already, so a local first run does not need it. |
 | `TOME_METRICS_ADDR` | host:port | `:9090` | no | Listen address for the Prometheus endpoint, served by both `serve` and `worker`. Empty disables it. **Deliberately not on the main HTTP port:** an Ingress routing `/` would publish it, and the outbound metrics name every host the archive fetches from. See [Metrics](metrics.md). |
+| `TOME_RETAIN_AFTER_READ` | duration | unset | no | How long a **read** article keeps its stored body and images before they are released. Unset or `0` keeps everything forever, which is the default. Starred, kept, and manually saved articles are never expired at any setting. Values under `1h` are rejected, because a typo here deletes an archive. See [Retention](retention.md). |
 | `TOME_CONTACT_URL` | URL | — | no | Published in the outbound `User-Agent` as `tomekeeper/<version> (+<url>)`. Must be absolute if set. Strongly encouraged before pointing this at anyone else's server: it is how an operator finds out who to ask when they want it to stop. |
 | `TOME_POLL_MIN_INTERVAL` | duration | `15m` | no | Floor for the adaptive poll interval. No feed is polled more often. |
 | `TOME_POLL_MAX_INTERVAL` | duration | `24h` | no | Ceiling for the adaptive poll interval. Must be at least the floor. |
@@ -100,6 +101,7 @@ as a whole. Only some affect a given command's behavior:
 | `TOME_PASSWORD` | — | — | sets the password | — |
 | `TOME_SESSION_KEY`, `TOME_COOKIE_SECURE` | yes | — | — | — |
 | `TOME_METRICS_ADDR` | yes | yes | — | — |
+| `TOME_RETAIN_AFTER_READ` | — | yes | — | — |
 | `TOME_CONTACT_URL` | — | yes | — | — |
 | `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — |
 | `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — |

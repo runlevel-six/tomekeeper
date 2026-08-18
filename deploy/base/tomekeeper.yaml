@@ -172,10 +172,19 @@ spec:
               cpu: 100m
               memory: 256Mi
             limits:
-              # Extraction parses whole documents in memory and image
-              # re-encoding is the other spike. 1Gi is comfortable; below about
-              # 512Mi a pathological page can take the worker out.
-              memory: 1Gi
+              # Raised from 1Gi after the first real archive OOM-killed the
+              # worker during asset localization.
+              #
+              # The per-image ceiling is MaxPixels (30 megapixels, ~120MB
+              # decoded), but TOME_WORKER_CONCURRENCY defaults to 5, so the peak
+              # is five simultaneous decodes plus their resize destinations plus
+              # whatever the Go heap has not returned yet. 1Gi left no margin for
+              # that, and the symptom — a worker that restarts every few minutes
+              # mid-import — reads like a crash rather than a limit.
+              #
+              # If you lower the worker concurrency you can lower this with it;
+              # the two numbers move together.
+              memory: 2Gi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

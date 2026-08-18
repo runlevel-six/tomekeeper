@@ -31,7 +31,7 @@ type ui struct {
 // pageNames are the templates that extend base.html. Listed explicitly rather
 // than globbed, so a stray file cannot become a page and a missing one fails at
 // startup instead of on the request that needed it.
-var pageNames = []string{"login", "stream", "article", "search", "feeds", "attention"}
+var pageNames = []string{"login", "stream", "article", "search", "feeds", "attention", "saved"}
 
 // newUI parses every page template.
 //
@@ -168,6 +168,23 @@ var templateFuncs = template.FuncMap{
 	"plural": plural,
 	"add":    func(a, b int) int { return a + b },
 
+	// A heading for an article that may not have one yet.
+	//
+	// A page saved by hand has no title until the worker fetches and extracts it,
+	// and "(untitled)" for every row in a fresh reading list is useless — the
+	// reader cannot tell which link is which. The URL is what they pasted, so it
+	// is what they recognize; the scheme is dropped because it never distinguishes
+	// two rows.
+	"displayTitle": func(title, canonical string) string {
+		if title != "" {
+			return title
+		}
+		if trimmed := strings.TrimPrefix(strings.TrimPrefix(canonical, "https://"), "http://"); trimmed != "" {
+			return trimmed
+		}
+		return "(untitled)"
+	},
+
 	// Turns a search snippet into HTML safely.
 	//
 	// The snippet is article *text* with sentinels around the matched terms, so it
@@ -184,14 +201,14 @@ var templateFuncs = template.FuncMap{
 
 	// Projects the article page onto the shared "actions" partial.
 	"articleActions": func(p articlePage) actions {
-		return actions{ArticleID: p.Article.ID, Read: p.Read, Starred: p.Starred}
+		return actions{ArticleID: p.Article.ID, Read: p.Read, Starred: p.Starred, Kept: p.Kept}
 	},
 
 	// Projects a stream row onto the shape the shared "actions" partial takes, so
 	// the control inside a row and the one returned by htmx are the same template
 	// with the same data rather than two that have to be kept in step.
 	"actionsOf": func(it store.StreamItem) actions {
-		return actions{ArticleID: it.ArticleID, Read: it.Read, Starred: it.Starred}
+		return actions{ArticleID: it.ArticleID, Read: it.Read, Starred: it.Starred, Kept: it.Kept}
 	},
 }
 

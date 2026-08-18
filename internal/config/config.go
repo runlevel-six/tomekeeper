@@ -89,6 +89,15 @@ type Config struct {
 	PollMinInterval time.Duration
 	PollMaxInterval time.Duration
 
+	// RetainAfterRead is how long a read article keeps its stored body and
+	// images before they are released. Zero, the default, means forever.
+	//
+	// Off unless asked for, because the difference between the two settings is
+	// the difference between an archive and a cache, and nobody should discover
+	// which one they are running by noticing something is missing. Starred, kept,
+	// and manually saved articles are never expired at any setting.
+	RetainAfterRead time.Duration
+
 	// FeedFailureThreshold is the number of consecutive failures after which a
 	// feed is disabled and surfaced for attention.
 	FeedFailureThreshold int
@@ -295,6 +304,30 @@ func Load(lookup LookupFunc) (*Config, error) {
 			Prefix, cfg.PollMinInterval, Prefix, cfg.PollMaxInterval))
 	}
 
+	// Deliberately not the `duration` helper above, which rejects zero: zero is
+	// the meaningful default here, and it means "keep everything".
+	if raw := get("RETAIN_AFTER_READ", ""); raw != "" {
+		d, err := time.ParseDuration(raw)
+		switch {
+		case err != nil:
+			problems = append(problems, fmt.Errorf(
+				"%sRETAIN_AFTER_READ %q is not a duration, for example 168h for a week: %w",
+				Prefix, raw, err))
+		case d < 0:
+			problems = append(problems, fmt.Errorf(
+				"%sRETAIN_AFTER_READ must not be negative, got %s", Prefix, d))
+		case d > 0 && d < time.Hour:
+			// A typo here deletes an archive. "7" parses as 7 nanoseconds in some
+			// hands and 7 of whatever-you-meant in others; either way, anything
+			// under an hour is a mistake rather than a policy.
+			problems = append(problems, fmt.Errorf(
+				"%sRETAIN_AFTER_READ is %s, which would expire articles almost immediately; "+
+					"use at least 1h, or leave it unset to keep everything", Prefix, d))
+		default:
+			cfg.RetainAfterRead = d
+		}
+	}
+
 	cfg.CookieSecure = boolean("COOKIE_SECURE", true)
 	cfg.FeedFailureThreshold = positiveInt("FEED_FAILURE_THRESHOLD", defaultFeedFailureThreshold)
 	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
@@ -386,6 +419,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Float64("fetch_rps", c.FetchRPS),
 		slog.Int("fetch_concurrency", c.FetchConcurrency),
 		slog.String("blob_root", c.BlobRoot),
+		slog.Duration("retain_after_read", c.RetainAfterRead),
 	)
 }
 

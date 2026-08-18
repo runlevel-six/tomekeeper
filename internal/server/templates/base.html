@@ -18,6 +18,7 @@
       <a href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>Unread{{if .Unread}} <span class="badge count">{{.Unread}}</span>{{end}}</a>
       <a href="/all"{{if eq .Nav "all"}} aria-current="page"{{end}}>Everything</a>
       <a href="/starred"{{if eq .Nav "starred"}} aria-current="page"{{end}}>Starred</a>
+      <a href="/saved"{{if eq .Nav "saved"}} aria-current="page"{{end}}>Saved</a>
       <a href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
       <a href="/feeds"{{if eq .Nav "feeds"}} aria-current="page"{{end}}>Feeds</a>
       <a href="/attention"{{if eq .Nav "attention"}} aria-current="page"{{end}}>Attention</a>

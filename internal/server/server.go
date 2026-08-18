@@ -132,6 +132,8 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", s.requireUser(s.handleStream))
 	mux.HandleFunc("GET /all", s.requireUser(s.handleAll))
 	mux.HandleFunc("GET /starred", s.requireUser(s.handleStarred))
+	mux.HandleFunc("GET /saved", s.requireUser(s.handleSaved))
+	mux.HandleFunc("POST /save", s.requireUser(s.handleSave))
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by
@@ -144,6 +146,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /articles/{id}/read", s.requireUser(s.handleToggleRead))
 	mux.HandleFunc("POST /articles/{id}/star", s.requireUser(s.handleToggleStar))
+	mux.HandleFunc("POST /articles/{id}/keep", s.requireUser(s.handleToggleKept))
 
 	// Archived images. Behind requireUser like everything else: the archive is
 	// one person's reading history, and its illustrations are part of it.

@@ -64,6 +64,13 @@ type StreamQuery struct {
 	// StarredOnly restricts the stream to starred articles.
 	StarredOnly bool
 
+	// SavedOnly restricts the stream to articles the reader saved by hand.
+	//
+	// Distinct from StarredOnly: starring is a reaction to something a feed
+	// brought, saving is a decision to archive something nothing brought. Both
+	// set saved_at, so this is a superset of the starred list.
+	SavedOnly bool
+
 	// FeedID, when non-zero, restricts the stream to one of the user's feeds.
 	FeedID FeedID
 
@@ -103,9 +110,16 @@ type StreamItem struct {
 	Excerpt      string
 	Read         bool
 	Starred      bool
+	Kept         bool
 	AssetsStatus string
 	FeedTitle    string
 	HasBody      bool
+
+	// FetchStatus distinguishes "nothing was extracted from this page" from
+	// "nothing has looked at this page yet". A page saved by hand is the second
+	// for as long as it takes the worker to reach it, and reporting that as a
+	// failure would make the save feature look broken at the moment it worked.
+	FetchStatus string
 }
 
 // Stream returns a page of the user's articles, newest first.
@@ -136,6 +150,9 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 	if q.StarredOnly {
 		where = append(where, `COALESCE(st.starred, false)`)
 	}
+	if q.SavedOnly {
+		where = append(where, `st.saved_at IS NOT NULL`)
+	}
 	if q.FeedID != 0 {
 		add(`EXISTS (SELECT 1 FROM feed_items fi2 JOIN feeds f2 ON f2.id = fi2.feed_id
 		             WHERE fi2.article_id = a.id AND f2.id = ? AND f2.user_id = $1)`, q.FeedID)
@@ -157,10 +174,10 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.author, ''), COALESCE(a.site_name, ''),
 		       a.url_canonical, a.published_at, a.first_seen_at,
 		       COALESCE(a.published_at, a.first_seen_at) AS sort_at,
-		       a.assets_status,
+		       a.assets_status, a.fetch_status,
 		       COALESCE(c.word_count, 0), left(COALESCE(c.content_text, ''), ` +
 		strconv.Itoa(ExcerptLength) + `), (c.id IS NOT NULL),
-		       COALESCE(st.read, false), COALESCE(st.starred, false),
+		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
 		       COALESCE(feed.title, '')
 		FROM articles a
 		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
@@ -191,8 +208,8 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		if err := rows.Scan(
 			&it.ArticleID, &it.Title, &it.Author, &it.SiteName,
 			&it.URLCanonical, &it.PublishedAt, &it.FirstSeenAt, &it.SortAt,
-			&it.AssetsStatus, &it.WordCount, &it.Excerpt, &it.HasBody,
-			&it.Read, &it.Starred, &it.FeedTitle,
+			&it.AssetsStatus, &it.FetchStatus, &it.WordCount, &it.Excerpt, &it.HasBody,
+			&it.Read, &it.Starred, &it.Kept, &it.FeedTitle,
 		); err != nil {
 			return nil, fmt.Errorf("scanning a stream row: %w", err)
 		}
@@ -208,7 +225,12 @@ type ArticleView struct {
 	HasBody bool
 	Read    bool
 	Starred bool
+	Kept    bool
 	Tags    []Tag
+
+	// ExpiredAt is set when this article's body and images were released by the
+	// retention policy. The article is still here; what it said is not.
+	ExpiredAt *time.Time
 }
 
 // ArticleForUser returns an article the user is allowed to read.
@@ -236,7 +258,8 @@ func (s *Store) ArticleForUser(ctx context.Context, userID UserID, id ArticleID)
 		       COALESCE(c.content_origin, ''), COALESCE(c.immutable, false),
 		       COALESCE(c.content_html, ''), COALESCE(c.content_text, ''),
 		       COALESCE(c.word_count, 0),
-		       COALESCE(st.read, false), COALESCE(st.starred, false)
+		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
+		       a.content_expired_at
 		FROM articles a
 		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
@@ -253,7 +276,7 @@ func (s *Store) ArticleForUser(ctx context.Context, userID UserID, id ArticleID)
 		&content.ExtractorName, &content.ExtractorVersion,
 		&content.ContentOrigin, &content.Immutable,
 		&content.HTML, &content.Text, &content.WordCount,
-		&v.Read, &v.Starred,
+		&v.Read, &v.Starred, &v.Kept, &v.ExpiredAt,
 	)
 	if err != nil {
 		return ArticleView{}, fmt.Errorf("reading article %d for user %d: %w", id, userID, err)

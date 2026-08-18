@@ -1,0 +1,47 @@
+{{define "title"}}Saved — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="stream" id="stream" data-keyboard="stream">
+  <h1>{{.Heading}}</h1>
+
+  <form class="save-box" method="post" action="/save">
+    <label for="url">Save a page</label>
+    <input type="url" id="url" name="url" placeholder="https://example.com/an-article"
+           autocomplete="off" spellcheck="false" required>
+    <button type="submit">Save</button>
+  </form>
+
+  {{with .Saved}}
+    {{if .Problem}}
+      <p class="import-result bad">
+        {{if .URL}}<code>{{.URL}}</code> — {{end}}{{.Problem}}
+      </p>
+    {{else}}
+      <div class="import-result ok">
+        <p>
+          {{if .Already}}Already saved.{{else}}Saved.{{end}}
+          {{if .HasBody}}
+            <a href="/articles/{{.ArticleID}}">Read it now</a> — the archive already had this page.
+          {{else}}
+            Queued for fetching; the body appears here once the worker has it.
+          {{end}}
+        </p>
+        <p class="note"><code>{{.URL}}</code></p>
+      </div>
+    {{end}}
+  {{end}}
+
+  {{if .Items}}
+    {{template "stream-rows" .}}
+  {{else}}
+    <p class="placeholder">{{.Empty}}</p>
+  {{end}}
+</div>
+
+{{if .Items}}
+  <p class="hint">
+    <kbd>j</kbd> / <kbd>k</kbd> move, <kbd>o</kbd> open, <kbd>s</kbd> star,
+    <kbd>m</kbd> mark read
+  </p>
+{{end}}
+{{end}}

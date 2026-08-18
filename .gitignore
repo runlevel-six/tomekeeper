@@ -44,3 +44,4 @@
 # someone's network, and this repository is public. deploy/overlays/example is
 # the committed one; the working copy stays here.
 /deploy/overlays/local/
+/Screenshot*.png

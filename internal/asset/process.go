@@ -108,6 +108,18 @@ func Process(raw []byte, sourceMediaType string) (Processed, error) {
 		}, nil
 	}
 
+	// The header first, so an image too large to decode is rejected before it is
+	// decoded. DecodeConfig reads only enough to learn the dimensions, so the
+	// allocation this prevents is never made. Doing this check after image.Decode
+	// would be reading the bomb to find out whether it was one.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return Processed{}, &ErrSkipped{Reason: SkipUndecodable}
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > MaxPixels {
+		return Processed{}, &ErrSkipped{Reason: SkipTooManyPixels}
+	}
+
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return Processed{}, &ErrSkipped{Reason: SkipUndecodable}

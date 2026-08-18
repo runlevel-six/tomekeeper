@@ -182,11 +182,17 @@ type articlePage struct {
 	HasBody bool
 	Read    bool
 	Starred bool
+	Kept    bool
 	Tags    []store.Tag
 	Words   int
 
 	// Notice explains why there is no body, when there is not one.
 	Notice string
+
+	// ImageNotice explains why a body's images are not showing, when they are
+	// not. Separate from Notice because it accompanies a body rather than
+	// replacing one.
+	ImageNotice string
 }
 
 func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
@@ -209,9 +215,12 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 		HasBody:  view.HasBody,
 		Read:     view.Read,
 		Starred:  view.Starred,
+		Kept:     view.Kept,
 		Tags:     view.Tags,
 		Words:    view.Content.WordCount,
 	}
+
+	page.ImageNotice = imageNoticeFor(view)
 
 	if view.HasBody {
 		// Marked safe because extraction sanitized it with bluemonday before
@@ -220,7 +229,7 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 		// they are why this is not reckless.
 		page.Body = template.HTML(view.Content.HTML) //nolint:gosec // sanitized at extraction; see the extraction ladder
 	} else {
-		page.Notice = noticeFor(view.Article)
+		page.Notice = noticeFor(view)
 	}
 
 	// Opening an article marks it read. That is what a reader expects, and the
@@ -241,9 +250,39 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "article", page)
 }
 
+// imageNoticeFor explains images that are not going to appear.
+//
+// Worth saying out loud because the failure is invisible and looks like a bug.
+// Between extraction and localization an article's markup still points at the
+// origin site, and the archive's content security policy blocks every remote
+// image — so the reader gets correctly-sized blank rectangles with no
+// explanation, for as long as the asset queue takes to reach this article. On a
+// fresh import that is hours.
+func imageNoticeFor(v store.ArticleView) string {
+	if !v.HasBody {
+		return ""
+	}
+	switch v.Article.AssetsStatus {
+	case "pending":
+		return "The images in this article have not been archived yet, so they are not " +
+			"shown. The worker is working through them; reload in a while."
+	case "partial":
+		return "Some images in this article could not be archived, and are not shown. " +
+			"Images are never loaded from the original site."
+	default:
+		return ""
+	}
+}
+
 // noticeFor explains an article with no body, in the reader's terms.
-func noticeFor(a store.Article) string {
+func noticeFor(v store.ArticleView) string {
+	a := v.Article
 	switch {
+	case v.ExpiredAt != nil:
+		return "The stored copy of this page was released on " +
+			v.ExpiredAt.Format("2 January 2006") + " under the retention policy, because it had " +
+			"been read and was not starred, kept, or saved. The original is still linked above, " +
+			"and re-fetching it will archive it again."
 	case a.FetchStatus == store.FetchSkipped:
 		return "This page was not fetched because the site's robots.txt asked us not to. " +
 			"The original is still linked above."
@@ -373,6 +412,7 @@ type actions struct {
 	ArticleID store.ArticleID
 	Read      bool
 	Starred   bool
+	Kept      bool
 }
 
 func (s *Server) handleToggleRead(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +421,10 @@ func (s *Server) handleToggleRead(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleToggleStar(w http.ResponseWriter, r *http.Request) {
 	s.toggle(w, r, s.store.SetStarred)
+}
+
+func (s *Server) handleToggleKept(w http.ResponseWriter, r *http.Request) {
+	s.toggle(w, r, s.store.SetKept)
 }
 
 // stateSetter is the shape SetRead and SetStarred share, so toggle can be written

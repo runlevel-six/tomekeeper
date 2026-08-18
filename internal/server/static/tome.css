@@ -225,6 +225,7 @@ kbd {
 .reader .body p { margin: 0 0 1.15em; }
 .reader .body h2, .reader .body h3 { margin: 1.8em 0 0.5em; }
 .reader .body img { max-width: 100%; height: auto; display: block; margin: 1.5em auto; }
+.reader .image-notice { font-size: 0.85rem; color: var(--ink-soft); border-left: 3px solid var(--rule); padding-left: 0.8rem; }
 .reader .body figure { margin: 1.5em 0; }
 .reader .body figcaption { font-size: 0.85rem; color: var(--ink-soft); text-align: center; }
 .reader .body blockquote {
@@ -317,6 +318,37 @@ kbd {
 
 .tag-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tag-list .count { font-size: 0.75rem; }
+
+/* The save box: paste a URL, keep the page. Sits above the reading list it adds
+   to, so the thing you just did and the thing it did it to are adjacent. */
+.save-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+.save-box label {
+  flex-basis: 100%;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.save-box input[type="url"] {
+  flex: 1 1 18rem;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.save-box input[type="url"]:focus-visible { border-color: var(--accent); outline: none; }
 
 /* Import: the result of an upload, and the form that starts one. Same left-rule
    treatment as .warn-banner, so the three states read as one family. */

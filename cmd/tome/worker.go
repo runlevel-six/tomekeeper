@@ -57,14 +57,15 @@ func worker(args []string, stderr io.Writer) int {
 	}
 
 	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
-		Pool:        pool,
-		Store:       s,
-		Poller:      newPoller(cfg, s, client, log),
-		Client:      client,
-		Blobs:       blobs,
-		Extractor:   extract.New(),
-		Log:         log,
-		Concurrency: cfg.WorkerConcurrency,
+		Pool:            pool,
+		Store:           s,
+		Poller:          newPoller(cfg, s, client, log),
+		Client:          client,
+		Blobs:           blobs,
+		Extractor:       extract.New(),
+		Log:             log,
+		Concurrency:     cfg.WorkerConcurrency,
+		RetainAfterRead: cfg.RetainAfterRead,
 	})
 	if err != nil {
 		log.Error("cannot start the worker", "error", err)

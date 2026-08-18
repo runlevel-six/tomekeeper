@@ -1,6 +1,8 @@
 package store_test
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"testing"
 
 	"github.com/runlevel-six/tomekeeper/internal/dbtest"
@@ -19,6 +21,11 @@ import (
 // article, plus one article both feeds carry.
 type twoReaders struct {
 	store *store.Store
+
+	// pool is here for the tests that have to set up a state the public API
+	// deliberately does not expose — a read_at in the past, an asset shared by
+	// two articles. Reaching past the store is the point in those cases.
+	pool *pgxpool.Pool
 
 	alice, bob         store.UserID
 	aliceFeed, bobFeed store.FeedID
@@ -73,7 +80,7 @@ func setupTwoReaders(t *testing.T) twoReaders {
 		return id
 	}
 
-	tr := twoReaders{store: s, alice: alice, bob: bob, aliceFeed: aliceFeed, bobFeed: bobFeed}
+	tr := twoReaders{store: s, pool: pool, alice: alice, bob: bob, aliceFeed: aliceFeed, bobFeed: bobFeed}
 	tr.aliceOnly = article("https://example.com/alice-only", "Alice Only")
 	tr.bobOnly = article("https://example.com/bob-only", "Bob Only")
 	tr.shared = article("https://example.com/shared", "Shared Story")

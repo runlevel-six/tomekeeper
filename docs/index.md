@@ -46,6 +46,8 @@ Dry, complete descriptions of the machinery. Look things up here.
 - [Configuration](reference/configuration.md) — every environment variable
 - [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint
 - [Metrics](reference/metrics.md) — every metric, and why they are on their own port
+- [Retention](reference/retention.md) — what expires, what never does, and why
+  it asks about every reader
 - [Data model](reference/data-model.md) — the schema and its constraints
 - [Storage layout](reference/storage-layout.md) — the on-disk archive
 - [Export format](reference/export-format.md) — what `meta.json` contains
@@ -80,6 +82,8 @@ rejected. Design rationale lives here and nowhere else.
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
 | Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
 | Run this on a cluster | [Install on Kubernetes](how-to/install-kubernetes.md) |
+| Stop the archive growing forever | [Retention](reference/retention.md) |
+| Save a page nothing subscribed to | Paste it into **Saved** in the web interface |
 | Scrape it with Prometheus | [Metrics](reference/metrics.md) |
 | Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
 | Read an article without this service running | [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md) |

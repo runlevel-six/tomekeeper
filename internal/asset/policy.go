@@ -37,6 +37,25 @@ const (
 	// MaxSourceBytes caps any single image download. Larger than this is a
 	// malfunction, not a photograph.
 	MaxSourceBytes = 20 << 20 // 20MB
+
+	// MaxPixels caps an image's decoded size, which MaxSourceBytes does not.
+	//
+	// Compressed bytes say almost nothing about decoded cost: a 2MB PNG of a
+	// flat gradient can be 20,000×20,000, and decoding it allocates width ×
+	// height × 4 bytes — 1.6GB — before any of the policy above gets a chance to
+	// reject it for being too large. This is the classic decompression bomb, and
+	// it does not need to be malicious to happen; a poster-resolution scan on a
+	// gallery site is enough.
+	//
+	// This limit is enforced from the *header* via image.DecodeConfig, before
+	// the pixels are read, which is the only point where it can prevent the
+	// allocation rather than merely regret it.
+	//
+	// 30 megapixels is roughly a 6000×5000 image: far beyond the 1600px longest
+	// edge that survives downscaling, comfortably above anything a camera on a
+	// news site produces, and about 120MB decoded — survivable several at a time
+	// on a worker sized for the job.
+	MaxPixels = 30_000_000
 )
 
 // SkipReason explains why an image was not localized. It is recorded so that
@@ -45,13 +64,14 @@ type SkipReason string
 
 // Skip reasons.
 const (
-	SkipNone         SkipReason = ""
-	SkipDataURI      SkipReason = "data URI, already self-contained"
-	SkipNotHTTP      SkipReason = "not an http or https URL"
-	SkipTooSmall     SkipReason = "smaller than 10KB and under 100x100"
-	SkipOversizeSVG  SkipReason = "SVG larger than 1MB"
-	SkipOversizeFile SkipReason = "larger than 20MB"
-	SkipUndecodable  SkipReason = "not a decodable image"
+	SkipNone          SkipReason = ""
+	SkipDataURI       SkipReason = "data URI, already self-contained"
+	SkipNotHTTP       SkipReason = "not an http or https URL"
+	SkipTooSmall      SkipReason = "smaller than 10KB and under 100x100"
+	SkipOversizeSVG   SkipReason = "SVG larger than 1MB"
+	SkipOversizeFile  SkipReason = "larger than 20MB"
+	SkipUndecodable   SkipReason = "not a decodable image"
+	SkipTooManyPixels SkipReason = "more than 30 megapixels"
 )
 
 // ShouldFetch reports whether a reference is worth a network request at all.

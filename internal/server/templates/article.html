@@ -28,6 +28,10 @@
     {{template "actions" (articleActions .)}}
   </header>
 
+  {{with .ImageNotice}}
+    <p class="notice image-notice">{{.}}</p>
+  {{end}}
+
   {{if .HasBody}}
     <div class="body">{{.Body}}</div>
   {{else}}

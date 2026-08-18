@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,10 @@ type Deps struct {
 	Log       *slog.Logger
 
 	Concurrency int
+
+	// RetainAfterRead mirrors the config setting. Zero means keep everything,
+	// which is the default.
+	RetainAfterRead time.Duration
 }
 
 // NewWorkerClient builds a River client that works jobs.
@@ -80,6 +85,13 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	assetScheduler := &ScheduleAssetsWorker{store: d.Store, log: d.Log}
 	river.AddWorker(workers, assetScheduler)
 
+	// Registered whether or not retention is on, so that turning the setting on
+	// is a configuration change rather than a different build. With RetainAfterRead
+	// at zero the worker returns immediately.
+	river.AddWorker(workers, &ExpireContentWorker{
+		store: d.Store, blobs: d.Blobs, retain: d.RetainAfterRead, log: d.Log,
+	})
+
 	client, err := river.NewClient(riverpgxv5.New(d.Pool), &river.Config{
 		Logger:  d.Log,
 		Workers: workers,
@@ -104,6 +116,7 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 				func() (river.JobArgs, *river.InsertOpts) { return ScheduleAssetsArgs{}, nil },
 				&river.PeriodicJobOpts{RunOnStart: true},
 			),
+			expiryPeriodicJob(),
 		},
 	})
 	if err != nil {

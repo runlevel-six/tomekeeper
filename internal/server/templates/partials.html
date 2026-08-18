@@ -16,6 +16,17 @@
     </button>
   </form>
 
+  <form method="post" action="/articles/{{.ArticleID}}/keep"
+        hx-post="/articles/{{.ArticleID}}/keep"
+        hx-target="#actions-{{.ArticleID}}" hx-swap="outerHTML">
+    <input type="hidden" name="on" value="{{if .Kept}}false{{else}}true{{end}}">
+    <button type="submit" class="toggle{{if .Kept}} on{{end}}"
+            aria-pressed="{{.Kept}}"
+            title="{{if .Kept}}Stop keeping this{{else}}Keep this permanently{{end}}">
+      {{if .Kept}}⬢{{else}}⬡{{end}}<span class="label">{{if .Kept}}Kept{{else}}Keep{{end}}</span>
+    </button>
+  </form>
+
   <form method="post" action="/articles/{{.ArticleID}}/read"
         hx-post="/articles/{{.ArticleID}}/read"
         hx-target="#actions-{{.ArticleID}}" hx-swap="outerHTML">
@@ -40,7 +51,7 @@
   {{if and $.NextPage (eq (len $.Items) (add $i 1))}}
     hx-get="{{$.NextPage}}" hx-trigger="revealed" hx-swap="afterend"
   {{end}}>
-  <h2><a href="/articles/{{$item.ArticleID}}">{{if $item.Title}}{{$item.Title}}{{else}}(untitled){{end}}</a></h2>
+  <h2><a href="/articles/{{$item.ArticleID}}">{{displayTitle $item.Title $item.URLCanonical}}</a></h2>
 
   <p class="meta">
     {{if $item.FeedTitle}}<span class="source">{{$item.FeedTitle}}</span>{{else if $item.SiteName}}<span class="source">{{$item.SiteName}}</span>{{end}}
@@ -48,7 +59,13 @@
     <time datetime="{{$item.SortAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since $item.SortAt}}</time>
     {{with readingTime $item.WordCount}}<span class="length">{{.}}</span>{{end}}
     {{if eq $item.AssetsStatus "partial"}}<span class="warn" title="Some images could not be archived">images incomplete</span>{{end}}
-    {{if not $item.HasBody}}<span class="warn" title="Nothing was extracted from this page">no body</span>{{end}}
+    {{if not $item.HasBody}}
+      {{if eq $item.FetchStatus "pending"}}
+        <span class="pending" title="The worker has not reached this page yet">not fetched yet</span>
+      {{else}}
+        <span class="warn" title="Nothing was extracted from this page">no body</span>
+      {{end}}
+    {{end}}
   </p>
 
   {{if $item.Excerpt}}<p class="excerpt">{{$item.Excerpt}}</p>{{end}}

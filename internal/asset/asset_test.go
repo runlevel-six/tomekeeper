@@ -2,6 +2,9 @@ package asset_test
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -363,5 +366,64 @@ func TestOversizeSourceIsSkipped(t *testing.T) {
 	reason, skipped := asset.IsSkipped(err)
 	if !skipped || reason != asset.SkipOversizeFile {
 		t.Errorf("Process() = %v (%q), want a %q skip", err, reason, asset.SkipOversizeFile)
+	}
+}
+
+// bombPNG builds a PNG whose header claims an enormous image but which carries
+// no pixel data at all.
+//
+// This is exactly the shape that matters: the file is a few hundred bytes, so
+// every byte-size limit in the policy passes it, and decoding it would try to
+// allocate width × height × 4. If the guard is working, the header alone is
+// enough to reject it and the test costs nothing to run.
+func bombPNG(t *testing.T, width, height uint32) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	buf.Write([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})
+
+	var ihdr bytes.Buffer
+	ihdr.WriteString("IHDR")
+	_ = binary.Write(&ihdr, binary.BigEndian, width)
+	_ = binary.Write(&ihdr, binary.BigEndian, height)
+	ihdr.Write([]byte{8, 6, 0, 0, 0}) // 8-bit RGBA, no interlace
+
+	_ = binary.Write(&buf, binary.BigEndian, uint32(ihdr.Len()-4))
+	buf.Write(ihdr.Bytes())
+	_ = binary.Write(&buf, binary.BigEndian, crc32.ChecksumIEEE(ihdr.Bytes()))
+
+	return buf.Bytes()
+}
+
+func TestProcessRejectsDecompressionBombsFromTheHeader(t *testing.T) {
+	// 20,000 x 20,000 = 400 megapixels, which would be 1.6GB decoded as RGBA.
+	// The file itself is well under a kilobyte.
+	raw := bombPNG(t, 20000, 20000)
+
+	if len(raw) > asset.MinBytes {
+		t.Fatalf("the fixture is %d bytes, which is not small enough to prove the point", len(raw))
+	}
+
+	_, err := asset.Process(raw, "image/png")
+
+	var skipped *asset.ErrSkipped
+	if !errors.As(err, &skipped) {
+		t.Fatalf("Process() = %v, want a skip; a bomb this size must not reach image.Decode", err)
+	}
+	if skipped.Reason != asset.SkipTooManyPixels {
+		t.Errorf("skip reason = %q, want %q", skipped.Reason, asset.SkipTooManyPixels)
+	}
+}
+
+// Just under the limit must still be processed, so the guard cannot be satisfied
+// by rejecting everything.
+func TestProcessAcceptsLargeButReasonableImages(t *testing.T) {
+	raw := bombPNG(t, 5000, 5000) // 25 megapixels, under the 30M limit
+
+	_, err := asset.Process(raw, "image/png")
+
+	var skipped *asset.ErrSkipped
+	if errors.As(err, &skipped) && skipped.Reason == asset.SkipTooManyPixels {
+		t.Errorf("a 25 megapixel image was rejected as too many pixels, so the limit is too tight")
 	}
 }
