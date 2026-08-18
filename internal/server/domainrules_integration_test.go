@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -348,9 +349,15 @@ func TestReprocessQueuesExtractionJobs(t *testing.T) {
 	// The job queue is not truncated between packages the way the application
 	// tables are, so leftovers from another suite would be counted here. Cleared
 	// inside this test's own database lock.
-	if _, err := tr.pool.Exec(ctx, `DELETE FROM river_job WHERE kind = 'extract_article'`); err != nil {
-		t.Fatalf("clearing the job queue: %v", err)
-	}
+	clearExtractionJobs(t, tr)
+
+	// And cleared again afterwards, which matters more than it looks. This test
+	// enqueues real jobs and there is no worker here to run them, so anything left
+	// behind is picked up by the next package that starts one — naming an article id
+	// that has since been truncated and reused, because dbtest restarts identity and
+	// deliberately leaves River's tables alone. The symptom is a two-minute timeout
+	// in an unrelated package's pipeline test, which is a long way from the cause.
+	t.Cleanup(func() { clearExtractionJobs(t, tr) })
 
 	rec := rd.do(http.MethodPost, "/domain-rules/reprocess", url.Values{"domain": {"example.com"}})
 	if rec.Code != http.StatusOK {
@@ -369,6 +376,18 @@ func TestReprocessQueuesExtractionJobs(t *testing.T) {
 	}
 	if queued[int64(imported.ArticleID)] {
 		t.Error("an imported, immutable body was queued for re-extraction")
+	}
+}
+
+// clearExtractionJobs empties the extraction queue, which no test here has a worker
+// to drain.
+func clearExtractionJobs(t *testing.T, tr twoReadersHTTP) {
+	t.Helper()
+
+	// Not t.Context(): cleanup runs after it is canceled.
+	if _, err := tr.pool.Exec(context.Background(),
+		`DELETE FROM river_job WHERE kind = 'extract_article'`); err != nil {
+		t.Fatalf("clearing the job queue: %v", err)
 	}
 }
 

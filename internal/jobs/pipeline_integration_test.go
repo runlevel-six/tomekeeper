@@ -68,6 +68,23 @@ func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpcli
 	pool := s.Pool()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
+	// Start from an empty queue, and the reason is worth stating because the failure
+	// it prevents points nowhere near here.
+	//
+	// dbtest truncates the application tables with RESTART IDENTITY, so every test
+	// begins with article id 1 again — and it deliberately leaves River's tables
+	// alone, because they are not part of this schema. A job queued by another
+	// package therefore names an article id that now belongs to a different article
+	// entirely, and this is the only package that starts a worker to run one.
+	//
+	// Observed as exactly that: a stray extract_article job ran against a
+	// freshly-created article that had not been fetched yet, found no stored page,
+	// marked it failed, and left the pipeline test waiting out its whole budget for
+	// an image that was never going to be localized.
+	if _, err := pool.Exec(t.Context(), `DELETE FROM river_job`); err != nil {
+		t.Fatalf("clearing the job queue before starting a worker: %v", err)
+	}
+
 	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
 		Pool:        pool,
 		Store:       s,
@@ -111,7 +128,12 @@ const waitForBudget = 2 * time.Minute
 // The pipeline is asynchronous by design — fetch and extract are separate jobs
 // precisely so neither blocks the other — so the test waits on the outcome
 // rather than on a call returning.
-func waitFor(t *testing.T, what string, cond func() bool) {
+//
+// A timeout prints whatever detail is passed. Two minutes of waiting followed by
+// "timed out waiting for every article to be localized and written" is a true
+// statement that starts an investigation rather than ending one; the same failure
+// with the articles' statuses beside it is a diagnosis.
+func waitFor(t *testing.T, what string, cond func() bool, detail ...func() string) {
 	t.Helper()
 
 	deadline := time.Now().Add(waitForBudget)
@@ -120,6 +142,10 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	for _, d := range detail {
+		t.Log(d())
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }
@@ -508,6 +534,24 @@ func TestSameImageAcrossArticlesStoresOnce(t *testing.T) {
 				return false
 			}
 			return true
+		}, func() string {
+			// What the articles actually did, which is the difference between a
+			// timeout that names a cause and one that starts an investigation.
+			var b strings.Builder
+			b.WriteString("article states at the deadline:\n")
+			for _, id := range ids {
+				a, err := s.GetArticle(ctx, id)
+				if err != nil {
+					fmt.Fprintf(&b, "  %d: unreadable: %v\n", id, err)
+					continue
+				}
+				fmt.Fprintf(&b, "  %d: fetch=%s assets=%s %s\n",
+					id, a.FetchStatus, a.AssetsStatus, a.FetchError)
+			}
+			if st, err := s.System().Stats(ctx); err == nil {
+				fmt.Fprintf(&b, "  asset links: %d, want %d", st.AssetLinks, articles)
+			}
+			return b.String()
 		})
 	})
 
@@ -629,4 +673,61 @@ func articleWithImage(base string) string {
 // srvURLFor reconstructs the test server's base URL from a request.
 func srvURLFor(r *http.Request) string {
 	return "http://" + r.Host
+}
+
+// An article with nothing to extract from says so, rather than blaming the
+// extractors.
+//
+// The two failures need different responses — one wants a domain rule, the other
+// wants to know why the fetch never landed — and they used to be the same sentence
+// in the attention queue. That cost a long investigation once: a stray job extracted
+// an article that had never been fetched, and "extraction produced no content" sent
+// the search towards the extraction ladder.
+func TestExtractionWithNothingToExtractFromSaysSo(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	// An article with no stored page and no feed body: exactly what a job running
+	// against an article that was never fetched sees.
+	id, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: "https://example.com/never-fetched",
+		URLOriginal:  "https://example.com/never-fetched",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
+		if err := jobs.EnqueueExtraction(ctx, riverClient, id, true); err != nil {
+			t.Fatalf("EnqueueExtraction() = %v", err)
+		}
+
+		waitFor(t, "the article to be recorded as failed", func() bool {
+			a, err := s.GetArticle(ctx, id)
+			return err == nil && a.FetchStatus == store.FetchFailed
+		}, func() string {
+			a, _ := s.GetArticle(ctx, id)
+			return fmt.Sprintf("article %d: fetch=%s error=%q", id, a.FetchStatus, a.FetchError)
+		})
+
+		a, err := s.GetArticle(ctx, id)
+		if err != nil {
+			t.Fatalf("GetArticle() = %v", err)
+		}
+		if !strings.Contains(a.FetchError, "no stored page") {
+			t.Errorf("fetch_error = %q, want it to say there was no stored page to extract from",
+				a.FetchError)
+		}
+		// And specifically not the sentence that means the opposite thing.
+		if strings.Contains(a.FetchError, "extraction produced no content") {
+			t.Errorf("fetch_error blames the extractors for an article that was never fetched: %q",
+				a.FetchError)
+		}
+	})
 }

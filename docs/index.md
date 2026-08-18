@@ -43,6 +43,8 @@ doing.
   files are two backups, and one of them is not automatic
 - [Export everything](how-to/export-everything.md) — a portable copy of the whole
   archive, and what a round trip preserves
+- [Install with Docker Compose](how-to/install-docker-compose.md) — one machine,
+  no Kubernetes, nothing to build
 - [Import from Wallabag](how-to/import-from-wallabag.md) — a read-later library,
   and what the report is telling you before you commit to it
 - [Install on Kubernetes](how-to/install-kubernetes.md) — the manifests in

@@ -1,0 +1,123 @@
+# Tomekeeper with Docker Compose.
+#
+# Four services: PostgreSQL, a one-shot migration, the reader, and the worker.
+# They are separate because the worker is bursty and memory-hungry — image
+# encoding is measured in hundreds of megabytes per picture — and a backlog of it
+# must not be able to make the reader unresponsive.
+#
+#   cp .env.example .env    # then edit it: the password and the contact URL
+#   docker compose up -d
+#   open http://localhost:8080
+#
+# See docs/how-to/install-docker-compose.md.
+
+name: tomekeeper
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tome
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: tome
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # Everything else waits on this. Without it the migration races the database's
+      # own first-boot initialization and fails in a way that reads like a bug in
+      # this software rather than a startup order.
+      test: ["CMD-SHELL", "pg_isready -U tome -d tome"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Schema and user, as an explicit step rather than something the server does on
+  # start. A rolling restart at 3am is not when a schema change should first meet
+  # the data, and two servers starting at once must not race each other.
+  #
+  # Runs to completion and stops. Re-running it is correct and idempotent, which is
+  # why `docker compose up` after an upgrade does the right thing.
+  migrate:
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:latest}
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TOME_DATABASE_URL: postgres://tome:${POSTGRES_PASSWORD}@db:5432/tome?sslmode=disable
+      TOME_USERNAME: ${TOME_USERNAME:-tome}
+      # Read here and nowhere else: the cleartext exists in this one short-lived
+      # container and never in a long-running process.
+      TOME_PASSWORD: ${TOME_PASSWORD:?set TOME_PASSWORD in .env}
+      TOME_LOG_FORMAT: ${TOME_LOG_FORMAT:-text}
+
+  server:
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:latest}
+    command: ["serve"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${TOME_PORT:-8080}:8080"
+    environment:
+      TOME_DATABASE_URL: postgres://tome:${POSTGRES_PASSWORD}@db:5432/tome?sslmode=disable
+      TOME_USERNAME: ${TOME_USERNAME:-tome}
+      TOME_BLOB_ROOT: /var/lib/tomekeeper
+      TOME_SESSION_KEY: ${TOME_SESSION_KEY:-}
+      # Cookies are marked Secure by default, which means a browser will not send
+      # them over plain HTTP — you would appear to sign in and then silently not be.
+      # Left false here because compose usually means http://localhost; set it back
+      # to true the moment this is behind TLS.
+      TOME_COOKIE_SECURE: ${TOME_COOKIE_SECURE:-false}
+      TOME_CONTACT_URL: ${TOME_CONTACT_URL:-}
+      TOME_LOG_FORMAT: ${TOME_LOG_FORMAT:-text}
+    volumes:
+      # Read-only: the reader serves archived images and writes none of them.
+      - blobs:/var/lib/tomekeeper:ro
+    healthcheck:
+      # The image is distroless — no shell, no curl — so the binary answers this
+      # itself. Liveness rather than readiness: /healthz does not consult the
+      # database, because a Postgres restart should not get this container killed
+      # and restarted alongside it.
+      test: ["CMD", "/usr/local/bin/tome", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:latest}
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      TOME_DATABASE_URL: postgres://tome:${POSTGRES_PASSWORD}@db:5432/tome?sslmode=disable
+      TOME_USERNAME: ${TOME_USERNAME:-tome}
+      TOME_BLOB_ROOT: /var/lib/tomekeeper
+      # Say who you are. It goes in the User-Agent of every outbound request, so
+      # that an operator who wants this to stop can find out who to ask.
+      TOME_CONTACT_URL: ${TOME_CONTACT_URL:-}
+      TOME_LOG_FORMAT: ${TOME_LOG_FORMAT:-text}
+      # Image encoding costs roughly 600MB per picture and the figure barely moves
+      # with image size — it is the call that is expensive, not the pixels. One at a
+      # time is the setting that keeps this container inside its limit; raising it
+      # without raising the limit below is how the worker gets killed mid-article.
+      TOME_IMAGE_CONCURRENCY: ${TOME_IMAGE_CONCURRENCY:-1}
+      GOMEMLIMIT: ${GOMEMLIMIT:-1750MiB}
+    volumes:
+      - blobs:/var/lib/tomekeeper
+    # Matched to GOMEMLIMIT above, with headroom. Change the two together or not at
+    # all.
+    mem_limit: ${TOME_WORKER_MEMORY:-2g}
+
+volumes:
+  db-data:
+  # Every fetched page and every archived image. This is the larger half of the
+  # archive and the half no backup job here covers — see
+  # docs/how-to/back-up-and-restore.md.
+  blobs:

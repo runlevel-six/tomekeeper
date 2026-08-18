@@ -112,8 +112,23 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 			// pages that 200 while saying nothing. Recording it puts the
 			// article in the queue that domain rules exist to drain, instead
 			// of retrying a page that will not change.
-			log.Info("no extractor produced acceptable content")
-			return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, "extraction produced no content")
+			//
+			// The two cases are worth telling apart in the queue, because they
+			// call for different things. "The extractors found nothing" is a
+			// page that needs a domain rule; "there was nothing to extract from"
+			// is an article whose fetch never landed, which is a different
+			// problem entirely and reads as the first one if both say the same
+			// sentence. Discovered the hard way: a stray job extracted an
+			// article that had not been fetched, and the resulting "extraction
+			// produced no content" sent the investigation a long way from the
+			// cause.
+			reason := "extraction produced no content"
+			if len(raw) == 0 && feedBody == "" {
+				reason = "no stored page and no feed body to extract from"
+			}
+
+			log.Info("no extractor produced acceptable content", "reason", reason)
+			return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, reason)
 		}
 		return err
 	}

@@ -69,6 +69,20 @@ than one user account. Those are planned, roughly in that order.
 
 ## Quick start
 
+With Docker Compose, which builds nothing:
+
+```sh
+curl -O https://raw.githubusercontent.com/runlevel-six/tomekeeper/master/compose.yaml
+curl -O https://raw.githubusercontent.com/runlevel-six/tomekeeper/master/.env.example
+cp .env.example .env && $EDITOR .env     # a password, and a contact URL
+docker compose up -d
+```
+
+Then sign in at <http://localhost:8080>. See
+[Install with Docker Compose](docs/how-to/install-docker-compose.md) for the parts
+worth knowing — the worker's memory limit, the cookie setting, and where the archive
+actually lives.
+
 Locally, from source:
 
 ```sh
