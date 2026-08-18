@@ -31,7 +31,7 @@ type ui struct {
 // pageNames are the templates that extend base.html. Listed explicitly rather
 // than globbed, so a stray file cannot become a page and a missing one fails at
 // startup instead of on the request that needed it.
-var pageNames = []string{"login", "stream", "article", "search", "feeds", "attention", "saved", "settings"}
+var pageNames = []string{"login", "stream", "article", "search", "feeds", "categories", "attention", "saved", "settings"}
 
 // newUI parses every page template.
 //
@@ -195,7 +195,14 @@ var templateFuncs = template.FuncMap{
 		}
 	},
 
-	"plural": plural,
+	// Pluralization takes any integer, not an int.
+	//
+	// Counts arrive from the store as int64 and from `len` as int, and a template
+	// will not convert between them — the failure is an execution error at render
+	// time, which means a page that renders in every test that happens to use the
+	// other width. One tolerant helper is cheaper than remembering which is which
+	// at every call site.
+	"plural": func(n any, unit string) string { return plural(asInt(n), unit) },
 	"add":    func(a, b int) int { return a + b },
 
 	// A heading for an article that may not have one yet.
@@ -247,6 +254,24 @@ func plural(n int, unit string) string {
 		return "1 " + unit
 	}
 	return strconv.Itoa(n) + " " + unit + "s"
+}
+
+// asInt narrows whatever integer a template handed over.
+//
+// Anything else counts as zero rather than panicking: a miscounted noun is a
+// blemish, and a template that panics mid-render is a 500 on a page the reader
+// wanted.
+func asInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case int32:
+		return int(n)
+	default:
+		return 0
+	}
 }
 
 // staticMaxAge is how long a browser may cache the stylesheet.

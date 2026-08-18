@@ -2,6 +2,8 @@
 
 {{define "content"}}
 <article class="reader">
+  {{template "reader-nav" .}}
+
   <header>
     <h1>{{if .Article.Title}}{{.Article.Title}}{{else}}(untitled){{end}}</h1>
 
@@ -37,5 +39,21 @@
   {{else}}
     <p class="notice">{{.Notice}}</p>
   {{end}}
+
+  {{/*
+    Navigation only, deliberately no second copy of the star/keep/read controls.
+    They carry an element id that htmx swaps by, so a second set would either
+    share the id — leaving one of them stale after every click — or need its own,
+    which is two controls for one piece of state showing different answers on the
+    same screen. The keyboard shortcuts and the set above the headline are enough.
+  */}}
+  <footer class="reader-foot">
+    {{template "reader-nav" .}}
+  </footer>
 </article>
+
+<p class="hint">
+  <kbd>n</kbd> next, <kbd>p</kbd> previous, <kbd>u</kbd> back to the list,
+  <kbd>s</kbd> star, <kbd>m</kbd> mark unread
+</p>
 {{end}}

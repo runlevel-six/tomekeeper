@@ -23,7 +23,14 @@
       <ol class="results">
         {{range .Results}}
         <li class="result{{if .Read}} is-read{{end}}">
-          <h2><a href="/articles/{{.ArticleID}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a></h2>
+          {{/*
+            Carries the search back to the article page, so leaving a result
+            returns to these results rather than to an empty form. It grants no
+            previous/next: results are ranked by relevance, which is not a reading
+            order, and pretending otherwise would make Next mean "the next best
+            match", which nobody wants while reading.
+          */}}
+          <h2><a href="/articles/{{.ArticleID}}?from={{$.From}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a></h2>
           <p class="meta">
             {{if .FeedTitle}}<span class="source">{{.FeedTitle}}</span>{{else if .SiteName}}<span class="source">{{.SiteName}}</span>{{end}}
             {{if .Starred}}<span class="starred" title="Starred">★</span>{{end}}

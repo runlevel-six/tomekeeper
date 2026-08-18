@@ -1,0 +1,32 @@
+{{define "title"}}Categories — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="categories">
+  <h1>Categories</h1>
+
+  {{if .Categories}}
+    <p class="hint">
+      The folders your subscription list came in. A category is not stored
+      separately — it is whatever each feed says it is filed under, so re-importing
+      an OPML file with the folders rearranged rearranges these.
+    </p>
+
+    <ul class="category-list">
+      {{range .Categories}}
+        <li>
+          <a href="{{.Path}}">
+            <span class="name">{{.Heading}}</span>
+            {{if .Unread}}<span class="badge count">{{.Unread}}</span>{{end}}
+          </a>
+          <span class="detail">{{plural .Feeds "feed"}}</span>
+        </li>
+      {{end}}
+    </ul>
+  {{else}}
+    <p class="placeholder">
+      No feeds yet, so nothing to file. Import an OPML export under
+      <a href="/feeds">Feeds</a> and its folders appear here.
+    </p>
+  {{end}}
+</div>
+{{end}}

@@ -90,6 +90,11 @@ type loginPage struct {
 	// shared, and a missing field is an execution error that turns the sign-in
 	// page into a 500 with no clue as to why.
 	Theme string
+
+	// Unread is likewise always zero, and here for the same reason: base.html
+	// puts the count in the page title, and an unread tally is exactly the sort
+	// of thing a sign-in page must not be able to tell an anonymous visitor.
+	Unread int64
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {

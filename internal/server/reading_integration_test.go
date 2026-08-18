@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -168,8 +169,10 @@ func TestStreamPageRenders(t *testing.T) {
 	if strings.Contains(body, "Bob&#39;s Article") || strings.Contains(body, "Bob's Article") {
 		t.Error("the stream lists Bob's article")
 	}
-	if !strings.Contains(body, `href="/articles/`+strconv.FormatInt(int64(tr.aliceOnly), 10)+`"`) {
-		t.Error("the entry does not link to the reader")
+	// The link carries which list it was opened from, which is what lets the
+	// article page offer a way back and a next article.
+	if !strings.Contains(body, `href="/articles/`+strconv.FormatInt(int64(tr.aliceOnly), 10)+`?from=unread"`) {
+		t.Error("the entry does not link to the reader, carrying its list")
 	}
 	// The keyboard hint is part of the interface brief's promise that this is usable from the
 	// keyboard from day one.
@@ -470,7 +473,9 @@ func snippetElement(t *testing.T, body string) string {
 
 var (
 	snippetPara = regexp.MustCompile(`(?s)<p class="snippet">(.*?)</p>`)
-	articleHref = regexp.MustCompile(`href="/articles/(\d+)"`)
+	// The query string is optional because a stream row's link carries the list it
+	// was opened from, and the attention queue's does not.
+	articleHref = regexp.MustCompile(`href="/articles/(\d+)(?:\?[^"]*)?"`)
 	nextHref    = regexp.MustCompile(`hx-get="([^"]+)"`)
 )
 
@@ -482,10 +487,16 @@ func articleLinks(body string) []string {
 	return out
 }
 
+// nextPageLink returns the URL a browser would request for the next page.
+//
+// Fully HTML-unescaped, not just `&amp;`. A category's paging URL carries the
+// folder name, and html/template escapes a `+` in a query value as `&#43;` — which
+// a browser decodes and a naive replacement does not, so a partial decode here
+// would send a request no browser would ever send and fail a URL that works.
 func nextPageLink(body string) string {
 	m := nextHref.FindStringSubmatch(body)
 	if m == nil {
 		return ""
 	}
-	return strings.ReplaceAll(m[1], "&amp;", "&")
+	return html.UnescapeString(m[1])
 }

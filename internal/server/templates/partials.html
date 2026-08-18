@@ -1,6 +1,11 @@
 {{/*
   Shared fragments. Rendered inside pages and returned alone as htmx responses, so
   a control cannot look one way on load and another after a click.
+
+  Each toggle is a glyph plus a word, and the word stays on a phone. It used to be
+  hidden below 34rem, which left three unlabeled geometric marks — ☆ reads as a
+  star anywhere, but ⬡ and ◯ mean nothing to anyone who has not been told, and
+  there is nowhere to hover to find out on a touchscreen.
 */}}
 
 {{define "actions"}}
@@ -12,7 +17,7 @@
     <button type="submit" class="toggle{{if .Starred}} on{{end}}"
             aria-pressed="{{.Starred}}"
             title="{{if .Starred}}Remove star{{else}}Star{{end}} (s)">
-      {{if .Starred}}★{{else}}☆{{end}}<span class="label">{{if .Starred}}Starred{{else}}Star{{end}}</span>
+      <span class="glyph" aria-hidden="true">{{if .Starred}}★{{else}}☆{{end}}</span><span class="label">{{if .Starred}}Starred{{else}}Star{{end}}</span>
     </button>
   </form>
 
@@ -23,7 +28,7 @@
     <button type="submit" class="toggle{{if .Kept}} on{{end}}"
             aria-pressed="{{.Kept}}"
             title="{{if .Kept}}Stop keeping this{{else}}Keep this permanently{{end}}">
-      {{if .Kept}}⬢{{else}}⬡{{end}}<span class="label">{{if .Kept}}Kept{{else}}Keep{{end}}</span>
+      <span class="glyph" aria-hidden="true">{{if .Kept}}⬢{{else}}⬡{{end}}</span><span class="label">{{if .Kept}}Kept{{else}}Keep{{end}}</span>
     </button>
   </form>
 
@@ -34,10 +39,43 @@
     <button type="submit" class="toggle{{if .Read}} on{{end}}"
             aria-pressed="{{.Read}}"
             title="Mark {{if .Read}}unread{{else}}read{{end}} (m)">
-      {{if .Read}}◉{{else}}◯{{end}}<span class="label">{{if .Read}}Read{{else}}Unread{{end}}</span>
+      <span class="glyph" aria-hidden="true">{{if .Read}}◉{{else}}◯{{end}}</span><span class="label">{{if .Read}}Read{{else}}Unread{{end}}</span>
     </button>
   </form>
 </span>
+{{end}}
+
+{{/*
+  Getting out of an article, and moving along the list without going back to it.
+
+  Rendered twice on the article page — above the headline and again after the last
+  paragraph — because the two moments a reader wants it are before they have
+  started and after they have finished, and on a phone those are thousands of
+  pixels apart.
+
+  The ends of the list render as inert text rather than disappearing, so the
+  controls do not move around under a thumb that has learned where they are.
+*/}}
+{{define "reader-nav"}}
+<nav class="reader-nav" aria-label="Article">
+  <a class="back" href="{{.BackTo}}" rel="up">
+    <span aria-hidden="true">←</span> {{.BackLabel}}
+  </a>
+  <span class="siblings">
+    {{if .Newer}}
+      <a href="/articles/{{.Newer}}{{if .From}}?from={{.From}}{{end}}" rel="prev"
+         title="The article above this one in {{.BackLabel}} (p)">Previous</a>
+    {{else}}
+      <span class="spent" aria-disabled="true">Previous</span>
+    {{end}}
+    {{if .Older}}
+      <a href="/articles/{{.Older}}{{if .From}}?from={{.From}}{{end}}" rel="next"
+         title="The next article in {{.BackLabel}} (n)">Next</a>
+    {{else}}
+      <span class="spent" aria-disabled="true">Next</span>
+    {{end}}
+  </span>
+</nav>
 {{end}}
 
 {{/*
@@ -51,7 +89,13 @@
   {{if and $.NextPage (eq (len $.Items) (add $i 1))}}
     hx-get="{{$.NextPage}}" hx-trigger="revealed" hx-swap="afterend"
   {{end}}>
-  <h2><a href="/articles/{{$item.ArticleID}}">{{displayTitle $item.Title $item.URLCanonical}}</a></h2>
+  {{/*
+    The list travels with the link. That is what lets the article page offer a way
+    back to here and a next article — neither of which the browser can work out,
+    and the first of which does not otherwise exist at all in an installed app
+    with no back button.
+  */}}
+  <h2><a href="/articles/{{$item.ArticleID}}{{if $.From}}?from={{$.From}}{{end}}">{{displayTitle $item.Title $item.URLCanonical}}</a></h2>
 
   <p class="meta">
     {{if $item.FeedTitle}}<span class="source">{{$item.FeedTitle}}</span>{{else if $item.SiteName}}<span class="source">{{$item.SiteName}}</span>{{end}}

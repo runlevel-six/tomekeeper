@@ -10,14 +10,49 @@
 //   j / ↓   next entry
 //   k / ↑   previous entry
 //   o / ⏎   open the selected entry
+//   n       next article (in the reader)
+//   p       previous article (in the reader)
+//   u / esc back to the list the article was opened from
+//   r       reload this page
 //   s       star or unstar
 //   m       mark read or unread
 //   /       jump to search
-//   g then u / a / s / f   go to unread, everything, starred, feeds
+//   g then u / a / s / f / c   go to unread, everything, starred, feeds, categories
 (function () {
   "use strict";
 
   var selected = -1;
+
+  // Mirrors the unread count onto the installed app's icon.
+  //
+  // This is the only thing here that is not an accelerator for a control already
+  // on the page — there is no way to draw on an app icon in markup. Guarded
+  // because setAppBadge exists on some platforms and not others, and clearing at
+  // zero matters as much as setting: a badge that stays at 12 after everything is
+  // read is worse than no badge, because it is a lie the reader cannot dismiss.
+  function badge() {
+    if (!navigator.setAppBadge) return;
+
+    var count = parseInt(document.body.getAttribute("data-unread") || "0", 10);
+    if (isNaN(count) || count <= 0) {
+      if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function () {});
+      return;
+    }
+    navigator.setAppBadge(count).catch(function () {});
+  }
+
+  badge();
+
+  // Follows a link the page has already drawn, so a keyboard shortcut can never
+  // navigate somewhere the reader had no visible way to reach.
+  function follow(selector) {
+    var link = document.querySelector(selector);
+    if (link) {
+      link.click();
+      return true;
+    }
+    return false;
+  }
 
   function entries() {
     return Array.prototype.slice.call(document.querySelectorAll(".entry"));
@@ -89,7 +124,9 @@
 
     if (awaitingGo) {
       awaitingGo = false;
-      var destinations = { u: "/", a: "/all", s: "/starred", f: "/feeds" };
+      var destinations = {
+        u: "/", a: "/all", s: "/starred", f: "/feeds", c: "/categories"
+      };
       var to = destinations[event.key];
       if (to) {
         event.preventDefault();
@@ -122,6 +159,27 @@
         event.preventDefault();
         press("read");
         break;
+
+      // Moving along the list from inside an article, and getting back out of
+      // one. These are the keys that matter most in the reader, because it is
+      // the one view with nowhere else to go.
+      case "n":
+        if (follow(".reader-nav a[rel='next']")) event.preventDefault();
+        break;
+      case "p":
+        if (follow(".reader-nav a[rel='prev']")) event.preventDefault();
+        break;
+      case "u":
+      case "Escape":
+        if (follow(".reader-nav a[rel='up']")) event.preventDefault();
+        break;
+
+      // Reload, because an installed app has no reload button. The control is on
+      // the page, and this presses it.
+      case "r":
+        if (follow(".chrome .reload")) event.preventDefault();
+        break;
+
       case "g":
         awaitingGo = true;
         break;

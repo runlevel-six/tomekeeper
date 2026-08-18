@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/runlevel-six/tomekeeper/internal/feed"
+	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
 // maxOPMLUpload bounds an uploaded subscription list.
@@ -47,13 +48,13 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 			s.renderFeeds(w, r, http.StatusRequestEntityTooLarge, &importOutcome{
 				Problem: "That file is larger than 4MB, which is far larger than any subscription list. " +
 					"Check that it is the OPML export and not something else.",
-			})
+			}, nil)
 			return
 		}
 		s.log.Warn("reading an OPML upload failed", "error", err)
 		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
 			Problem: "The upload did not arrive intact. Try again.",
-		})
+		}, nil)
 		return
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
@@ -62,7 +63,7 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
 			Problem: "No file was chosen.",
-		})
+		}, nil)
 		return
 	}
 	defer func() { _ = file.Close() }()
@@ -79,14 +80,14 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 			Filename: header.Filename,
 			Problem: "That does not look like an OPML file. Most readers call the export " +
 				"“subscriptions”, “OPML” or “feeds”, and the file usually ends in .opml or .xml.",
-		})
+		}, nil)
 		return
 	}
 	if len(subs) == 0 {
 		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
 			Filename: header.Filename,
 			Problem:  "That file parsed as OPML but contains no subscriptions.",
-		})
+		}, nil)
 		return
 	}
 
@@ -106,7 +107,7 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	s.renderFeeds(w, r, http.StatusOK, &importOutcome{
 		Filename: header.Filename,
 		Result:   &result,
-	})
+	}, nil)
 }
 
 // importOutcome is what the feeds page says about an import that just happened.
@@ -116,4 +117,37 @@ type importOutcome struct {
 	Filename string
 	Problem  string
 	Result   *feed.ImportResult
+}
+
+// handleRefreshFeeds brings every one of the reader's feeds forward to due.
+//
+// Note what this does not do: it does not fetch anything. `tome serve` has no job
+// client and no business holding a request open while seventy origin servers think
+// about it — polling is the worker's work. So this moves the schedule and says so,
+// which is the honest thing to put behind a button labeled "check now": the
+// alternative is a spinner that finishes before any feed has been contacted.
+//
+// Rendered rather than redirected, like the OPML import above and for the same
+// reason: the result belongs to the request that produced it. Re-posting costs
+// nothing, because the store leaves alone anything polled inside its floor.
+func (s *Server) handleRefreshFeeds(w http.ResponseWriter, r *http.Request) {
+	result, err := s.store.PollNow(r.Context(), signedInUser(r))
+	if err != nil {
+		s.log.Error("bringing feed polls forward failed", "error", err)
+		s.renderFeeds(w, r, http.StatusInternalServerError, nil, &refreshOutcome{
+			Problem: "The feeds could not be queued. The log will say why.",
+		})
+		return
+	}
+
+	s.log.Info("feeds queued for an on-demand poll",
+		"moved", result.Moved, "held", result.Held, "disabled", result.Disabled)
+
+	s.renderFeeds(w, r, http.StatusOK, nil, &refreshOutcome{Result: &result})
+}
+
+// refreshOutcome is what the feeds page says after a manual refresh.
+type refreshOutcome struct {
+	Problem string
+	Result  *store.PollNowResult
 }

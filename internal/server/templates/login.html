@@ -2,7 +2,18 @@
 
 {{define "content"}}
 <div class="signin">
-  <h1>Tomekeeper</h1>
+  {{/*
+    The full lockup, once, on the one page that introduces the application rather
+    than getting out of the way of it. Everywhere past this door the mark is the
+    monochrome seal, which inherits the reader's palette; this drawing brings its
+    own colors and would fight six of the seven.
+
+    The image carries the name in its alt text rather than sitting beside a
+    heading that repeats it: one name for a screen reader, and the word still
+    appears if the image does not load.
+  */}}
+  <h1><img class="lockup" src="/static/wordmark.png" alt="Tomekeeper"
+           width="640" height="213"></h1>
 
   {{if .Error}}
     <p class="error" role="alert">{{.Error}}</p>

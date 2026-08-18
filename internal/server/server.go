@@ -141,7 +141,10 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.
 	mux.HandleFunc("POST /feeds/import", s.requireUser(s.handleImportOPML))
+	mux.HandleFunc("POST /feeds/refresh", s.requireUser(s.handleRefreshFeeds))
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
+	// Both the category index and one category's stream: `?name=` chooses.
+	mux.HandleFunc("GET /categories", s.requireUser(s.handleCategories))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
 	mux.HandleFunc("GET /articles/{id}", s.requireUser(s.handleArticle))

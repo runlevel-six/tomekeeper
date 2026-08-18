@@ -2,8 +2,22 @@
 <html lang="en"{{if and .Theme (ne .Theme "auto")}} data-theme="{{.Theme}}"{{end}}>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{block "title" .}}Tomekeeper{{end}}</title>
+  {{/*
+    viewport-fit=cover so that the fixed tab bar can sit against the bottom of
+    the screen on a phone and still keep its buttons clear of the home
+    indicator. Without it the safe-area insets the stylesheet asks for are all
+    reported as zero, and the last row of controls ends up under the gesture bar.
+  */}}
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  {{/*
+    The unread count leads the title, because the title is the only thing an
+    installed app can say from behind its own icon — a browser tab, an app
+    switcher, a window list. Counted once per page load rather than pushed: this
+    is a reading tool for one person, and a background poll to keep a number
+    fresh is a cost with no reader behind it.
+  */}}
+  <title>{{if .Unread}}({{.Unread}}) {{end}}{{block "title" .}}Tomekeeper{{end}}</title>
   <link rel="stylesheet" href="/static/tome.css">
 
   {{/*
@@ -36,27 +50,82 @@
     <script src="/static/tome.js" defer></script>
   {{end}}
 </head>
-<body>
+{{/*
+  data-unread is read by tome.js, which mirrors it onto the installed app's icon
+  badge. An attribute rather than a variable in a script tag, because the content
+  security policy has no 'unsafe-inline' and is not going to acquire one for a
+  number.
+*/}}
+<body{{if .User}} data-unread="{{.Unread}}"{{end}}>
 {{if .User}}
   <header class="chrome">
     <a class="brand" href="/">{{template "mark"}}<span>Tomekeeper</span></a>
-    <nav>
-      <a href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>Unread{{if .Unread}} <span class="badge count">{{.Unread}}</span>{{end}}</a>
-      <a href="/all"{{if eq .Nav "all"}} aria-current="page"{{end}}>Everything</a>
-      <a href="/starred"{{if eq .Nav "starred"}} aria-current="page"{{end}}>Starred</a>
-      <a href="/saved"{{if eq .Nav "saved"}} aria-current="page"{{end}}>Saved</a>
-      <a href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
-      <a href="/feeds"{{if eq .Nav "feeds"}} aria-current="page"{{end}}>Feeds</a>
-      <a href="/attention"{{if eq .Nav "attention"}} aria-current="page"{{end}}>Attention</a>
-      <a href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
+
+    {{/*
+      Every section, in one nav, marked up as primary or secondary. On a narrow
+      screen the primary five move to the tab bar at the foot of the page and are
+      hidden here, so each link exists once in the document at any width — a
+      second copy would be a second thing to keep in step, and a screen reader
+      would read the whole menu twice.
+    */}}
+    <nav class="sections">
+      <a class="primary" href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>Unread{{if .Unread}} <span class="badge count">{{.Unread}}</span>{{end}}</a>
+      <a class="primary" href="/categories"{{if eq .Nav "categories"}} aria-current="page"{{end}}>Categories</a>
+      <a class="secondary" href="/all"{{if eq .Nav "all"}} aria-current="page"{{end}}>Everything</a>
+      <a class="primary" href="/starred"{{if eq .Nav "starred"}} aria-current="page"{{end}}>Starred</a>
+      <a class="primary" href="/saved"{{if eq .Nav "saved"}} aria-current="page"{{end}}>Saved</a>
+      <a class="primary" href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
+      <a class="secondary" href="/feeds"{{if eq .Nav "feeds"}} aria-current="page"{{end}}>Feeds</a>
+      <a class="secondary" href="/attention"{{if eq .Nav "attention"}} aria-current="page"{{end}}>Attention</a>
+      <a class="secondary" href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
     </nav>
-    <form class="signout" method="post" action="/logout">
-      <button type="submit">Sign out</button>
-    </form>
+
+    <div class="chrome-tools">
+      {{/*
+        A link to this very page, which is a reload. Installed as a web app there
+        is no address bar and no reload button, and pull-to-refresh does not exist
+        in a standalone window — so without this there is genuinely no way to ask
+        for the newest articles short of navigating away and back.
+
+        It reloads; it does not poll the feeds. The control that does that is on
+        the Feeds page, labeled, because it costs every subscribed site a request.
+      */}}
+      <a class="tool reload" href="{{.Path}}" title="Reload this page (r)">
+        <span aria-hidden="true">↻</span><span class="label">Reload</span>
+      </a>
+      <form class="signout" method="post" action="/logout">
+        <button type="submit">Sign out</button>
+      </form>
+    </div>
   </header>
 {{end}}
 <main>
 {{block "content" .}}{{end}}
 </main>
+{{if .User}}
+  {{/*
+    The tab bar, shown only on narrow screens. Installed on a phone the app has
+    no browser chrome at all, so navigation has to come from the page — and at
+    the foot of it, where a thumb reaches.
+  */}}
+  <nav class="tabbar" aria-label="Sections">
+    <a href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>
+      <span class="glyph" aria-hidden="true">◍</span><span>Unread</span>
+      {{if .Unread}}<span class="badge count">{{.Unread}}</span>{{end}}
+    </a>
+    <a href="/categories"{{if eq .Nav "categories"}} aria-current="page"{{end}}>
+      <span class="glyph" aria-hidden="true">▤</span><span>Categories</span>
+    </a>
+    <a href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>
+      <span class="glyph" aria-hidden="true">⌕</span><span>Search</span>
+    </a>
+    <a href="/starred"{{if eq .Nav "starred"}} aria-current="page"{{end}}>
+      <span class="glyph" aria-hidden="true">★</span><span>Starred</span>
+    </a>
+    <a href="/saved"{{if eq .Nav "saved"}} aria-current="page"{{end}}>
+      <span class="glyph" aria-hidden="true">⬓</span><span>Saved</span>
+    </a>
+  </nav>
+{{end}}
 </body>
 </html>{{end}}

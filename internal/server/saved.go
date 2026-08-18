@@ -91,7 +91,13 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderSaved(w http.ResponseWriter, r *http.Request, status int, saved *savedOutcome) {
 	userID := signedInUser(r)
 
-	q := store.StreamQuery{SavedOnly: true, Limit: store.DefaultStreamLimit + 1}
+	// The list itself is defined once, in streams.go, so that the reading list and
+	// the previous/next controls on an article opened from it agree about what it
+	// contains.
+	spec := s.savedSpec()
+
+	q := spec.Query
+	q.Limit = store.DefaultStreamLimit + 1
 	if before := r.URL.Query().Get("before"); before != "" {
 		sortAt, id, ok := parseCursor(before)
 		if !ok {
@@ -110,16 +116,17 @@ func (s *Server) renderSaved(w http.ResponseWriter, r *http.Request, status int,
 
 	page := savedPage{
 		streamPage: streamPage{
-			pageData: s.pageData(r, "saved"),
-			Heading:  "Saved",
-			Empty:    "Nothing saved yet. Paste a link above to archive a page.",
+			pageData: s.pageData(r, spec.Nav),
+			Heading:  spec.Heading,
+			Empty:    spec.Empty,
+			From:     spec.Token,
 		},
 		Saved: saved,
 	}
 	if len(items) > store.DefaultStreamLimit {
 		last := items[store.DefaultStreamLimit-1]
 		items = items[:store.DefaultStreamLimit]
-		page.NextPage = "/saved?before=" + formatCursor(last.SortAt, last.ArticleID)
+		page.NextPage = pageURL(spec.Path, "before", formatCursor(last.SortAt, last.ArticleID))
 	}
 	page.Items = items
 

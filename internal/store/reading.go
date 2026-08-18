@@ -56,6 +56,15 @@ const ExcerptLength = 320
 // present it in whatever order the feed happened to list it.
 const streamOrder = `COALESCE(a.published_at, a.first_seen_at) DESC, a.id DESC`
 
+// streamOrderReversed is the same order walked upwards, which is what finding
+// the article *above* a given one requires.
+const streamOrderReversed = `COALESCE(a.published_at, a.first_seen_at) ASC, a.id ASC`
+
+// streamSortKey is the expression both orders sort on, written once because a
+// keyset comparison and an ORDER BY that disagree page incorrectly in a way no
+// test notices until the boundary row.
+const streamSortKey = `COALESCE(a.published_at, a.first_seen_at)`
+
 // StreamQuery selects and pages through a reader's articles.
 type StreamQuery struct {
 	// UnreadOnly restricts the stream to articles not yet read.
@@ -76,6 +85,27 @@ type StreamQuery struct {
 
 	// TagID, when non-zero, restricts the stream to one of the user's tags.
 	TagID TagID
+
+	// Category, when Categorized is set, restricts the stream to the articles
+	// carried by the user's feeds filed under that category. An empty Category
+	// with Categorized set selects the feeds that have none.
+	//
+	// Two fields rather than one, because "no category" is a real bucket and a
+	// bare empty string cannot distinguish it from "do not filter by category" —
+	// which is the sort of ambiguity that quietly turns a filter off.
+	Category    string
+	Categorized bool
+
+	// ReadWithin, when set alongside UnreadOnly, also admits articles read within
+	// that window.
+	//
+	// This exists for one caller: Neighbors. Opening an article marks it read, so
+	// a strictly-unread list rearranges itself under the reader the moment they
+	// start reading it, and "previous article" would walk off the top of a list
+	// that no longer contains anything they have seen. A short window makes the
+	// list stable for the length of a reading session without making the unread
+	// stream itself lie about what is unread.
+	ReadWithin time.Duration
 
 	// Limit caps the page. Zero means DefaultStreamLimit.
 	Limit int
@@ -122,6 +152,72 @@ type StreamItem struct {
 	FetchStatus string
 }
 
+// streamFilter is the WHERE clause a StreamQuery describes, together with the
+// arguments it references.
+//
+// Extracted so that Stream and Neighbors cannot disagree about what a list
+// contains. They did not, when there was one of them; the moment "the next
+// article in this list" became a separate query, two copies of these predicates
+// would have been two definitions of the same list, and the bug that produces —
+// a Next button that skips an article the list showed — is invisible until it
+// happens on somebody's screen.
+type streamFilter struct {
+	where []string
+	args  []any
+}
+
+// filter builds the predicates. $1 is always the user id, as visibleArticles
+// requires; every other argument is appended and numbered from there, so the
+// caller must add its own arguments after these.
+func (q StreamQuery) filter(userID UserID) streamFilter {
+	f := streamFilter{
+		where: []string{visibleArticles},
+		args:  []any{userID},
+	}
+
+	add := func(clause string, values ...any) {
+		for _, v := range values {
+			f.args = append(f.args, v)
+			clause = strings.Replace(clause, "?", "$"+strconv.Itoa(len(f.args)), 1)
+		}
+		f.where = append(f.where, clause)
+	}
+
+	if q.UnreadOnly {
+		// COALESCE, because an article nobody has touched has no state row at all
+		// and is unread by definition.
+		if q.ReadWithin > 0 {
+			add(`(NOT COALESCE(st.read, false)
+			      OR st.read_at > now() - make_interval(secs => ?))`, q.ReadWithin.Seconds())
+		} else {
+			f.where = append(f.where, `NOT COALESCE(st.read, false)`)
+		}
+	}
+	if q.StarredOnly {
+		f.where = append(f.where, `COALESCE(st.starred, false)`)
+	}
+	if q.SavedOnly {
+		f.where = append(f.where, `st.saved_at IS NOT NULL`)
+	}
+	if q.FeedID != 0 {
+		add(`EXISTS (SELECT 1 FROM feed_items fi2 JOIN feeds f2 ON f2.id = fi2.feed_id
+		             WHERE fi2.article_id = a.id AND f2.id = ? AND f2.user_id = $1)`, q.FeedID)
+	}
+	if q.TagID != 0 {
+		add(`EXISTS (SELECT 1 FROM article_tags at2 JOIN tags t2 ON t2.id = at2.tag_id
+		             WHERE at2.article_id = a.id AND t2.id = ? AND t2.user_id = $1)`, q.TagID)
+	}
+	if q.Categorized {
+		// COALESCE on the way in as well as the way out: the column is nullable and
+		// an OPML file with a top-level feed stores NULL, so comparing it directly
+		// to '' would silently match nothing.
+		add(`EXISTS (SELECT 1 FROM feed_items fi4 JOIN feeds f4 ON f4.id = fi4.feed_id
+		             WHERE fi4.article_id = a.id AND f4.user_id = $1
+		               AND COALESCE(f4.category, '') = ?)`, q.Category)
+	}
+	return f
+}
+
 // Stream returns a page of the user's articles, newest first.
 func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]StreamItem, error) {
 	limit := q.Limit
@@ -132,39 +228,13 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		limit = MaxStreamLimit
 	}
 
-	// $1 is the user id, as visibleArticles requires.
-	args := []any{userID}
-	var where []string
-	where = append(where, visibleArticles)
+	f := q.filter(userID)
+	where, args := f.where, f.args
 
-	add := func(clause string, value any) {
-		args = append(args, value)
-		where = append(where, strings.ReplaceAll(clause, "?", "$"+strconv.Itoa(len(args))))
-	}
-
-	if q.UnreadOnly {
-		// COALESCE, because an article nobody has touched has no state row at all
-		// and is unread by definition.
-		where = append(where, `NOT COALESCE(st.read, false)`)
-	}
-	if q.StarredOnly {
-		where = append(where, `COALESCE(st.starred, false)`)
-	}
-	if q.SavedOnly {
-		where = append(where, `st.saved_at IS NOT NULL`)
-	}
-	if q.FeedID != 0 {
-		add(`EXISTS (SELECT 1 FROM feed_items fi2 JOIN feeds f2 ON f2.id = fi2.feed_id
-		             WHERE fi2.article_id = a.id AND f2.id = ? AND f2.user_id = $1)`, q.FeedID)
-	}
-	if q.TagID != 0 {
-		add(`EXISTS (SELECT 1 FROM article_tags at2 JOIN tags t2 ON t2.id = at2.tag_id
-		             WHERE at2.article_id = a.id AND t2.id = ? AND t2.user_id = $1)`, q.TagID)
-	}
 	if !q.BeforeSort.IsZero() {
 		args = append(args, q.BeforeSort, q.BeforeID)
 		where = append(where, fmt.Sprintf(
-			`(COALESCE(a.published_at, a.first_seen_at), a.id) < ($%d, $%d)`,
+			`(`+streamSortKey+`, a.id) < ($%d, $%d)`,
 			len(args)-1, len(args)))
 	}
 
@@ -216,6 +286,74 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		out = append(out, it)
 	}
 	return out, rows.Err()
+}
+
+// Neighbors is what sits either side of an article in a list.
+//
+// Zero means there is nothing there — the reader is at one end of the list.
+type Neighbors struct {
+	// Newer is the article above this one: the one a reader gets by going back up
+	// the list. Named for the direction rather than "previous", because "previous"
+	// is ambiguous the moment you ask whether it means earlier in the list or
+	// earlier in time.
+	Newer ArticleID
+
+	// Older is the article below this one, which is what "next" advances to.
+	Older ArticleID
+}
+
+// NeighborsIn finds the articles either side of one article within a stream.
+//
+// The filter comes from a StreamQuery so that "next" means the next article in
+// the list the reader was actually looking at — the next thing in Comics, or the
+// next unread, rather than the next thing in the archive. Callers pass the same
+// query they used to draw that list; see StreamQuery.ReadWithin for the one
+// adjustment a reader-facing caller should make.
+//
+// The current article's position is looked up without the filter applied. That is
+// deliberate: an article can stop matching the list it was opened from — the
+// obvious case being that opening it marked it read — and its place in the
+// ordering is still perfectly well defined.
+func (s *Store) NeighborsIn(ctx context.Context, userID UserID, q StreamQuery, id ArticleID) (Neighbors, error) {
+	f := q.filter(userID)
+	args := append(f.args, id)
+	where := strings.Join(f.where, "\n			  AND ")
+
+	// One round trip for both sides. Two queries would be simpler to read and
+	// would double the latency of every article page for no gain.
+	side := func(comparison, order string) string {
+		return `(
+			SELECT a.id FROM articles a
+			LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+			WHERE ` + where + `
+			  AND (` + streamSortKey + `, a.id) ` + comparison + ` (SELECT sort_at, id FROM cur)
+			ORDER BY ` + order + `
+			LIMIT 1
+		)`
+	}
+
+	query := `
+		WITH cur AS (
+			SELECT ` + streamSortKey + ` AS sort_at, a.id
+			FROM articles a
+			WHERE a.id = $` + strconv.Itoa(len(args)) + ` AND ` + visibleArticles + `
+		)
+		SELECT COALESCE(` + side(">", streamOrderReversed) + `, 0),
+		       COALESCE(` + side("<", streamOrder) + `, 0)
+		FROM cur`
+
+	var n Neighbors
+	err := s.pool.QueryRow(ctx, query, args...).Scan(&n.Newer, &n.Older)
+	if IsNotFound(err) {
+		// The article is not visible to this reader. Its neighbors are nobody's
+		// business, and the caller has already decided what to do about the
+		// article itself.
+		return Neighbors{}, nil
+	}
+	if err != nil {
+		return Neighbors{}, fmt.Errorf("finding the neighbors of article %d for user %d: %w", id, userID, err)
+	}
+	return n, nil
 }
 
 // ArticleView is one article as a reader sees it, with that reader's state.

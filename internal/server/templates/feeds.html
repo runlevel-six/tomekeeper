@@ -2,7 +2,46 @@
 
 {{define "content"}}
 <div class="feeds">
-  <h1>Feeds</h1>
+  <div class="page-head">
+    <h1>Feeds</h1>
+
+    {{/*
+      On demand, because adaptive polling means a feed's next check can be up to a
+      day away, and "I just published something, is it there yet" is a fair
+      question to be able to ask.
+    */}}
+    <form class="refresh" method="post" action="/feeds/refresh">
+      <button type="submit">Check all feeds now</button>
+    </form>
+  </div>
+
+  {{with .Refreshed}}
+    {{if .Problem}}
+      <p class="import-result bad">{{.Problem}}</p>
+    {{else}}{{with .Result}}
+      <div class="import-result ok">
+        <p>
+          {{if .Moved}}
+            {{plural .Moved "feed"}} queued. The worker polls them within a minute,
+            and new articles show up on a reload.
+          {{else}}
+            Nothing to queue.
+          {{end}}
+        </p>
+        {{if or .Held .Disabled}}
+          <p class="note">
+            {{if .Held}}{{plural .Held "feed"}} {{if eq .Held 1}}was{{else}}were{{end}}
+            polled in the last few minutes and {{if eq .Held 1}}was{{else}}were{{end}} left
+            alone.{{end}}
+            {{if .Disabled}}{{plural .Disabled "feed"}} {{if eq .Disabled 1}}is{{else}}are{{end}}
+            disabled and {{if eq .Disabled 1}}was{{else}}were{{end}} not queued — re-enable
+            {{if eq .Disabled 1}}it{{else}}them{{end}} to have {{if eq .Disabled 1}}it{{else}}them{{end}}
+            checked again.{{end}}
+          </p>
+        {{end}}
+      </div>
+    {{end}}{{end}}
+  {{end}}
 
   {{with .Imported}}
     {{if .Problem}}
@@ -54,7 +93,7 @@
         {{range .Feeds}}
         <tr{{if .Disabled}} class="is-disabled"{{else if .ConsecutiveFailures}} class="is-failing"{{end}}>
           <th scope="row"><a href="/feeds/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.FeedURL}}{{end}}</a></th>
-          <td>{{.Category}}</td>
+          <td>{{if .Category}}<a href="{{.CategoryPath}}">{{.Category}}</a>{{end}}</td>
           <td class="num">{{if .Unread}}{{.Unread}}{{end}}</td>
           <td>{{with .LastSuccessAt}}<time datetime="{{.Format "2006-01-02T15:04:05Z07:00"}}">{{since .}}</time>{{else}}never{{end}}</td>
           <td>

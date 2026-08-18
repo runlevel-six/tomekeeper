@@ -77,8 +77,26 @@ code {
 }
 .brand .mark { color: var(--accent); flex: none; }
 .brand:hover span { color: var(--accent); }
-.chrome nav { display: flex; gap: 1rem; }
-.chrome .signout { margin-left: auto; }
+.chrome nav.sections { display: flex; gap: 1rem; flex-wrap: wrap; }
+.chrome-tools {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+/* The reload control. A link, so it works with no JavaScript and so a long-press
+   offers "open in new tab" like any other. */
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+.tool:hover { color: var(--accent); }
+.tool .label { font-size: inherit; }
+.reload span[aria-hidden] { font-size: 1.15em; line-height: 1; }
 
 button {
   font: inherit;
@@ -102,7 +120,19 @@ button:hover { border-color: var(--accent); color: var(--accent); }
   border-radius: 6px;
 }
 
-.signin h1 { margin: 0 0 1.25rem; font-size: 1.4rem; }
+.signin h1 { margin: 0 0 1.25rem; font-size: 1.4rem; text-align: center; }
+
+/* The lockup, on the sign-in page only. It carries its own navy-and-gold palette,
+   so it gets no color treatment from here — recoloring it is exactly what would
+   ruin it. Sized in rem against the card rather than by its pixel dimensions,
+   which are 2× the display size so it stays sharp on a phone. */
+.signin .lockup {
+  display: block;
+  width: 100%;
+  max-width: 17rem;
+  height: auto;
+  margin: 0 auto;
+}
 
 .signin label {
   display: block;
@@ -212,6 +242,77 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
   align-items: baseline;
 }
 .toggle.on { color: var(--accent); border-color: var(--accent); }
+.toggle .glyph { line-height: 1; }
+
+/* Getting out of an article, and along the list. Above the headline and again
+   after the last paragraph. */
+.reader-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.85rem;
+}
+.reader-nav .back { text-decoration: none; font-weight: 600; }
+.reader-nav .back:hover { text-decoration: underline; }
+.reader-nav .siblings { display: inline-flex; gap: 0.5rem; }
+.reader-nav .siblings > * {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.3rem 0.7rem;
+  text-decoration: none;
+}
+.reader-nav .siblings a:hover { border-color: var(--accent); }
+
+/* An end of the list. Still occupying its space, so the buttons do not shuffle
+   sideways under a thumb that has learned where they are. */
+.reader-nav .spent { color: var(--ink-soft); opacity: 0.55; }
+
+.reader-nav + header { margin-top: 1.25rem; }
+.reader-foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+}
+
+/* A heading with a control beside it. */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.page-head h1 { margin-bottom: 1rem; }
+.refresh { margin-bottom: 1rem; }
+
+/* The category index. */
+.categories { max-width: 46rem; margin: 0 auto; }
+.category-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+.category-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.85rem 0.2rem;
+  border-bottom: 1px solid var(--rule);
+}
+.category-list a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+.category-list a:hover .name { color: var(--accent); text-decoration: underline; }
+.category-list .detail {
+  margin-left: auto;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
 
 .hint {
   max-width: 46rem;
@@ -414,11 +515,86 @@ kbd {
   cursor: pointer;
 }
 
+/* ---------------------------------------------------------------------------
+ * The tab bar
+ *
+ * Hidden above 34rem, where the header nav is one comfortable row. Below it, the
+ * five sections a reader actually moves between come down here, against the
+ * bottom of the screen where a thumb is — which is the whole point: installed as
+ * a web app there is no browser chrome, no back button and no address bar, so
+ * every way out of wherever you are has to be drawn by the page.
+ * ------------------------------------------------------------------------- */
+.tabbar { display: none; }
+
 @media (max-width: 34rem) {
   .chrome { gap: 0.6rem; font-size: 0.82rem; }
-  .chrome nav { gap: 0.65rem; flex-wrap: wrap; }
-  main { padding: 1.25rem 0.9rem 3rem; }
-  .toggle .label { display: none; }
+  .chrome nav.sections { gap: 0.9rem; flex-wrap: nowrap; overflow-x: auto; }
+
+  /* No duplicates: what the tab bar shows, the header does not. */
+  .chrome nav.sections .primary { display: none; }
+
+  /* The secondary row is short enough not to wrap, and scrolls if a translation
+     or a large font makes it. Scrollbar hidden because it sits over the rule. */
+  .chrome nav.sections { scrollbar-width: none; }
+  .chrome nav.sections::-webkit-scrollbar { display: none; }
+
+  .chrome-tools { gap: 0.75rem; }
+  .reload .label { display: none; }
+
+  /* Room for the bar, plus the phone's own gesture area. env() reports zero
+     without viewport-fit=cover in the viewport meta, which base.html sets. */
+  main {
+    padding: 1.25rem 0.9rem;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .tabbar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-top: 1px solid var(--rule);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+  .tabbar a {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+
+    /* 3rem plus the padding clears the 44px minimum for a touch target, which is
+       the number that decides whether these are usable or merely present. */
+    min-height: 3rem;
+    padding: 0.4rem 0.2rem;
+
+    font-size: 0.66rem;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    color: var(--ink-soft);
+  }
+  .tabbar a[aria-current="page"] { color: var(--accent); }
+  .tabbar .glyph { font-size: 1.15rem; line-height: 1; }
+
+  /* The count rides the icon rather than sitting in the label, so a four-figure
+     backlog cannot push the five tabs out of shape. */
+  .tabbar .badge.count {
+    position: absolute;
+    top: 0.15rem;
+    left: 55%;
+    font-size: 0.62rem;
+    padding: 0 0.3em;
+  }
+
+  /* The last row's rule would otherwise land alongside the tab bar's own top
+     border and read as a double line. */
+  .stream .entry:last-of-type { border-bottom: 0; }
 }
 
 /* Settings. */

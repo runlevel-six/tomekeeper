@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,13 @@ type pageData struct {
 	// Nav marks the current section so the chrome can show where you are.
 	Nav string
 
+	// Path is this page's own URL, which is what the reload control links to.
+	//
+	// A link rather than a scripted reload, because installed as a web app there
+	// is no browser reload button and a reader with JavaScript off should still be
+	// able to ask for fresh contents.
+	Path string
+
 	// Theme is the value for <html data-theme>. Rendered into every page rather
 	// than applied by a script, so the palette is right in the first paint.
 	Theme string
@@ -32,7 +40,7 @@ type pageData struct {
 func (s *Server) pageData(r *http.Request, nav string) pageData {
 	userID := signedInUser(r)
 
-	d := pageData{User: userID, Username: s.cfg.Username, Nav: nav}
+	d := pageData{User: userID, Username: s.cfg.Username, Nav: nav, Path: selfPath(r)}
 
 	// A failed lookup costs the reader their palette for one page, which is a
 	// far better outcome than costing them the page.
@@ -52,8 +60,8 @@ func (s *Server) pageData(r *http.Request, nav string) pageData {
 	return d
 }
 
-// streamPage is the unread stream, the starred list, a feed, or a tag: the same
-// view with a different title and filter.
+// streamPage is the unread stream, the starred list, a feed, a category, or a
+// tag: the same view with a different title and filter.
 type streamPage struct {
 	pageData
 
@@ -61,35 +69,22 @@ type streamPage struct {
 	Empty    string
 	Items    []store.StreamItem
 	NextPage string
+
+	// From is the token every article link in this list carries, so that the
+	// article page knows which list it was opened from.
+	From string
 }
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
-	s.serveStream(w, r, streamRequest{
-		nav:     "unread",
-		heading: "Unread",
-		empty:   "Nothing unread. The worker fills this in as feeds are polled.",
-		query:   store.StreamQuery{UnreadOnly: true},
-		path:    "/",
-	})
+	s.serveStream(w, r, s.unreadSpec())
 }
 
 func (s *Server) handleAll(w http.ResponseWriter, r *http.Request) {
-	s.serveStream(w, r, streamRequest{
-		nav:     "all",
-		heading: "Everything",
-		empty:   "The archive is empty. Import feeds and run the worker.",
-		path:    "/all",
-	})
+	s.serveStream(w, r, s.allSpec())
 }
 
 func (s *Server) handleStarred(w http.ResponseWriter, r *http.Request) {
-	s.serveStream(w, r, streamRequest{
-		nav:     "starred",
-		heading: "Starred",
-		empty:   "Nothing starred yet. Press s on an article, or use the button in the reader.",
-		query:   store.StreamQuery{StarredOnly: true},
-		path:    "/starred",
-	})
+	s.serveStream(w, r, s.starredSpec())
 }
 
 func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
@@ -107,13 +102,7 @@ func (s *Server) handleFeedStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.serveStream(w, r, streamRequest{
-		nav:     "feeds",
-		heading: feed.Title,
-		empty:   "Nothing stored from this feed yet.",
-		query:   store.StreamQuery{FeedID: feed.ID},
-		path:    "/feeds/" + strconv.FormatInt(int64(feed.ID), 10),
-	})
+	s.serveStream(w, r, s.feedSpec(feed))
 }
 
 func (s *Server) handleTagStream(w http.ResponseWriter, r *http.Request) {
@@ -123,27 +112,13 @@ func (s *Server) handleTagStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.serveStream(w, r, streamRequest{
-		nav:     "tags",
-		heading: "Tagged",
-		empty:   "Nothing carries this tag.",
-		query:   store.StreamQuery{TagID: store.TagID(id)},
-		path:    "/tags/" + strconv.FormatInt(id, 10),
-	})
+	s.serveStream(w, r, s.tagSpec(store.TagID(id)))
 }
 
-type streamRequest struct {
-	nav     string
-	heading string
-	empty   string
-	query   store.StreamQuery
-	path    string
-}
-
-func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, req streamRequest) {
+func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, spec streamSpec) {
 	userID := signedInUser(r)
 
-	q := req.query
+	q := spec.Query
 	// One more than the page size, so "is there a next page" is answered by the
 	// query rather than by guessing from a full page — a page that happens to end
 	// exactly on the boundary would otherwise offer a link to nothing.
@@ -166,14 +141,15 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, req streamR
 	}
 
 	page := streamPage{
-		pageData: s.pageData(r, req.nav),
-		Heading:  req.heading,
-		Empty:    req.empty,
+		pageData: s.pageData(r, spec.Nav),
+		Heading:  spec.Heading,
+		Empty:    spec.Empty,
+		From:     spec.Token,
 	}
 	if len(items) > store.DefaultStreamLimit {
 		last := items[store.DefaultStreamLimit-1]
 		items = items[:store.DefaultStreamLimit]
-		page.NextPage = req.path + "?before=" + formatCursor(last.SortAt, last.ArticleID)
+		page.NextPage = pageURL(spec.Path, "before", formatCursor(last.SortAt, last.ArticleID))
 	}
 	page.Items = items
 
@@ -205,7 +181,35 @@ type articlePage struct {
 	// not. Separate from Notice because it accompanies a body rather than
 	// replacing one.
 	ImageNotice string
+
+	// From, BackTo and BackLabel are the list this article was opened from.
+	//
+	// Installed as a web app there is no browser back button, so a way back to the
+	// list is not a convenience — without it the only way out of an article is to
+	// pick a section from the chrome and lose your place. BackTo always points
+	// somewhere: an article opened from a bare link falls back to the unread list.
+	From      string
+	BackTo    string
+	BackLabel string
+
+	// Newer and Older are the articles either side of this one in that list, zero
+	// where there is nothing there. Named for direction rather than
+	// previous/next, which are ambiguous about whether they mean the list or the
+	// clock; the templates say "Previous" and "Next" because that is what a reader
+	// expects to read.
+	Newer store.ArticleID
+	Older store.ArticleID
 }
+
+// neighborReadWindow is how long an article stays in the unread list, for the
+// purpose of working out what comes before and after it.
+//
+// Opening an article marks it read, so without this the unread list would
+// rearrange itself under a reader the instant they started reading, and
+// "previous" would point off the top of a list that no longer held anything they
+// had seen. Half an hour is longer than any single article takes to read and
+// shorter than a session someone comes back to the next day.
+const neighborReadWindow = 30 * time.Minute
 
 func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(r, "id")
@@ -221,15 +225,41 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Which list this was opened from. Unrecognized or absent leaves the reader
+	// with a way back to the unread list and no previous/next, which is the right
+	// outcome for a bare link.
+	spec, haveList := s.streamSpecFor(r.Context(), userID, r.URL.Query().Get("from"))
+
 	page := articlePage{
-		pageData: s.pageData(r, ""),
-		Article:  view.Article,
-		HasBody:  view.HasBody,
-		Read:     view.Read,
-		Starred:  view.Starred,
-		Kept:     view.Kept,
-		Tags:     view.Tags,
-		Words:    view.Content.WordCount,
+		pageData:  s.pageData(r, spec.Nav),
+		Article:   view.Article,
+		HasBody:   view.HasBody,
+		Read:      view.Read,
+		Starred:   view.Starred,
+		Kept:      view.Kept,
+		Tags:      view.Tags,
+		Words:     view.Content.WordCount,
+		BackTo:    "/",
+		BackLabel: "Unread",
+	}
+	if haveList {
+		page.From = spec.Token
+		page.BackTo = spec.Path
+		page.BackLabel = spec.Heading
+	}
+
+	if haveList && spec.Ordered {
+		q := spec.Query
+		q.ReadWithin = neighborReadWindow
+
+		neighbors, err := s.store.NeighborsIn(r.Context(), userID, q, view.Article.ID)
+		if err != nil {
+			// Losing two links is not worth losing the article over.
+			s.log.Warn("finding neighboring articles failed",
+				"article_id", view.Article.ID, "from", spec.Token, "error", err)
+		} else {
+			page.Newer, page.Older = neighbors.Newer, neighbors.Older
+		}
 	}
 
 	page.ImageNotice = imageNoticeFor(view)
@@ -316,12 +346,21 @@ type searchPage struct {
 	Query   string
 	Results []store.SearchResult
 	Ran     bool
+
+	// From is the token result links carry, so that "back" from an article returns
+	// to these results rather than to the empty search form. Results are ranked
+	// rather than ordered, so it grants no previous/next — see streamSpec.Ordered.
+	From string
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	text := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	page := searchPage{pageData: s.pageData(r, "search"), Query: text, Ran: text != ""}
+	page := searchPage{
+		pageData: s.pageData(r, "search"),
+		Query:    text, Ran: text != "",
+		From: searchStream(text),
+	}
 
 	if page.Ran {
 		results, err := s.search.Query(r.Context(), signedInUser(r), store.SearchQuery{Text: text})
@@ -346,15 +385,22 @@ type feedsPage struct {
 
 	// Imported is set only on the page rendered straight after an upload.
 	Imported *importOutcome
+
+	// Refreshed is set only on the page rendered straight after a manual refresh.
+	Refreshed *refreshOutcome
 }
 
 type feedRow struct {
 	store.Feed
 	Unread int64
+
+	// CategoryPath links a feed's category to that category's stream, so the feed
+	// list is a way into the categories rather than just a report of them.
+	CategoryPath string
 }
 
 func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
-	s.renderFeeds(w, r, http.StatusOK, nil)
+	s.renderFeeds(w, r, http.StatusOK, nil, nil)
 }
 
 // renderFeeds draws the feed list, optionally reporting on an import that just
@@ -363,7 +409,9 @@ func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
 // Shared by GET /feeds and POST /feeds/import so that the page after an upload is
 // the same page, freshly counted — an import that subscribed to seventy feeds
 // should show seventy feeds, not a summary line above a stale list.
-func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int, imported *importOutcome) {
+func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int,
+	imported *importOutcome, refreshed *refreshOutcome,
+) {
 	userID := signedInUser(r)
 
 	feeds, err := s.store.ListFeeds(r.Context(), userID)
@@ -385,17 +433,73 @@ func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int,
 		return
 	}
 
-	page := feedsPage{pageData: s.pageData(r, "feeds"), Tags: tags, Imported: imported}
+	page := feedsPage{
+		pageData: s.pageData(r, "feeds"),
+		Tags:     tags, Imported: imported, Refreshed: refreshed,
+	}
 	page.Unread = counts.Total
 
 	for _, f := range feeds {
 		if f.ConsecutiveFailures > 0 || f.Disabled {
 			page.Broken++
 		}
-		page.Feeds = append(page.Feeds, feedRow{Feed: f, Unread: counts.ByFeed[f.ID]})
+		page.Feeds = append(page.Feeds, feedRow{
+			Feed:         f,
+			Unread:       counts.ByFeed[f.ID],
+			CategoryPath: categoryPath(f.Category),
+		})
 	}
 
 	s.render(w, status, "feeds", page)
+}
+
+// categoriesPage is the category index: the folders an OPML import produced,
+// which is how a reader looks up "Comics" without remembering which feeds are in
+// it.
+type categoriesPage struct {
+	pageData
+
+	Categories []categoryRow
+}
+
+type categoryRow struct {
+	store.Category
+
+	// Heading is the display name, which differs from Name only for the category
+	// that has none.
+	Heading string
+	Path    string
+}
+
+// handleCategories is both the index and one category's stream.
+//
+// One route, split on whether `name` is present — the same shape as /search,
+// which is a form until it has something to search for. Present-but-empty selects
+// the feeds with no category, which is why this tests for the parameter rather
+// than for a non-empty value.
+func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("name") {
+		s.serveStream(w, r, s.categorySpec(r.URL.Query().Get("name")))
+		return
+	}
+
+	categories, err := s.store.ListCategories(r.Context(), signedInUser(r))
+	if err != nil {
+		s.log.Error("listing categories failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	page := categoriesPage{pageData: s.pageData(r, "categories")}
+	for _, c := range categories {
+		page.Categories = append(page.Categories, categoryRow{
+			Category: c,
+			Heading:  categoryHeading(c.Name),
+			Path:     categoryPath(c.Name),
+		})
+	}
+
+	s.render(w, http.StatusOK, "categories", page)
 }
 
 // attentionPage is the failed-fetch queue.
@@ -481,10 +585,15 @@ func (s *Server) toggle(w http.ResponseWriter, r *http.Request, set stateSetter)
 		return
 	}
 
+	// Every field, including the one this request did not change. The fragment
+	// replaces all three controls, so a missing Kept here rendered the keep button
+	// as "not kept" after any star or read toggle — the state was still in the
+	// database, but the reader was told otherwise until they reloaded.
 	s.renderFragment(w, http.StatusOK, "actions", actions{
 		ArticleID: view.Article.ID,
 		Read:      view.Read,
 		Starred:   view.Starred,
+		Kept:      view.Kept,
 	})
 }
 
@@ -579,6 +688,34 @@ func pathID(r *http.Request, name string) (int64, bool) {
 }
 
 func isHTMX(r *http.Request) bool { return r.Header.Get("HX-Request") == "true" }
+
+// pageURL adds a parameter to a path that may already carry one.
+//
+// A category's path does — it identifies the category by query parameter — so
+// appending "?before=..." unconditionally would produce a URL with two question
+// marks and a next-page link that silently paged from the beginning.
+func pageURL(path, key, value string) string {
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	return path + separator + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+}
+
+// selfPath is this request's own path and query, for the reload control.
+//
+// A path beginning with two slashes is rejected: `//example.com/` in an href is
+// protocol-relative, so echoing the request line back into a link would turn a
+// reload button into an off-site one. ServeMux cleans such paths before a handler
+// sees them, which makes this belt as well as braces — and belt as well as braces
+// is the right amount for the one place a request line reaches an href.
+func selfPath(r *http.Request) string {
+	uri := r.URL.RequestURI()
+	if !strings.HasPrefix(uri, "/") || strings.HasPrefix(uri, "//") {
+		return "/"
+	}
+	return uri
+}
 
 // The cursor is the sort timestamp and the id, which is exactly the keyset the
 // store pages on. Opaque to the reader but deliberately not encrypted: it is a

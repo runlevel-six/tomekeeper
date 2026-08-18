@@ -26,7 +26,7 @@
         {{range .Items}}
         <tr>
           <th scope="row">
-            <a href="/articles/{{.ArticleID}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a>
+            <a href="/articles/{{.ArticleID}}?from=attention">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a>
             <span class="url">{{.URLCanonical}}</span>
           </th>
           <td>{{.FeedTitle}}</td>
