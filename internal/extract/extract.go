@@ -47,6 +47,7 @@ const (
 	NameTrafilatura = "trafilatura"
 	NameReadability = "readability"
 	NameFeedBody    = "feed_body"
+	NamePageImages  = "page_images"
 )
 
 // Acceptance thresholds.
@@ -172,20 +173,33 @@ func (e *Extractor) Extract(in Input) (Result, error) {
 
 		// Rung 2.
 		if r, ok := e.viaTrafilatura(in, pageURL, visible); ok {
-			return e.orTheFeedIfRicher(in, pageURL, r), nil
+			return e.bestOf(in, pageURL, r), nil
 		}
 
 		// Rung 3.
 		if r, ok := e.viaReadability(in, pageURL, visible); ok {
-			return e.orTheFeedIfRicher(in, pageURL, r), nil
+			return e.bestOf(in, pageURL, r), nil
 		}
 	}
 
-	// Rung 5. The feed body is not compared against the page's text — it is a
+	// Rung 4. The feed body is not compared against the page's text — it is a
 	// different document, and comparing them would reject every truncated
 	// summary for being short relative to a page it does not come from.
 	if r, ok := e.viaFeedBody(in, pageURL); ok {
 		return r, nil
+	}
+
+	// Rung 5. The page's own images, for articles that are a picture.
+	//
+	// Last deliberately, and after the feed body rather than before it. A page
+	// whose text extraction failed is usually paywalled or JavaScript-rendered,
+	// not a comic, and for those the feed's words are worth more than the
+	// article's hero image. Ordering this rung first would trade real prose for
+	// a picture on every one of them.
+	if len(in.RawHTML) > 0 {
+		if r, ok := e.viaPageImages(in, pageURL); ok {
+			return r, nil
+		}
 	}
 
 	return Result{}, ErrNoContent
@@ -229,6 +243,16 @@ func (e *Extractor) orTheFeedIfRicher(in Input, pageURL *url.URL, page Result) R
 		return page
 	}
 	return feed
+}
+
+// bestOf second-guesses a rung that declared success.
+//
+// Both corrections it applies exist because "acceptable" is a floor rather than
+// a judgement, and a page's header block or its navigation sidebar clears a
+// floor as easily as an article does.
+func (e *Extractor) bestOf(in Input, pageURL *url.URL, page Result) Result {
+	page = e.orTheFeedIfRicher(in, pageURL, page)
+	return e.orThePageImagesIfTextless(in, pageURL, page)
 }
 
 func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {

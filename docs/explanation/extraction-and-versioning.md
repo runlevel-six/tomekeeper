@@ -36,6 +36,7 @@ Extraction runs in order and stops at the first acceptable result:
 3. **go-readability**, the fallback.
 4. *Headless rendering* — planned, for domains flagged `requires_js`.
 5. **The feed's own body**, if everything else failed.
+6. **The page's own images**, for articles that are a picture rather than prose.
 
 Two extractors rather than one because they fail differently. Trafilatura has
 better precision on news and blog markup; readability handles some older,
@@ -116,13 +117,69 @@ This rung matters more than its position suggests. When a site goes down
 between publication and the next poll, the feed's copy is the only copy — and
 that is precisely the moment archiving is worth having.
 
+### The page images rung
+
+Webcomics defeat every rung above, and not by a small margin. Each of those
+extractors scores by text density, and a comic has almost none — so they do not
+rank the strip poorly, they cannot see it at all, and settle on the largest block
+of words on the page instead. On one strip that was the news sidebar: seventy-
+eight words of shop announcements, stored as the article, with the comic absent
+entirely.
+
+The acceptance floor then closed the last door. `minChars` rejects anything under
+200 characters as a paywall stub or a navigation shell, which is right for text
+and exactly wrong here, so even a hand-written domain rule pointing straight at
+the strip produced nothing. This rung does not consult the floor.
+
+Telling the comic from the furniture is the real problem, on pages carrying
+twenty images of navigation arrows, logos and banners. The signal is that a
+content image's URL contains the article's own slug, while chrome lives under
+generic paths shared by every page on the site:
+
+| Article | Its image | Chrome on the same page |
+|---|---|---|
+| `/comics/oots1347.html` | `/comics/strip/**oots1347**_….png` | `/redesign/ComicNav_Next.gif` |
+| `/2016/**project-lifecycle**` | `/2016/project-lifecycle/4-….png` | `/images/logo.png` |
+| `/comics/**design_hell**` | `/comics/design_hell/1.png, 2.jpg` | `/default/header_2023/….png` |
+
+It is a precise signal rather than a clever one, and that is the point: a false
+positive stores a banner in place of an article, so the rung would rather find
+nothing and fall through than guess. Sites whose image URLs share nothing with
+their page URLs are not rescued and still need a domain rule.
+
+**Last, and after the feed body, on purpose.** A page whose text extraction
+failed is usually paywalled or JavaScript-rendered rather than a comic, and for
+those the feed's words are worth more than the article's hero image. Ordering
+this rung earlier would trade real prose for a picture on every one of them.
+
+### Second-guessing a rung that succeeded
+
+Two corrections apply to a rung that already declared success, because
+"acceptable" is a floor rather than a judgement — a page's header block or its
+navigation sidebar clears a floor as easily as an article does.
+
+**A much richer feed body wins.** Observed on a real article where trafilatura
+returned 30 words — the title twice and two dates — while the feed carried the
+whole 2,000-word piece, which was then discarded. When the feed body is three
+times richer than the page extraction, the feed wins. This is safe in one
+direction only, which is what makes it sound: a feed summary is a *truncation* of
+the article, so it cannot legitimately be several times longer than the article's
+own body. It can only ever move toward the longer text, never the shorter, so it
+cannot cause the truncated-summary failure this whole ladder exists to prevent.
+
+**A thin, imageless body loses to the page's images.** Three conditions, all
+required, because replacing a body is destructive: the body carries no image at
+all, it is under 120 words, and the page has images bearing the article's slug. A
+body that already contains an image is left alone whatever its length —
+extraction found the picture, and there is nothing to add.
+
 ## Versioning
 
 Every body records the extractor that produced it and the version of the
 extraction *behavior*, a constant in the code:
 
 ```go
-const Version = "2"
+const Version = "3"
 ```
 
 **Bump it whenever extraction output could change** — a new rung, a changed
@@ -135,6 +192,7 @@ never reaches the archive it was written for.
 |---|---|
 | `1` | The ladder as originally specified. |
 | `2` | The ratio check no longer applies to bodies past 2,000 characters (2026-08-17). |
+| `3` | A much richer feed body wins over a thin page extraction; a page images rung for webcomics (2026-08-18). |
 
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not
