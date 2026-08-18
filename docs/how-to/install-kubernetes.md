@@ -196,6 +196,8 @@ articles — which is the part that is small and irreplaceable.
 It does not cover the blob tree, which is much larger and is not something a
 CronJob should be shipping around. Replicate `tomekeeper-blobs` with a tool built
 for it, or accept that a total loss means re-fetching what is still online.
+[Back up and restore](back-up-and-restore.md) has a recipe for copying it out — and
+why the obvious `kubectl cp` does not work against a distroless image.
 
 To restore:
 

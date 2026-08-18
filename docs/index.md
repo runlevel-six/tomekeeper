@@ -29,6 +29,8 @@ you are new.
 
 - [1. Your first run](tutorials/01-first-run.md) — database to collected
   articles in about 20 minutes
+- [2. Bring your reading with you](tutorials/02-import-your-feeds.md) — your
+  subscriptions and your saved articles, and what does not survive the move
 
 ### How-to guides — goals
 
@@ -37,6 +39,8 @@ doing.
 
 - [Add a domain rule](how-to/add-a-domain-rule.md) — fixing a site that
   extracts badly
+- [Back up and restore](how-to/back-up-and-restore.md) — the database and the
+  files are two backups, and one of them is not automatic
 - [Export everything](how-to/export-everything.md) — a portable copy of the whole
   archive, and what a round trip preserves
 - [Import from Wallabag](how-to/import-from-wallabag.md) — a read-later library,
@@ -73,6 +77,8 @@ rejected. Design rationale lives here and nowhere else.
 - [Extraction and versioning](explanation/extraction-and-versioning.md) — why
   bodies are regenerable and raw pages are kept
 - [Politeness and rate limiting](explanation/politeness-and-rate-limiting.md)
+- [What this deliberately will not do](explanation/non-goals.md) — the refusals,
+  and the reasoning, so the arguments are had once
 - [Scoping and access control](explanation/scoping-and-access-control.md) —
   one user today, several later, and what is kept true meanwhile
 - [Why the filesystem is the archive](explanation/why-the-filesystem-is-the-archive.md)
