@@ -45,6 +45,39 @@ blocks, and general enough to still match next month. Prefer a semantic
 attribute (`[data-role="story-body"]`, `article.post-content`) over a generated
 class name (`.css-1a2b3c`), which changes on the site's next deploy.
 
+### A body split across several blocks
+
+Some sites break the article around mid-article advertising, emitting several
+sibling blocks that each hold part of it:
+
+```html
+<div class="post-content"> …first third… </div>
+<div class="ad-wrapper">…</div>
+<div class="post-content"> …second third… </div>
+<div class="ad-wrapper">…</div>
+<div class="post-content"> …last third… </div>
+```
+
+The heuristics take one block and stop, which is why an article can look as though
+it simply ended early — and why the same site can extract correctly on one article
+and badly on the next, depending on where the first block happened to end. A rule
+handles it: **every** element the selector matches is used, in document order, so
+naming the class they share reassembles the article.
+
+The lead image is often *outside* those blocks. A comma-separated selector picks
+both up, and an element that falls inside another match is skipped rather than
+emitted twice, so overlapping selectors do not duplicate a picture:
+
+```sh
+tome domain-rule set \
+  --selector 'div.article-header > div.lightbox, .post-content' \
+  --strip '.ad-wrapper' --strip '.related-stories' \
+  example.com
+```
+
+Check the article's own length before and after. If the text roughly triples, the
+page was one of these.
+
 To check what the extractors currently do with the page you already have
 stored, without going back to the network:
 

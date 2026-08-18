@@ -516,11 +516,32 @@ type feedsPage struct {
 	Tags   []store.Tag
 	Broken int
 
+	// Categories are the folder names already in use, offered as suggestions when
+	// filing a new subscription. A category exists only because some feed claims
+	// it, so this is the whole list there is.
+	Categories []string
+
+	// TestingAvailable says whether this instance can test a feed URL before
+	// subscribing, which needs an outbound HTTP client.
+	TestingAvailable bool
+
+	feedsExtras
+}
+
+// feedsExtras are the results of whatever the reader just did, if anything.
+//
+// One struct rather than a parameter each, because every one of them is optional,
+// they are mutually exclusive in practice, and a render function with four nil
+// pointers in its signature is a call nobody can read.
+type feedsExtras struct {
 	// Imported is set only on the page rendered straight after an upload.
 	Imported *importOutcome
 
 	// Refreshed is set only on the page rendered straight after a manual refresh.
 	Refreshed *refreshOutcome
+
+	// Add is set after testing or adding a single subscription.
+	Add *addFeedOutcome
 }
 
 type feedRow struct {
@@ -533,17 +554,16 @@ type feedRow struct {
 }
 
 func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
-	s.renderFeeds(w, r, http.StatusOK, nil, nil)
+	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{})
 }
 
-// renderFeeds draws the feed list, optionally reporting on an import that just
-// happened.
+// renderFeedsWith draws the feed list, reporting on whatever the reader just did.
 //
-// Shared by GET /feeds and POST /feeds/import so that the page after an upload is
-// the same page, freshly counted — an import that subscribed to seventy feeds
-// should show seventy feeds, not a summary line above a stale list.
-func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int,
-	imported *importOutcome, refreshed *refreshOutcome,
+// Shared by every route that changes subscriptions so that the page after an
+// action is the same page, freshly counted — an import that subscribed to seventy
+// feeds should show seventy feeds, not a summary line above a stale list.
+func (s *Server) renderFeedsWith(w http.ResponseWriter, r *http.Request, status int,
+	extras feedsExtras,
 ) {
 	userID := signedInUser(r)
 
@@ -567,10 +587,24 @@ func (s *Server) renderFeeds(w http.ResponseWriter, r *http.Request, status int,
 	}
 
 	page := feedsPage{
-		pageData: s.pageData(r, "feeds"),
-		Tags:     tags, Imported: imported, Refreshed: refreshed,
+		pageData:         s.pageData(r, "feeds"),
+		Tags:             tags,
+		TestingAvailable: s.fetch != nil,
+		feedsExtras:      extras,
 	}
 	page.Unread = counts.Total
+
+	// The categories in use, for the suggestion list on the add form. A failed
+	// lookup costs the suggestions, not the page.
+	if categories, err := s.store.ListCategories(r.Context(), userID); err != nil {
+		s.log.Warn("listing categories for the feed form failed", "error", err)
+	} else {
+		for _, c := range categories {
+			if c.Name != "" {
+				page.Categories = append(page.Categories, c.Name)
+			}
+		}
+	}
 
 	for _, f := range feeds {
 		if f.ConsecutiveFailures > 0 || f.Disabled {

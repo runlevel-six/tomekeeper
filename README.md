@@ -27,7 +27,8 @@ What is there:
   for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
-- **Bringing a library with you.** `tome import` reads a Wallabag JSON export:
+- **Bringing a library with you.** `tome import`, or an upload on the Saved page,
+  reads a Wallabag JSON export:
   deduplicated against what your feeds already carried, dated when you saved each
   page rather than when you imported it, safe to re-run, and it reports what it
   will do before it does it — including the pages your old reader never actually
@@ -36,10 +37,11 @@ What is there:
   bar, a way back from every article, previous/next, a reload control, and the
   unread count in the title and on the app icon — because a standalone window
   provides none of that.
-- **Subscriptions.** OPML import from the CLI or by upload. Feed health with the
-  last error each feed gave, a queue of anything that did not come through
-  cleanly, and a button to check every feed now rather than waiting for the
-  adaptive interval.
+- **Subscriptions.** Add a feed by pasting a site's address — it finds the feed the
+  page advertises, tests it, and shows you what it carries before you subscribe.
+  OPML import from the CLI or by upload. Feed health with the last error each feed
+  gave, a queue of anything that did not come through cleanly, and a button to check
+  every feed now rather than waiting for the adaptive interval.
 - **Keeping, and letting go.** Star or keep an article to protect its stored copy
   forever; optional retention releases the bodies of things you have read and did
   not keep. Off by default.

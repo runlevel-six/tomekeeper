@@ -15,6 +15,7 @@ Recognized headers:
 | `url` | The article URL, used to resolve relative references. Required. |
 | `extractor` | Which rung must win: `domain_rule`, `trafilatura`, `readability`, `feed_body`. Optional; unset means any is acceptable. |
 | `min_chars` | The extracted text must be at least this long. Optional. |
+| `min_images` | The stored body must hold at least this many images. Optional. |
 | `selector` | A domain-rule content selector to apply. Optional. |
 | `strip` | A domain-rule strip selector. May be repeated. Optional. |
 | `feed_body` | Path to a file holding the feed's own body, for the fallback rung. Optional. |
@@ -23,6 +24,15 @@ Recognized headers:
 The `!` lines are the ones that catch regressions worth catching. An extractor
 that starts including navigation, cookie banners, or "related stories" still
 looks fine by length; it only shows up as forbidden text appearing in the body.
+
+Every `contains` line is checked against **both** the extracted text and the
+stored body, and whitespace is collapsed before comparing so an assertion does not
+depend on where the saved page happened to wrap a line. The two-place check exists
+because a bug hid behind a one-place one: a domain rule emitted the first of three
+content blocks while reporting the text of all three, so every threshold and every
+substring assertion passed while the reader saw a third of the article. The text and
+the body are two renderings of one document; a fixture that only reads one of them
+cannot notice them diverging.
 
 ## Two corpora
 

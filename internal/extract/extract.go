@@ -314,7 +314,7 @@ func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {
 		return Result{}, false
 	}
 
-	body, err := selection.Html()
+	body, err := joinHTML(selection)
 	if err != nil {
 		return Result{}, false
 	}
@@ -414,6 +414,67 @@ func (e *Extractor) viaFeedBody(in Input, pageURL *url.URL) (Result, bool) {
 	}
 
 	return e.finish(NameFeedBody, body, text, pageURL, metadata{}), true
+}
+
+// joinHTML concatenates the contents of every element a rule selected.
+//
+// Every element, which sounds obvious and was not: goquery's Html() returns the
+// contents of the *first* matched element only, while Text() returns the text of
+// them all. A selector matching three blocks therefore produced a body holding one
+// of them and a text holding three — and because the ladder's length checks read
+// the text, the result passed every threshold and looked like a working rule. What
+// the reader got was the first third of the article; what search indexed was all of
+// it. The two are stored in the same row and are meant to be the same document.
+//
+// This is not a rare shape. A site that breaks its article around mid-article
+// advertising emits exactly this: several sibling content blocks, each complete,
+// with the furniture between them. Ars Technica is one, and the truncation is
+// invisible from the outside because the first block is a plausible article.
+//
+// Elements nested inside another match are skipped. A rule naming both a wrapper
+// and something inside it — `.lightbox, .post-content`, where a lightbox also
+// appears within a post-content block — would otherwise emit that inner element
+// twice, and a duplicated image in the middle of an article is a strange thing to
+// have to explain. Taking the outermost is what somebody writing that selector
+// means.
+func joinHTML(selection *goquery.Selection) (string, error) {
+	matched := make(map[*html.Node]bool, selection.Length())
+	selection.Each(func(_ int, s *goquery.Selection) {
+		for _, node := range s.Nodes {
+			matched[node] = true
+		}
+	})
+
+	var (
+		joined strings.Builder
+		failed error
+	)
+	selection.EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		if nestedIn(matched, s.Nodes[0]) {
+			return true
+		}
+		inner, err := s.Html()
+		if err != nil {
+			failed = err
+			return false
+		}
+		joined.WriteString(inner)
+		return true
+	})
+	if failed != nil {
+		return "", failed
+	}
+	return joined.String(), nil
+}
+
+// nestedIn reports whether a node has an ancestor that was also selected.
+func nestedIn(matched map[*html.Node]bool, node *html.Node) bool {
+	for parent := node.Parent; parent != nil; parent = parent.Parent {
+		if matched[parent] {
+			return true
+		}
+	}
+	return false
 }
 
 // metadata is what a rung recovered about the article itself.

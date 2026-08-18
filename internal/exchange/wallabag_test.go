@@ -312,23 +312,29 @@ func TestWallabagDetection(t *testing.T) {
 		{"library.json", true},
 		{"onebadrecord.json", true},
 		{"truncated.json", true}, // recognizable even though it is unreadable
+		{"cutbetweenrecords.json", true},
 		{"notanexport.txt", false},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
-			got, err := (exchange.Wallabag{}).Detect(filepath.Join(fixtures, tc.file))
+			head, err := os.ReadFile(filepath.Join(fixtures, tc.file))
 			if err != nil {
-				t.Fatalf("Detect() = %v", err)
+				t.Fatalf("reading the fixture: %v", err)
 			}
-			if got != tc.want {
+			if len(head) > exchange.DetectHead {
+				head = head[:exchange.DetectHead]
+			}
+
+			if got := (exchange.Wallabag{}).Detect(head); got != tc.want {
 				t.Errorf("Detect(%s) = %v, want %v", tc.file, got, tc.want)
 			}
 		})
 	}
 
-	// A missing file is an error rather than "not this format": the operator named
-	// it, so being unable to open it is worth saying plainly.
-	if _, err := (exchange.Wallabag{}).Detect(filepath.Join(fixtures, "nothing-here.json")); err == nil {
-		t.Error("detecting a missing file reported no error")
+	// Detection is given bytes rather than a path so that the same code serves a
+	// file named on a command line and a file uploaded to the web interface. An
+	// empty or tiny export is not a panic.
+	if (exchange.Wallabag{}).Detect(nil) {
+		t.Error("nothing at all was detected as a wallabag export")
 	}
 }
 
@@ -339,6 +345,13 @@ func TestDetectImporterPicksTheAdapter(t *testing.T) {
 	}
 	if imp == nil || imp.Name() != exchange.SourceWallabag {
 		t.Fatalf("DetectImporter() = %v, want the wallabag adapter", imp)
+	}
+
+	// A missing file is an error rather than "not this format": the operator named
+	// it, so being unable to open it is worth saying plainly instead of being
+	// reported as an unknown format.
+	if _, err := exchange.DetectImporter(filepath.Join(fixtures, "nothing-here.json")); err == nil {
+		t.Error("detecting a missing file reported no error")
 	}
 
 	// An unrecognized file is not an error — the caller turns it into a message

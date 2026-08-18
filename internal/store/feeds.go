@@ -110,6 +110,22 @@ func (s *Store) GetFeed(ctx context.Context, userID UserID, feedID FeedID) (Feed
 	return f, nil
 }
 
+// FeedByURL looks up one of the reader's feeds by its URL.
+//
+// Reported as not found for a URL they do not subscribe to, and scoped to the
+// reader for the usual reason: feeds are per-user rows, so "am I already
+// subscribed to this" is a question about one person's list and not about the
+// archive.
+func (s *Store) FeedByURL(ctx context.Context, userID UserID, feedURL string) (Feed, error) {
+	f, err := scanFeed(s.pool.QueryRow(ctx,
+		`SELECT `+feedColumns+` FROM feeds WHERE user_id = $1 AND feed_url = $2`,
+		userID, feedURL))
+	if err != nil {
+		return Feed{}, fmt.Errorf("looking up feed %q for user %d: %w", feedURL, userID, err)
+	}
+	return f, nil
+}
+
 // ListFeeds returns all of a user's feeds, ordered for display.
 func (s *Store) ListFeeds(ctx context.Context, userID UserID) ([]Feed, error) {
 	rows, err := s.pool.Query(ctx,

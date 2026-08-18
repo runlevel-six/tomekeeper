@@ -32,18 +32,12 @@ func (Wallabag) Name() string { return SourceWallabag }
 // saved it as. `url` and `is_archived` together are specific enough — `url` alone
 // appears in half the JSON on earth, and `is_archived` is Wallabag's own
 // vocabulary for what other readers call read.
-func (Wallabag) Detect(path string) (bool, error) {
-	head, err := headOf(path)
-	if err != nil {
-		return false, err
-	}
-
-	trimmed := bytes.TrimSpace(head)
-	if !bytes.HasPrefix(trimmed, []byte("[")) {
-		return false, nil
+func (Wallabag) Detect(head []byte) bool {
+	if !bytes.HasPrefix(bytes.TrimSpace(head), []byte("[")) {
+		return false
 	}
 	return bytes.Contains(head, []byte(`"is_archived"`)) &&
-		bytes.Contains(head, []byte(`"url"`)), nil
+		bytes.Contains(head, []byte(`"url"`))
 }
 
 // wallabagEntry is one record of the export.

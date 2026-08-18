@@ -25,11 +25,14 @@ type Importer interface {
 	// as new articles.
 	Name() string
 
-	// Detect reports whether a file looks like this adapter's format, so that
-	// `tome import ./export.json` needs no --format flag. It examines the file's
-	// first few kilobytes rather than parsing it, because detection runs on files
-	// this adapter is about to decline.
-	Detect(path string) (bool, error)
+	// Detect reports whether an export looks like this adapter's format, so that
+	// `tome import ./export.json` needs no --format flag.
+	//
+	// It is given the first few kilobytes rather than a path, which is what lets the
+	// same detection serve a file named on a command line and a file uploaded to the
+	// web interface. Parsing is not its job: detection runs on exports this adapter
+	// is about to decline.
+	Detect(head []byte) bool
 
 	// Import yields one article per record.
 	//
@@ -83,23 +86,35 @@ func Importers() []Importer {
 	return []Importer{Wallabag{}}
 }
 
-// DetectImporter finds the adapter that recognizes a file.
+// DetectImporter finds the adapter that recognizes a file on disk.
 //
 // Reports a nil Importer and no error when nothing recognizes it: not knowing a
 // format is an ordinary outcome that the caller turns into a message naming the
 // formats it does know, which is more use than an error saying one file failed.
+// Being unable to read the file at all is an error, because the operator named it.
 func DetectImporter(path string) (Importer, error) {
+	head, err := headOf(path)
+	if err != nil {
+		return nil, err
+	}
+	return DetectImporterFor(head), nil
+}
+
+// DetectImporterFor finds the adapter that recognizes the start of an export.
+//
+// This is the form an upload uses: the bytes are already in hand and there is no
+// path to name. Nil means no adapter recognized it.
+func DetectImporterFor(head []byte) Importer {
 	for _, imp := range Importers() {
-		ok, err := imp.Detect(path)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			return imp, nil
+		if imp.Detect(head) {
+			return imp
 		}
 	}
-	return nil, nil
+	return nil
 }
+
+// DetectHead is how much of an export a caller should read for DetectImporterFor.
+const DetectHead = detectHead
 
 // ImporterNamed finds an adapter by name, for `--format`.
 func ImporterNamed(name string) (Importer, bool) {

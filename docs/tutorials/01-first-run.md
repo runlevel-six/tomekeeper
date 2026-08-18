@@ -340,6 +340,11 @@ maintainable:
   dropped silently. It also has **Check all feeds now**, which brings every feed's
   next poll forward — useful in a tutorial, where you do not want to wait fifteen
   minutes to see the adaptive interval do something.
+
+  It is also where you add a feed by hand. Try it with a site you read: paste the
+  *site's* address rather than hunting for its feed URL, press **Test**, and the
+  page reports the feed it found — following the site's own feed link if what you
+  gave it was a web page. File it in a category and press **Add feed**.
 - **Attention** lists anything that did not come through cleanly — usually a site
   that needs a [domain rule](../how-to/add-a-domain-rule.md), sometimes a page no
   extractor will ever read. Nothing there is lost; the stored page can be

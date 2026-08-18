@@ -45,25 +45,27 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(maxOPMLMemory); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			s.renderFeeds(w, r, http.StatusRequestEntityTooLarge, &importOutcome{
-				Problem: "That file is larger than 4MB, which is far larger than any subscription list. " +
-					"Check that it is the OPML export and not something else.",
-			}, nil)
+			s.renderFeedsWith(w, r, http.StatusRequestEntityTooLarge, feedsExtras{
+				Imported: &importOutcome{
+					Problem: "That file is larger than 4MB, which is far larger than any subscription list. " +
+						"Check that it is the OPML export and not something else.",
+				},
+			})
 			return
 		}
 		s.log.Warn("reading an OPML upload failed", "error", err)
-		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
-			Problem: "The upload did not arrive intact. Try again.",
-		}, nil)
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{
+			Imported: &importOutcome{Problem: "The upload did not arrive intact. Try again."},
+		})
 		return
 	}
 	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	file, header, err := r.FormFile("opml")
 	if err != nil {
-		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
-			Problem: "No file was chosen.",
-		}, nil)
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{
+			Imported: &importOutcome{Problem: "No file was chosen."},
+		})
 		return
 	}
 	defer func() { _ = file.Close() }()
@@ -76,18 +78,22 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	subs, err := feed.ParseOPML(file)
 	if err != nil {
 		s.log.Info("an uploaded OPML file could not be parsed", "filename", header.Filename, "error", err)
-		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
-			Filename: header.Filename,
-			Problem: "That does not look like an OPML file. Most readers call the export " +
-				"“subscriptions”, “OPML” or “feeds”, and the file usually ends in .opml or .xml.",
-		}, nil)
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{
+			Imported: &importOutcome{
+				Filename: header.Filename,
+				Problem: "That does not look like an OPML file. Most readers call the export " +
+					"“subscriptions”, “OPML” or “feeds”, and the file usually ends in .opml or .xml.",
+			},
+		})
 		return
 	}
 	if len(subs) == 0 {
-		s.renderFeeds(w, r, http.StatusBadRequest, &importOutcome{
-			Filename: header.Filename,
-			Problem:  "That file parsed as OPML but contains no subscriptions.",
-		}, nil)
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{
+			Imported: &importOutcome{
+				Filename: header.Filename,
+				Problem:  "That file parsed as OPML but contains no subscriptions.",
+			},
+		})
 		return
 	}
 
@@ -104,10 +110,9 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 		"filename", header.Filename,
 		"added", result.Added, "existing", result.Existing, "failed", len(result.Failures))
 
-	s.renderFeeds(w, r, http.StatusOK, &importOutcome{
-		Filename: header.Filename,
-		Result:   &result,
-	}, nil)
+	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{
+		Imported: &importOutcome{Filename: header.Filename, Result: &result},
+	})
 }
 
 // importOutcome is what the feeds page says about an import that just happened.
@@ -134,8 +139,8 @@ func (s *Server) handleRefreshFeeds(w http.ResponseWriter, r *http.Request) {
 	result, err := s.store.PollNow(r.Context(), signedInUser(r))
 	if err != nil {
 		s.log.Error("bringing feed polls forward failed", "error", err)
-		s.renderFeeds(w, r, http.StatusInternalServerError, nil, &refreshOutcome{
-			Problem: "The feeds could not be queued. The log will say why.",
+		s.renderFeedsWith(w, r, http.StatusInternalServerError, feedsExtras{
+			Refreshed: &refreshOutcome{Problem: "The feeds could not be queued. The log will say why."},
 		})
 		return
 	}
@@ -143,7 +148,7 @@ func (s *Server) handleRefreshFeeds(w http.ResponseWriter, r *http.Request) {
 	s.log.Info("feeds queued for an on-demand poll",
 		"moved", result.Moved, "held", result.Held, "disabled", result.Disabled)
 
-	s.renderFeeds(w, r, http.StatusOK, nil, &refreshOutcome{Result: &result})
+	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{Refreshed: &refreshOutcome{Result: &result}})
 }
 
 // refreshOutcome is what the feeds page says after a manual refresh.

@@ -103,11 +103,18 @@ as a whole. Only some affect a given command's behavior:
 | `TOME_SESSION_KEY`, `TOME_COOKIE_SECURE` | yes | — | — | — | — | — | — |
 | `TOME_METRICS_ADDR` | yes | yes | — | — | — | — | — |
 | `TOME_RETAIN_AFTER_READ` | — | yes | — | — | — | — | — |
-| `TOME_CONTACT_URL` | — | yes | — | — | — | — | — |
+| `TOME_CONTACT_URL` | testing a feed | yes | — | — | — | — | — |
 | `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — | — | — | — |
-| `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — | — | — | — |
+| `TOME_FETCH_RPS` | testing a feed | yes | — | — | — | — | — |
+| `TOME_FETCH_CONCURRENCY` | — | yes | — | — | — | — | — |
 | `TOME_IMAGE_CONCURRENCY` | — | yes | — | — | — | — | — |
 | `TOME_BLOB_ROOT` | serves images | writes the archive | — | — | — | — | — |
+
+**`tome serve` makes exactly one kind of outbound request**, and only when somebody
+presses **Test** on the add-a-feed form: it fetches that one feed URL and reports
+what is there. That is why the two rows above name it. Polling, article fetches and
+images all remain the worker's, and the reader-facing process has no job client —
+so `TOME_FETCH_CONCURRENCY` is deliberately not read there.
 
 `tome archive stats` is absent from that last row on purpose: it reports the
 archive's size from the database's own byte totals rather than by walking the tree,

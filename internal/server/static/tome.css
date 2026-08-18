@@ -496,6 +496,88 @@ kbd {
 }
 .save-box input[type="url"]:focus-visible { border-color: var(--accent); outline: none; }
 
+/* Importing a library, below the reading list it adds to. Constrained like the
+   list itself rather than inheriting main's full width. */
+.import-library {
+  max-width: 46rem;
+  margin: 2.5rem auto 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+.import-library form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.import-library label { font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-soft); }
+.import-library label[for="library"] { flex-basis: 100%; }
+.import-library input[type="file"] { font: inherit; font-size: 0.85rem; color: var(--ink-soft); flex: 1 1 14rem; }
+.import-library input[type="file"]::file-selector-button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+  margin-right: 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+/* The dry-run checkbox reads as a sentence, so it is not shouted in small caps
+   like the field labels above it. */
+.import-library label.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.import-library .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+.import-library .report {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+.import-library .report li { margin-bottom: 0.2rem; }
+
+/* Add a feed: three fields and two submits. Laid out as rows rather than a grid
+   so it reflows to one column on a phone without a second set of rules. */
+.add-feed {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+.add-feed .field { margin-bottom: 0.75rem; }
+.add-feed label {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+.add-feed input[type="text"] {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.add-feed input[type="text"]:focus-visible { border-color: var(--accent); outline: none; }
+.add-feed .actions-row { display: flex; gap: 0.75rem; margin-top: 1rem; }
+
+/* What a test found. The sample titles are the cheapest way to recognize a feed,
+   so they are given room rather than being squeezed into the summary line. */
+.probe .probe-sample {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.probe code { word-break: break-all; }
+
 /* Import: the result of an upload, and the form that starts one. Same left-rule
    treatment as .warn-banner, so the three states read as one family. */
 .import-result {

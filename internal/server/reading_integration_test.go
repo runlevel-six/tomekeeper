@@ -73,16 +73,7 @@ func readingFixture(t *testing.T) (*reader, twoReadersHTTP) {
 		t.Fatalf("NewCookie() = %v", err)
 	}
 
-	p := auth.DefaultParams()
-	p.Memory, p.Iterations = 8*1024, 1
-	hash, err := auth.HashWith(p, testPassword)
-	if err != nil {
-		t.Fatalf("HashWith() = %v", err)
-	}
-	if err := tr.store.System().SetPassword(t.Context(), tr.alice, hash,
-		auth.FeverAPIKey("tome", testPassword)); err != nil {
-		t.Fatalf("SetPassword() = %v", err)
-	}
+	seedPassword(t, tr)
 
 	srv := server.New(testConfig(), discardLogger(),
 		server.Deps{Store: tr.store, Sessions: sessions})
@@ -96,6 +87,26 @@ func readingFixture(t *testing.T) (*reader, twoReadersHTTP) {
 	rd.jar = login.Result().Cookies()
 
 	return rd, tr
+}
+
+// seedPassword gives the fixture's reader a password they can sign in with.
+//
+// Deliberately cheap parameters: the real ones are tuned so that verification costs
+// a noticeable fraction of a second, which is correct in production and is dozens of
+// seconds across a test suite that signs in for every case.
+func seedPassword(t *testing.T, tr twoReadersHTTP) {
+	t.Helper()
+
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, testPassword)
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := tr.store.System().SetPassword(t.Context(), tr.alice, hash,
+		auth.FeverAPIKey("tome", testPassword)); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
 }
 
 // twoReadersHTTP is the same shape as the store package's fixture. Duplicated

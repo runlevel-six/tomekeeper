@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 
 	"github.com/runlevel-six/tomekeeper/internal/extract"
 )
@@ -67,16 +70,44 @@ func TestCorpus(t *testing.T) {
 					len(got.Text), tc.minChars, truncate(got.Text))
 			}
 
+			// Asserted against the body as well as the text, and the reason is a
+			// bug that hid here for a milestone. Result.Text and Result.HTML are
+			// two renderings of one document and are stored in one row, but nothing
+			// checked that they agreed — so a domain rule that emitted the first of
+			// three content blocks while reporting the text of all three passed
+			// every threshold and every substring assertion. The reader saw a third
+			// of the article; search indexed the rest. Whatever the text must
+			// contain, the body a reader is shown must contain too.
+			// Compared with whitespace collapsed, so an assertion does not depend on
+			// where the fixture's source happens to wrap a line. A phrase spanning a
+			// newline in the saved page is the same phrase.
+			text := normalizeSpace(got.Text)
+			bodyText := normalizeSpace(textOfHTML(got.HTML))
 			for _, want := range tc.contains {
-				if !strings.Contains(got.Text, want) {
+				want = normalizeSpace(want)
+				if !strings.Contains(text, want) {
 					t.Errorf("extracted text is missing %q\n\ngot:\n%s", want, truncate(got.Text))
 				}
+				if !strings.Contains(bodyText, want) {
+					t.Errorf("the stored body is missing %q, though the extracted text has it — "+
+						"the body and the text have diverged\n\nbody:\n%s", want, truncate(bodyText))
+				}
+			}
+			if tc.minImages > 0 {
+				if n := countImages(got.HTML); n < tc.minImages {
+					t.Errorf("the stored body holds %d images, want at least %d:\n%s",
+						n, tc.minImages, truncate(got.HTML))
+				}
+			}
+			if n := duplicateImages(got.HTML); n > 0 {
+				t.Errorf("the stored body repeats %d image(s); a selector matching an element "+
+					"inside another match will do this:\n%s", n, truncate(got.HTML))
 			}
 			// The assertions that catch the regression worth catching: an
 			// extractor that starts including navigation or cookie banners
 			// still looks fine by length alone.
 			for _, unwanted := range tc.excludes {
-				if strings.Contains(got.Text, unwanted) {
+				if strings.Contains(text, normalizeSpace(unwanted)) {
 					t.Errorf("extracted text contains %q, which is page chrome, not article\n\ngot:\n%s",
 						unwanted, truncate(got.Text))
 				}
@@ -260,6 +291,7 @@ type corpusCase struct {
 	input      extract.Input
 	extractor  string
 	minChars   int
+	minImages  int
 	contains   []string
 	excludes   []string
 	expectNone bool
@@ -384,6 +416,12 @@ func loadCase(t *testing.T, dir, name, wantPath string) corpusCase {
 					t.Fatalf("%s: min_chars %q: %v", name, value, err)
 				}
 				tc.minChars = n
+			case "min_images":
+				n, err := strconv.Atoi(value)
+				if err != nil {
+					t.Fatalf("%s: min_images %q: %v", name, value, err)
+				}
+				tc.minImages = n
 			case "selector":
 				rule.ContentSelector = value
 			case "strip":
@@ -440,4 +478,60 @@ func truncate(s string) string {
 		return s
 	}
 	return s[:limit] + "…"
+}
+
+// imgSrcPattern finds the source of every image in a stored body.
+var imgSrcPattern = regexp.MustCompile(`(?i)<img[^>]+src="([^"]*)"`)
+
+func countImages(body string) int {
+	return len(imgSrcPattern.FindAllString(body, -1))
+}
+
+// duplicateImages counts sources that appear more than once.
+//
+// A body is a document, and a document does not show the same picture twice in a
+// row. This catches the one way a domain rule can produce that: a selector list
+// naming an element and something inside it.
+func duplicateImages(body string) int {
+	seen := map[string]int{}
+	for _, m := range imgSrcPattern.FindAllStringSubmatch(body, -1) {
+		seen[m[1]]++
+	}
+	repeats := 0
+	for _, n := range seen {
+		if n > 1 {
+			repeats++
+		}
+	}
+	return repeats
+}
+
+// textOfHTML is everything a stored body says, for asserting that the body and
+// the extracted text agree.
+//
+// Alt attributes count as what the body says. The image rung's text is the alt
+// text of the pictures it selected — a comic's body is a picture and its title —
+// so reading only the visible text would report that rung as diverged from itself
+// on every case, which is a false alarm rather than a finding.
+func textOfHTML(body string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return ""
+	}
+
+	var alts strings.Builder
+	doc.Find("img[alt]").Each(func(_ int, img *goquery.Selection) {
+		alts.WriteString(" " + img.AttrOr("alt", ""))
+	})
+	return doc.Text() + alts.String()
+}
+
+// normalizeSpace collapses every run of whitespace to one space.
+//
+// Fixtures are saved pages, and a saved page wraps its prose wherever the site's
+// templating happened to wrap it. Asserting on exact whitespace would mean every
+// assertion silently depends on that, and a phrase that reads as one sentence would
+// fail for being written across two lines.
+func normalizeSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }

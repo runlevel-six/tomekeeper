@@ -117,6 +117,100 @@
     </p>
   {{end}}
 
+  {{/*
+    Adding one subscription. Two submits on one form: Test fetches the feed and
+    reports what is there without saving, Add saves it. Both re-render this page
+    with the form still filled in, because a form that forgets what you typed the
+    moment something goes wrong is a form people stop using.
+
+    No JavaScript involved. The two buttons are two form actions, which is what
+    formaction is for.
+  */}}
+  <section class="add-feed">
+    <h2>Add a feed</h2>
+    <p class="note">
+      The feed's address, or the site's — testing follows a page to the feed it
+      advertises.
+    </p>
+
+    <form method="post" action="/feeds/add">
+      <div class="field">
+        <label for="feed-url">Feed or site address</label>
+        <input type="text" id="feed-url" name="url" inputmode="url" autocomplete="off"
+               spellcheck="false" placeholder="example.com/feed" value="{{with .Add}}{{.URL}}{{end}}" required>
+      </div>
+
+      <div class="field">
+        <label for="feed-category">Category</label>
+        {{/*
+          A free-text field with suggestions rather than a select: a category
+          exists only because some feed claims one, so there is no fixed list to
+          choose from — but nearly every new feed belongs in a folder that already
+          exists, and retyping it exactly is how duplicates like "Tech" and "tech"
+          appear.
+        */}}
+        <input type="text" id="feed-category" name="category" list="known-categories"
+               autocomplete="off" placeholder="optional" value="{{with .Add}}{{.Category}}{{end}}">
+        <datalist id="known-categories">
+          {{range .Categories}}<option value="{{.}}"></option>{{end}}
+        </datalist>
+      </div>
+
+      <div class="field">
+        <label for="feed-title">Title</label>
+        <input type="text" id="feed-title" name="title" autocomplete="off"
+               placeholder="taken from the feed" value="{{with .Add}}{{.Title}}{{end}}">
+      </div>
+
+      <div class="actions-row">
+        {{if .TestingAvailable}}
+          <button type="submit" formaction="/feeds/test">Test</button>
+        {{end}}
+        <button type="submit">Add feed</button>
+      </div>
+    </form>
+
+    {{with .Add}}
+      {{if .Problem}}
+        <p class="import-result bad">{{.Problem}}</p>
+      {{else if .Added}}
+        <p class="import-result ok">
+          Subscribed. The worker polls it within a minute, and its articles appear
+          in <a href="/">Unread</a> as they are fetched.
+        </p>
+      {{else if .Existing}}
+        <p class="import-result ok">
+          Already subscribed — the title and category were updated, and nothing
+          about its polling was disturbed.
+        </p>
+      {{end}}
+
+      {{with .Probed}}
+        <div class="import-result ok probe">
+          <p>
+            <strong>{{if .Title}}{{.Title}}{{else}}(no title){{end}}</strong>
+            — {{plural .Items "item"}}{{with .Newest}}, newest {{since .}}{{end}}.
+          </p>
+          {{if .Discovered}}
+            <p class="note">
+              That address is a page, not a feed. It advertises
+              <code>{{.FeedURL}}</code>, which is what will be subscribed to.
+            </p>
+          {{end}}
+          {{if .Description}}<p class="note">{{.Description}}</p>{{end}}
+          {{if .Sample}}
+            <ul class="probe-sample">
+              {{range .Sample}}<li>{{.}}</li>{{end}}
+            </ul>
+          {{end}}
+          {{if $.Add.AlreadySubscribed}}
+            <p class="note">You are already subscribed to this feed.</p>
+          {{end}}
+        </div>
+      {{end}}
+    {{end}}
+  </section>
+
   <section class="import">
     <h2>Import subscriptions</h2>
     <p>

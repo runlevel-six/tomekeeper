@@ -321,7 +321,7 @@ Flags for `set`:
 
 | Flag | Description |
 |---|---|
-| `--selector <css>` | CSS selector for the article body. Extraction uses it instead of the heuristics, and it overrides the ratio check. |
+| `--selector <css>` | CSS selector for the article body. Extraction uses it instead of the heuristics, and it overrides the ratio check. **Every matching element is used**, in document order, so a body split across several blocks is selected by naming the class they share. A comma-separated list selects more than one kind of element; an element inside another match is skipped rather than emitted twice. |
 | `--strip <css>` | Selector removed before extraction. Repeatable. |
 | `--rate <rps>` | Per-host request rate, overriding `TOME_FETCH_RPS`. |
 | `--requires-js` | Marks the domain as needing a headless render. No effect until headless rendering exists. |
@@ -418,6 +418,9 @@ session.
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
 | `POST /articles/{id}/keep` | Keep permanently, or stop. Same form field. |
 | `POST /save` | Save a page by hand. `url=`. |
+| `POST /import` | Import an uploaded reading library. `library=` is the file; `report_only=true` reports without importing. |
+| `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
+| `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
 | `POST /feeds/import` | Subscribe to everything in an uploaded OPML file |
 | `POST /feeds/refresh` | Bring every enabled feed forward to due |
 | `POST /settings` | Save preferences |
@@ -450,6 +453,56 @@ Three things it deliberately does not do:
   that quietly undid auto-disable would undo the feature on every reload.
 - **It does not wait.** The page says the worker will get to them, because claiming
   otherwise would be a spinner that finishes before any feed has been contacted.
+
+### `POST /feeds/test` and `POST /feeds/add` — add one subscription
+
+The two steps of adding a feed by hand, on the **Feeds** page. They are separate
+routes because they are separate decisions: testing writes nothing, and adding does
+not require having tested.
+
+**Test** is the only outbound request `tome serve` makes. It fetches the URL, and:
+
+- If it is a feed, reports its title, how many items it carries, when the newest
+  one is, and the first few item titles — enough to recognize a feed, and enough to
+  notice one whose newest item is from 2019 before subscribing rather than after a
+  week of empty polls.
+- If it is an HTML page, follows the first RSS or Atom `<link rel="alternate">` it
+  advertises and reports that feed instead, saying so. This is the common case: the
+  URL somebody has to hand is the site's, not its feed's.
+- If it is a page with no feed, says so and suggests what to try.
+- If the reader is already subscribed, says that too. It is a reasonable question to
+  use a test for.
+
+Whatever answered becomes the URL in the form, so **Add** subscribes to the feed
+rather than to the page it was found on.
+
+An instance with no outbound HTTP client hides the Test button and, if the route is
+posted to anyway, says testing is unavailable rather than failing obscurely. Adding
+still works: a broken feed shows up in the feed list's health column and in
+**Attention**, which is what they are for.
+
+`Add` is `UpsertFeed`, so re-adding an existing subscription updates its title and
+category and disturbs nothing about its polling — the same idempotency the OPML
+import has. A URL with no scheme is assumed to be `https`, because an address bar
+does not show one and that is where the URL was copied from.
+
+### `POST /import` — import a library through the browser
+
+The upload form on the **Saved** page, doing what `tome import` does. Same two
+passes over the file, so a corrupt or truncated export writes nothing; the file is
+spooled by the multipart parser and read twice from disk rather than held in memory
+or uploaded twice.
+
+| Field | Meaning |
+|---|---|
+| `library` | The export file. The format is detected from its first bytes, not its name. |
+| `report_only` | Present means report what the file holds and import nothing. |
+
+Uploads are capped at 128MB. A library past that — or one large enough that the
+import exceeds the server's 30-second write timeout — belongs on the command line,
+where neither limit applies. If a timeout does interrupt one, re-uploading is safe:
+every write is idempotent and the second run continues from where the first
+stopped.
 
 ### `GET`/`POST /mark-read` — mark a whole list read
 

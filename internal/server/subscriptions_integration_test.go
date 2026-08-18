@@ -10,9 +10,16 @@ import (
 	"testing"
 )
 
-// upload posts a file to the import form the way a browser would.
-func (rd *reader) upload(path, field, filename, content string) *httptest.ResponseRecorder {
+// upload posts a file to an import form the way a browser would.
+//
+// Trailing name/value pairs become ordinary form fields alongside the file, which
+// is what a checkbox next to a file input arrives as.
+func (rd *reader) upload(path, field, filename, content string, fields ...string) *httptest.ResponseRecorder {
 	rd.t.Helper()
+
+	if len(fields)%2 != 0 {
+		rd.t.Fatalf("upload got %d trailing values, want name/value pairs", len(fields))
+	}
 
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -23,6 +30,11 @@ func (rd *reader) upload(path, field, filename, content string) *httptest.Respon
 		}
 		if _, err := io.WriteString(part, content); err != nil {
 			rd.t.Fatalf("writing the upload body: %v", err)
+		}
+	}
+	for i := 0; i+1 < len(fields); i += 2 {
+		if err := mw.WriteField(fields[i], fields[i+1]); err != nil {
+			rd.t.Fatalf("writing form field %s: %v", fields[i], err)
 		}
 	}
 	if err := mw.Close(); err != nil {

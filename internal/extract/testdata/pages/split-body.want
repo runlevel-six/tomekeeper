@@ -1,0 +1,20 @@
+url: https://review.example.com/culture/2026/08/the-restoration-of-a-lost-technique
+extractor: domain_rule
+selector: div.relative > div.ars-lightbox, .post-content
+strip: .ad-wrapper
+strip: .ars-interlude-container
+strip: .author-mini-bio
+min_chars: 2000
+min_images: 2
+
+a shot nobody has been able to explain
+the three months it took to work out
+The first attempts were too even
+Once that was understood the rest went quickly
+how little of this shows
+the footage makes the argument better than the sentence does
+
+! Advertisement
+! Everything we know about the sequel
+! has written about film for Example Review
+! Subscribe today for unlimited access

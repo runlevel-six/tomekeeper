@@ -14,6 +14,7 @@ import (
 
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
+	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
@@ -49,6 +50,15 @@ type Deps struct {
 	// pages still work, which is the right failure for a misconfigured blob root
 	// rather than refusing to start.
 	Blobs blob.Store
+
+	// Fetch makes the one outbound request the web interface has a use for:
+	// testing a feed URL somebody is about to subscribe to.
+	//
+	// Nil is supported and means the test control says it is unavailable rather
+	// than failing. Everything else here works without it — polling, fetching and
+	// extraction all belong to the worker, and this deliberately stays the single
+	// exception rather than becoming a second fetcher.
+	Fetch *httpclient.Client
 }
 
 // Server wraps an http.Server with this application's routes, timeouts, and
@@ -62,6 +72,7 @@ type Server struct {
 	sessions session.Store
 	search   store.SearchIndex
 	blobs    blob.Store
+	fetch    *httpclient.Client
 	ui       *ui
 }
 
@@ -76,7 +87,7 @@ func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Serv
 	s := &Server{
 		log: log, cfg: cfg, checks: checks,
 		store: deps.Store, sessions: deps.Sessions,
-		search: deps.Search, blobs: deps.Blobs,
+		search: deps.Search, blobs: deps.Blobs, fetch: deps.Fetch,
 	}
 	if s.search == nil && s.store != nil {
 		s.search = s.store.Search()
@@ -134,6 +145,10 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /starred", s.requireUser(s.handleStarred))
 	mux.HandleFunc("GET /saved", s.requireUser(s.handleSaved))
 	mux.HandleFunc("POST /save", s.requireUser(s.handleSave))
+	// Importing a reading library exported from another system, as an upload rather
+	// than only a command line: the people with a library to bring are not
+	// necessarily the people with a shell in the container.
+	mux.HandleFunc("POST /import", s.requireUser(s.handleImportLibrary))
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
 	mux.HandleFunc("GET /settings", s.requireUser(s.handleSettings))
 	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))
@@ -141,6 +156,10 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.
 	mux.HandleFunc("POST /feeds/import", s.requireUser(s.handleImportOPML))
+	// Adding one subscription: test it, then save it. Two routes because they are
+	// two decisions, and the first writes nothing.
+	mux.HandleFunc("POST /feeds/test", s.requireUser(s.handleTestFeed))
+	mux.HandleFunc("POST /feeds/add", s.requireUser(s.handleAddFeed))
 	mux.HandleFunc("POST /feeds/refresh", s.requireUser(s.handleRefreshFeeds))
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
 	// Both the category index and one category's stream: `?name=` chooses.

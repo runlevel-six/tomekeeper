@@ -13,6 +13,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/db"
+	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/logging"
 	"github.com/runlevel-six/tomekeeper/internal/metrics"
 	"github.com/runlevel-six/tomekeeper/internal/server"
@@ -54,6 +55,17 @@ func serve(args []string, stderr io.Writer) int {
 	// Postgres restart should take this instance out of the load balancer, not
 	// get every replica killed and restarted. See docs/reference/cli.md.
 	deps := server.Deps{Store: store.New(pool), Sessions: sessions}
+
+	// The one outbound request the reader-facing process makes: testing a feed URL
+	// somebody is about to subscribe to. Its own client with a small concurrency
+	// rather than the worker's, because this is not a fetcher and should not be able
+	// to become one by configuration — polling, article fetches and images all stay
+	// with the worker.
+	deps.Fetch = httpclient.New(httpclient.Options{
+		UserAgent:   httpclient.UserAgent(version.Short(), cfg.ContactURL),
+		DefaultRPS:  cfg.FetchRPS,
+		Concurrency: 2,
+	})
 
 	// A blob root that cannot be opened costs the reader images, not the whole
 	// interface: the pages still work and the log says why, which beats refusing

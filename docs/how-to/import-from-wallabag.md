@@ -20,6 +20,21 @@ Take the JSON export rather than reading Wallabag's database directly. It is a
 stable artifact you can re-run, inspect in an editor, and keep — and Wallabag's
 schema has drifted across releases in ways an export does not.
 
+## In the browser, if you would rather
+
+Everything below can be done from **Saved → Import a library**: choose the export,
+optionally tick **Report only, import nothing** to see the same report first, and
+import. It reads the file the same way the command does — twice, so a corrupt export
+writes nothing — and prints the same numbers.
+
+Two reasons to use the command line anyway: an export larger than 128MB, and a
+library big enough that the import takes longer than the server's 30-second write
+timeout. If a timeout does cut one off, re-uploading is safe and continues where it
+stopped.
+
+The rest of this guide uses the command line, because that is where the report is
+easiest to quote.
+
 ## 2. Look before you leap
 
 ```console

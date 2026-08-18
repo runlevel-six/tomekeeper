@@ -13,6 +13,9 @@ type savedPage struct {
 
 	// Saved reports on a save that just happened, if one did.
 	Saved *savedOutcome
+
+	// Library reports on a reading library that was just uploaded, if one was.
+	Library *libraryOutcome
 }
 
 type savedOutcome struct {
@@ -24,7 +27,7 @@ type savedOutcome struct {
 }
 
 func (s *Server) handleSaved(w http.ResponseWriter, r *http.Request) {
-	s.renderSaved(w, r, http.StatusOK, nil)
+	s.renderSaved(w, r, http.StatusOK, nil, nil)
 }
 
 // handleSave archives a URL the reader pasted in.
@@ -44,7 +47,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderSaved(w, r, http.StatusBadRequest, &savedOutcome{
 			Problem: "That form did not arrive intact. Try again.",
-		})
+		}, nil)
 		return
 	}
 
@@ -52,7 +55,7 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	if raw == "" {
 		s.renderSaved(w, r, http.StatusBadRequest, &savedOutcome{
 			Problem: "No address was given.",
-		})
+		}, nil)
 		return
 	}
 
@@ -62,14 +65,14 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		s.renderSaved(w, r, http.StatusBadRequest, &savedOutcome{
 			URL:     raw,
 			Problem: "That is not a web address this can archive.",
-		})
+		}, nil)
 		return
 	case err != nil:
 		s.log.Error("saving a page failed", "error", err)
 		s.renderSaved(w, r, http.StatusInternalServerError, &savedOutcome{
 			URL:     raw,
 			Problem: "Something went wrong saving that. It has not been archived.",
-		})
+		}, nil)
 		return
 	}
 
@@ -81,14 +84,16 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		ArticleID: saved.ArticleID,
 		Already:   saved.AlreadySaved,
 		HasBody:   saved.HasBody,
-	})
+	}, nil)
 }
 
 // renderSaved draws the reading list, optionally reporting on a save.
 //
 // Like the OPML import, this renders rather than redirects so the result cannot
 // be lost, and re-posting is harmless because saving is idempotent.
-func (s *Server) renderSaved(w http.ResponseWriter, r *http.Request, status int, saved *savedOutcome) {
+func (s *Server) renderSaved(w http.ResponseWriter, r *http.Request, status int,
+	saved *savedOutcome, library *libraryOutcome,
+) {
 	userID := signedInUser(r)
 
 	// The list itself is defined once, in streams.go, so that the reading list and
@@ -121,7 +126,8 @@ func (s *Server) renderSaved(w http.ResponseWriter, r *http.Request, status int,
 			Empty:    spec.Empty,
 			From:     spec.Token,
 		},
-		Saved: saved,
+		Saved:   saved,
+		Library: library,
 	}
 	if len(items) > store.DefaultStreamLimit {
 		last := items[store.DefaultStreamLimit-1]

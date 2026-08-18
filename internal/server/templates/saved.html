@@ -38,6 +38,105 @@
   {{end}}
 </div>
 
+  {{/*
+    Bringing a library from another read-later tool. On this page rather than under
+    Feeds, because what arrives is saved articles and this is where they land.
+
+    The checkbox is the dry run. Same request, second pass skipped — which matters
+    because the alternative is uploading a decade of articles twice to find out what
+    is in the file.
+  */}}
+  <section class="import-library">
+    <h2>Import a library</h2>
+    <p class="note">
+      A Wallabag JSON export — <em>Settings → Export → JSON</em>. Articles are
+      deduplicated against what your feeds already carried, dated when you saved
+      them, and safe to import twice.
+    </p>
+    <form method="post" action="/import" enctype="multipart/form-data">
+      <label for="library">Export file</label>
+      <input type="file" id="library" name="library" accept=".json,application/json" required>
+      <label class="checkbox">
+        <input type="checkbox" name="report_only" value="true">
+        Report only, import nothing
+      </label>
+      <button type="submit">Import</button>
+    </form>
+
+    {{with .Library}}
+      {{if .Problem}}
+        <p class="import-result bad">
+          {{if .Filename}}<strong>{{.Filename}}</strong> — {{end}}{{.Problem}}
+        </p>
+      {{end}}
+
+      {{with .Report}}
+        <div class="import-result{{if $.Library.Problem}} bad{{else}} ok{{end}}">
+          <p>
+            <strong>{{$.Library.Filename}}</strong> — {{plural .Records "record"}}
+            from {{.Source}}{{if $.Library.ReportOnly}} (nothing was imported){{end}}.
+          </p>
+          <ul class="report">
+            <li>{{.New}} new, {{.AlreadyImported}} already imported</li>
+            {{if .DuplicateURLs}}
+              <li>{{plural .DuplicateURLs "URL"}} already in the archive — the import adds a
+              reference, not a copy</li>
+            {{end}}
+            {{if .WithoutBody}}
+              <li>
+                {{plural .WithoutBody "record"}} with no usable body
+                {{if .PlaceholderBodies}}
+                  — {{.PlaceholderBodies}} of them hold {{.Source}}'s own fetch-failure
+                  message, so this archive will fetch those pages itself
+                {{end}}
+              </li>
+            {{end}}
+            {{if .WithImages}}
+              <li>
+                {{plural .WithImages "record"}} with images: {{plural .Images.Fetchable "image"}}
+                to fetch and archive
+                {{if .Images.InSourceStorage}}
+                  , and {{plural .Images.InSourceStorage "image"}} held inside the {{.Source}}
+                  installation that cannot be reached from here
+                {{end}}
+              </li>
+            {{end}}
+            {{if .Tags}}<li>{{plural .Tags "tag"}}</li>{{end}}
+            {{if .Highlights}}<li>{{plural .Highlights "highlight"}}</li>{{end}}
+          </ul>
+
+          {{with .Written}}
+            <p>
+              Imported {{plural .Articles "article"}}: {{.Bodies}} bodies stored,
+              {{.QueuedForFetch}} queued for fetching{{if .HighlightsAdded}},
+              {{plural .HighlightsAdded "highlight"}}{{end}}{{if .TagsAdded}},
+              {{plural .TagsAdded "tag"}}{{end}}.
+            </p>
+            {{if .Failures}}
+              <p class="note">
+                {{plural (len .Failures) "record"}} failed and are listed in the log.
+                Re-uploading the file is safe and will retry them.
+              </p>
+            {{end}}
+          {{end}}
+
+          {{if .Images.Fetchable}}
+            <p class="note">
+              Images are fetched by the worker afterwards, not now. Until it gets to
+              them, these articles show their text with the images missing.
+            </p>
+          {{end}}
+          {{if .Problems}}
+            <p class="note">
+              {{plural (len .Problems) "record"}} could not be read and were skipped;
+              the log names them by position.
+            </p>
+          {{end}}
+        </div>
+      {{end}}
+    {{end}}
+  </section>
+
 {{if .Items}}
   <p class="hint">
     <kbd>j</kbd> / <kbd>k</kbd> move, <kbd>o</kbd> open, <kbd>s</kbd> star,
