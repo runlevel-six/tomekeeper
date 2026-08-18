@@ -196,6 +196,9 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /articles/{id}/read", s.requireUser(s.handleToggleRead))
 	mux.HandleFunc("POST /articles/{id}/star", s.requireUser(s.handleToggleStar))
 	mux.HandleFunc("POST /articles/{id}/keep", s.requireUser(s.handleToggleKept))
+	// Choosing between an article's stored bodies. The one deliberate human act the
+	// archive's automatic rules deliberately leave room for.
+	mux.HandleFunc("POST /articles/{id}/promote", s.requireUser(s.handlePromoteBody))
 
 	// Archived images. Behind requireUser like everything else: the archive is
 	// one person's reading history, and its illustrations are part of it.

@@ -30,6 +30,10 @@
     {{template "actions" (articleActions .)}}
   </header>
 
+  {{with .Promoted}}
+    <p class="import-result ok">{{.}}</p>
+  {{end}}
+
   {{with .ImageNotice}}
     <p class="notice image-notice">{{.}}</p>
   {{end}}
@@ -48,6 +52,48 @@
     same screen. The keyboard shortcuts and the set above the headline are enough.
   */}}
   <footer class="reader-foot">
+    {{/*
+      Choosing which stored copy of this page to show. Drawn only when there is
+      more than one, which is unusual: an article imported with a body and then
+      fetched here, or one kept from an older extraction.
+
+      Below the article rather than above it, because the question only arises
+      after reading enough to notice the copy is wrong.
+    */}}
+    {{if .Bodies}}
+      <section class="bodies">
+        <h2>Stored copies of this page</h2>
+        <p class="note">
+          This archive holds more than one body for this article. Only one is shown,
+          and nothing automatic will change which — an imported copy may be the only
+          one left of a page that is gone, so replacing it is a decision rather than
+          a rule.
+        </p>
+        <ul class="body-list">
+          {{range .Bodies}}
+            <li{{if .Current}} class="is-current"{{end}}>
+              <p class="body-what">
+                {{.Description}}
+                {{if .Immutable}}<span class="badge warn" title="Never regenerated automatically">immutable</span>{{end}}
+                {{if .Current}}<span class="badge ok">shown</span>{{end}}
+              </p>
+              <p class="meta">
+                {{plural .WordCount "word"}} ·
+                <time datetime="{{.ExtractedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since .ExtractedAt}}</time>
+              </p>
+              {{if .Excerpt}}<p class="excerpt">{{.Excerpt}}…</p>{{end}}
+              {{if not .Current}}
+                <form method="post" action="/articles/{{$.Article.ID}}/promote">
+                  <input type="hidden" name="body" value="{{.ID}}">
+                  <button type="submit">Show this one instead</button>
+                </form>
+              {{end}}
+            </li>
+          {{end}}
+        </ul>
+      </section>
+    {{end}}
+
     {{template "reader-nav" .}}
   </footer>
 </article>

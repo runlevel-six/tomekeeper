@@ -332,6 +332,47 @@ type articlePage struct {
 	// expects to read.
 	Newer store.ArticleID
 	Older store.ArticleID
+
+	// Bodies are the other stored copies of this page, when there is more than one.
+	// Empty in the ordinary case, which is most articles: one page, one body.
+	Bodies []bodyChoice
+
+	// Promoted is set when this render follows a reader choosing a different body,
+	// so the page can say what it now shows rather than silently looking different.
+	Promoted string
+}
+
+// bodyChoice is one stored body, as the reader chooses between them.
+type bodyChoice struct {
+	ID          store.ContentID
+	Description string
+	WordCount   int
+	ExtractedAt time.Time
+	Excerpt     string
+	Current     bool
+	Immutable   bool
+}
+
+// describeBody says where a body came from, in a reader's terms.
+//
+// The origin rather than the extractor name is what answers the question somebody
+// is actually asking — is this the copy my old reader had, or the one this archive
+// made? — so the extractor is the detail and the provenance is the sentence.
+func describeBody(b store.StoredBody) string {
+	switch {
+	case strings.HasPrefix(b.ContentOrigin, "import:"):
+		return "imported from " + strings.TrimPrefix(b.ContentOrigin, "import:")
+	case b.ContentOrigin == store.OriginFeedBody:
+		return "the summary the feed carried"
+	case b.ExtractorName != "":
+		version := b.ExtractorVersion
+		if version != "" {
+			version = " " + version
+		}
+		return "extracted from the stored page by " + b.ExtractorName + version
+	default:
+		return "an earlier body"
+	}
 }
 
 // neighborReadWindow is how long an article stays in the unread list, for the
@@ -350,9 +391,14 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	s.serveArticle(w, r, store.ArticleID(id), "")
+}
+
+// serveArticle renders the reader, optionally saying which body it now shows.
+func (s *Server) serveArticle(w http.ResponseWriter, r *http.Request, id store.ArticleID, promoted string) {
 	userID := signedInUser(r)
 
-	view, err := s.store.ArticleForUser(r.Context(), userID, store.ArticleID(id))
+	view, err := s.store.ArticleForUser(r.Context(), userID, id)
 	if err != nil {
 		s.notFoundOrError(w, r, err, "reading an article")
 		return
@@ -374,6 +420,7 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 		Words:     view.Content.WordCount,
 		BackTo:    "/",
 		BackLabel: "Unread",
+		Promoted:  promoted,
 	}
 	if haveList {
 		page.From = spec.Token
@@ -392,6 +439,27 @@ func (s *Server) handleArticle(w http.ResponseWriter, r *http.Request) {
 				"article_id", view.Article.ID, "from", spec.Token, "error", err)
 		} else {
 			page.Newer, page.Older = neighbors.Newer, neighbors.Older
+		}
+	}
+
+	// The other stored copies of this page, when there are any. Looked up on every
+	// article read, which is one indexed query against a table that holds one row
+	// for most articles — cheaper than the alternative of hiding the control behind
+	// a second page nobody would find.
+	if bodies, err := s.store.BodiesForArticle(r.Context(), view.Article.ID); err != nil {
+		// A failed lookup costs the choice, not the article.
+		s.log.Warn("listing the stored bodies failed", "article_id", view.Article.ID, "error", err)
+	} else if len(bodies) > 1 {
+		for _, b := range bodies {
+			page.Bodies = append(page.Bodies, bodyChoice{
+				ID:          b.ID,
+				Description: describeBody(b),
+				WordCount:   b.WordCount,
+				ExtractedAt: b.ExtractedAt,
+				Excerpt:     b.Excerpt,
+				Current:     b.Current,
+				Immutable:   b.Immutable,
+			})
 		}
 	}
 

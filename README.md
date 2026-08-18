@@ -49,6 +49,9 @@ What is there:
 - **Fixing a site that extracts badly.** Domain rules are a page rather than a
   shell command: write the selector, and reprocess that domain from the same screen.
   The failed-fetch queue links to the form for the host that failed.
+- **More than one copy of a page.** An imported body and a freshly extracted one can
+  coexist; the article page shows what each holds and lets you pick. Nothing
+  automatic overrules an import, because it may be the last copy there is.
 - **Keeping, and letting go.** Star or keep an article to protect its stored copy
   forever; optional retention releases the bodies of things you have read and did
   not keep. Off by default.

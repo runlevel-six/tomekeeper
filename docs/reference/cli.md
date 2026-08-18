@@ -446,6 +446,7 @@ session.
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
 | `POST /articles/{id}/keep` | Keep permanently, or stop. Same form field. |
+| `POST /articles/{id}/promote` | Show a different stored body. `body=` is its id. |
 | `POST /save` | Save a page by hand. `url=`. |
 | `POST /import` | Import an uploaded reading library. `library=` is the file; `report_only=true` reports without importing. |
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
@@ -517,6 +518,33 @@ still works: a broken feed shows up in the feed list's health column and in
 category and disturbs nothing about its polling — the same idempotency the OPML
 import has. A URL with no scheme is assumed to be `https`, because an address bar
 does not show one and that is where the URL was copied from.
+
+### `POST /articles/{id}/promote` — choose which stored copy to show
+
+An article can hold more than one body: the page as this archive extracted it, the
+copy a library was imported with, and any older extraction kept when a better one
+replaced it. One is shown, and the article page lists the others below it whenever
+there is a choice — with where each came from, how long it is, and its opening
+words.
+
+**This is the only way an imported body is ever replaced.** An imported body is
+immutable and wins automatically, because it may be the only surviving copy of a
+page that is gone, so nothing automatic may overrule it. That leaves exactly one
+mechanism: somebody looks at both and says which is better.
+
+Two consequences worth knowing:
+
+- **Promoting is reversible.** Nothing is deleted, a demoted immutable body is still
+  immutable, and it can be promoted back.
+- **Promoting a mutable body puts the article back in the extraction lifecycle.**
+  Re-extraction selects on the *current* body being replaceable, so an article
+  showing an imported copy is excluded and the same article showing a fetched copy is
+  not. That is the right behavior and it is not obvious.
+
+**The choice is global**, like the body it chooses: the archive keeps one copy of a
+page for everyone, so promoting changes what every reader sees in a way starring or
+tagging never does. Correct while there is one reader; a multi-user build has to
+decide whether it stays shared or becomes a per-reader preference.
 
 ### The domain rules page
 

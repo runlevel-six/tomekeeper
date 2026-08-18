@@ -281,3 +281,27 @@ domain rule](../how-to/add-a-domain-rule.md).
 - [Reprocess the archive](../how-to/reprocess-the-archive.md)
 - [Politeness and rate limiting](politeness-and-rate-limiting.md)
 - [Data model](../reference/data-model.md#article_content)
+
+## Choosing between stored bodies
+
+An article can hold several bodies at once, and the rules that decide which is shown
+are deliberately one-way: a better extraction replaces a worse one automatically,
+and an **imported** body replaces nothing and is replaced by nothing. That asymmetry
+is not caution for its own sake — an imported body may be the only surviving copy of
+a page that no longer exists, so no automatic rule is allowed to demote it.
+
+Which leaves a gap that has to be filled by hand, and is: the reader chooses. The
+article page lists every stored copy below the one it is showing, with where each
+came from and how long it is, and one button makes a different copy current. It is
+the only mechanism by which an imported body is ever replaced, and it exists
+precisely because no rule could safely do it.
+
+Nothing is deleted. A demoted body keeps everything it was — an immutable one is
+still immutable — so the choice is reversible, and the archive still holds every
+copy it ever made.
+
+One consequence is worth stating because it surprises people: re-extraction selects
+articles whose **current** body is replaceable. An article showing an imported copy
+is therefore skipped by `tome reextract`, and the same article, after a fetched copy
+is promoted, is not. Promoting is what puts an imported article back into the
+ordinary lifecycle.

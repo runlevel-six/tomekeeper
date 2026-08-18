@@ -496,6 +496,33 @@ kbd {
 }
 .save-box input[type="url"]:focus-visible { border-color: var(--accent); outline: none; }
 
+/* Choosing between an article's stored copies. Below the article, quiet, and only
+   drawn when there is a choice to make — which is rare. */
+.bodies {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+.bodies h2 { font-size: 1rem; }
+.bodies .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+.body-list { list-style: none; padding: 0; margin: 1.25rem 0 0; }
+.body-list li {
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+/* The one being shown is marked with the accent rather than by hiding the others:
+   the whole point of the list is comparing them. */
+.body-list li.is-current {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.body-what { margin: 0 0 0.3rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.9rem; }
+.body-what .badge { margin-left: 0.4rem; }
+.body-list .excerpt { margin: 0.4rem 0 0.6rem; font-size: 0.9rem; color: var(--ink-soft); }
+.body-list button { font-size: 0.85rem; }
+
 /* Domain rules: a table of overrides and the form that writes one. Wider than the
    reading measure because a selector is long and wrapping one mid-token makes it
    unreadable. */
