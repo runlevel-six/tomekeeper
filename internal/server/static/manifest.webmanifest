@@ -1,0 +1,16 @@
+{
+  "name": "Tomekeeper",
+  "short_name": "Tomekeeper",
+  "description": "A self-hosted feed reader and article archive.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F223D",
+  "theme_color": "#0F223D",
+  "icons": [
+    { "src": "/static/favicon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/static/favicon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "/static/favicon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" },
+    { "src": "/static/favicon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
+}

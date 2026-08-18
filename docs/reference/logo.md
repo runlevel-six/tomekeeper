@@ -1,0 +1,73 @@
+# The mark
+
+An archive seal: a gold diamond and a serif T on a deep navy field, with a
+compass ring.
+
+## One source, several files
+
+Everything is generated from one definition of the geometry in
+`internal/server/static/logo/gen.go`:
+
+```sh
+cd internal/server/static/logo && go run gen.go
+```
+
+It is build-tagged `ignore`, so it never compiles into the binary.
+
+Hand-writing an SVG and then hand-drawing a matching PNG is how a favicon ends up
+subtly different from the header mark — a difference invisible until someone puts
+them side by side. Here the shapes are Go values, the SVG is printed from them,
+and the PNGs are rasterized from them.
+
+| File | Size | Used for |
+|---|---|---|
+| `favicon.svg` | scalable | Browsers that prefer SVG |
+| `favicon-16.png` | 16 | Tab strips — **a separate, simplified drawing** |
+| `favicon-32.png` | 32 | Bookmarks, higher-density tabs |
+| `favicon-180.png` | 180 | `apple-touch-icon`, **opaque** |
+| `favicon-192.png`, `favicon-512.png` | 192, 512 | Web app manifest |
+| `templates/mark.html` | — | The in-page mark, as a template partial |
+
+## Four things that fail silently
+
+Each of these produces no error anywhere. That is what makes them worth writing
+down, and each has a test.
+
+**An SVG favicon needs `width` and `height`, not just `viewBox`.** Gecko renders
+nothing at all without an intrinsic size — and caches the nothing, so the icon
+stays missing after the file is fixed until the cache is cleared. `viewBox` alone
+is sufficient for an `<img>` in a page, which is precisely why the omission looks
+harmless.
+
+**16px needs its own drawing.** The full mark has four concentric elements; at
+16px, one unit of the 64-unit grid is a quarter of a pixel, and the ring and
+studs become a smudge around a shape you cannot identify. The small variant drops
+the ring, enlarges the diamond, and thickens the letter — it is heavier, not
+merely smaller. Browsers choose per size from the `sizes` attributes.
+
+**The apple-touch-icon must be opaque.** iOS composites a transparent icon onto
+black, drawing a dark square around a round mark. This one is flattened onto the
+navy field.
+
+**The manifest needs `manifest-src` in the CSP.** `default-src` is `'none'`, so
+the manifest fetch is blocked outright — and the symptom is not an error anyone
+sees: "add to home screen" simply offers a generic icon and the wrong name.
+
+## Themed, or not
+
+The **favicon is fixed** to the Midnight palette. It is the application's
+identity in a tab strip full of other applications, and one that changed with the
+reader's palette would be a different icon on their phone than on their desk.
+
+The **in-page mark follows the theme**. It is inlined as a template partial
+rather than linked as a file, because an `<img>` cannot inherit `currentColor` —
+inlining is what lets one drawing serve all seven palettes for free.
+
+Mobile browser chrome is colored by two `theme-color` meta tags with
+`prefers-color-scheme` media queries, because a palette left on `auto` does not
+choose between its halves until it meets a system preference, which happens after
+the page was rendered.
+
+## See also
+
+- [Themes](themes.md)

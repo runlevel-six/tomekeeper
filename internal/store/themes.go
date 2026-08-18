@@ -19,6 +19,16 @@ type Theme struct {
 
 	Name  string
 	Blurb string
+
+	// LightBG and DarkBG are the palette's page background in each mode.
+	//
+	// Duplicated from the stylesheet, which is a real cost, and paid because
+	// mobile browsers color their own chrome from a <meta name="theme-color">
+	// and cannot read a CSS variable to do it. A test asserts each value still
+	// appears in the stylesheet for its palette, so the copy cannot drift
+	// silently.
+	LightBG string
+	DarkBG  string
 }
 
 // Palettes are the six from the design sheet, plus the original neutral one.
@@ -26,13 +36,13 @@ type Theme struct {
 // The order is the order they appear in the picker, and "auto" is first because
 // it is what everyone has until they choose otherwise.
 var Palettes = []Theme{
-	{Palette: "auto", Name: "Default", Blurb: "The original neutral palette."},
-	{Palette: "midnight", Name: "Midnight", Blurb: "Deep navy and gold leaf."},
-	{Palette: "plum", Name: "Royal Plum", Blurb: "Aubergine and antique gold."},
-	{Palette: "verdant", Name: "Verdant Archive", Blurb: "Bottle green on aged parchment."},
-	{Palette: "oxblood", Name: "Oxblood", Blurb: "Oxblood leather and copper."},
-	{Palette: "slate", Name: "Slate & Silver", Blurb: "Graphite and silver, no gold."},
-	{Palette: "aegean", Name: "Aegean Bronze", Blurb: "Deep teal and warm bronze."},
+	{Palette: "auto", Name: "Default", Blurb: "The original neutral palette.", LightBG: "#fbfaf7", DarkBG: "#16151a"},
+	{Palette: "midnight", Name: "Midnight", Blurb: "Deep navy and gold leaf.", LightBG: "#f2e8d5", DarkBG: "#0d1d34"},
+	{Palette: "plum", Name: "Royal Plum", Blurb: "Aubergine and antique gold.", LightBG: "#f1e7d8", DarkBG: "#341e3e"},
+	{Palette: "verdant", Name: "Verdant Archive", Blurb: "Bottle green on aged parchment.", LightBG: "#e7d4ae", DarkBG: "#1e4032"},
+	{Palette: "oxblood", Name: "Oxblood", Blurb: "Oxblood leather and copper.", LightBG: "#efe2cf", DarkBG: "#4e1b21"},
+	{Palette: "slate", Name: "Slate & Silver", Blurb: "Graphite and silver, no gold.", LightBG: "#eee7da", DarkBG: "#2e323a"},
+	{Palette: "aegean", Name: "Aegean Bronze", Blurb: "Deep teal and warm bronze.", LightBG: "#eee4d1", DarkBG: "#0b4151"},
 }
 
 // Modes are how a palette decides between its light and dark halves.

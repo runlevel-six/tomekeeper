@@ -65,7 +65,18 @@ code {
   font-size: 0.9rem;
 }
 
-.brand { font-weight: 700; text-decoration: none; }
+/* The brand: mark plus wordmark. The mark inherits color from here, which is
+   what lets one drawing serve all seven palettes. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--ink);
+}
+.brand .mark { color: var(--accent); flex: none; }
+.brand:hover span { color: var(--accent); }
 .chrome nav { display: flex; gap: 1rem; }
 .chrome .signout { margin-left: auto; }
 

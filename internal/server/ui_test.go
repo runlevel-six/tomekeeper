@@ -157,7 +157,7 @@ func TestPageNamesMatchTheTemplateFiles(t *testing.T) {
 	}
 
 	// base and partials are included by every page rather than being pages.
-	shared := map[string]bool{"base": true, "partials": true}
+	shared := map[string]bool{"base": true, "partials": true, "mark": true}
 
 	onDisk := make(map[string]bool)
 	for _, f := range files {

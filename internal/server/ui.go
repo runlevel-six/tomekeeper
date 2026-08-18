@@ -43,7 +43,10 @@ func newUI() (*ui, error) {
 
 	for _, name := range pageNames {
 		t, err := template.New("base.html").Funcs(templateFuncs).ParseFS(assets,
-			"templates/base.html", "templates/partials.html", "templates/"+name+".html")
+			"templates/base.html", "templates/partials.html",
+			// Generated from the logo geometry; see static/logo/gen.go.
+			"templates/mark.html",
+			"templates/"+name+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parsing the %s template: %w", name, err)
 		}
@@ -99,9 +102,13 @@ func (s *Server) render(w http.ResponseWriter, status int, page string, data any
 	// page that needed a CDN could not have a policy this tight. The two
 	// deliberate allowances are data: images, for the small inline images the asset policy
 	// leaves in place, and connect-src for htmx's own requests back here.
+	// manifest-src is here because default-src is 'none', which blocks the
+	// web app manifest outright — and the symptom is not an error anyone sees:
+	// "add to home screen" simply offers a generic icon and the wrong name.
 	w.Header().Set("Content-Security-Policy",
 		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "+
-			"connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+			"connect-src 'self'; manifest-src 'self'; form-action 'self'; "+
+			"base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.WriteHeader(status)
@@ -165,6 +172,29 @@ var templateFuncs = template.FuncMap{
 		minutes := max(1, (words+109)/220)
 		return plural(minutes, "minute") + " read"
 	},
+	// The two background colors a palette can present, for the mobile
+	// browser-chrome meta tags. Two rather than one because a palette in "auto"
+	// mode does not decide until it meets a system preference, and the page is
+	// rendered before it meets one.
+	"themeColors": func(theme string) map[string]string {
+		palette, mode := store.SplitTheme(theme)
+		light, dark := "#fbfaf7", "#16151a"
+		for _, p := range store.Palettes {
+			if p.Palette == palette {
+				light, dark = p.LightBG, p.DarkBG
+				break
+			}
+		}
+		switch mode {
+		case "light":
+			return map[string]string{"light": light, "dark": light}
+		case "dark":
+			return map[string]string{"light": dark, "dark": dark}
+		default:
+			return map[string]string{"light": light, "dark": dark}
+		}
+	},
+
 	"plural": plural,
 	"add":    func(a, b int) int { return a + b },
 

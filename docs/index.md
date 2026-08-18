@@ -46,6 +46,7 @@ Dry, complete descriptions of the machinery. Look things up here.
 - [Configuration](reference/configuration.md) — every environment variable
 - [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint
 - [Metrics](reference/metrics.md) — every metric, and why they are on their own port
+- [The mark](reference/logo.md) — the seal, and four things about icons that fail silently
 - [Themes](reference/themes.md) — the six palettes, and the contrast measurements
 - [Retention](reference/retention.md) — what expires, what never does, and why
   it asks about every reader

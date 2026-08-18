@@ -5,6 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{block "title" .}}Tomekeeper{{end}}</title>
   <link rel="stylesheet" href="/static/tome.css">
+
+  {{/*
+    Both formats, deliberately. An SVG favicon that carries no intrinsic size
+    renders as nothing in Gecko — and it caches the nothing, so the icon stays
+    missing after the file is fixed. The generated SVG has width and height, and
+    the PNGs are here regardless for the browsers and platforms that never look
+    at the SVG at all.
+
+    16 is a separate, simplified drawing rather than a scaled-down 32: four
+    concentric elements at that size are a smudge.
+  */}}
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/static/favicon-16.png" type="image/png" sizes="16x16">
+  <link rel="apple-touch-icon" href="/static/favicon-180.png" sizes="180x180">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+
+  {{/*
+    Colors the browser chrome on mobile to match the reader's palette. Two tags
+    with media queries, because a palette left on "auto" does not choose between
+    its light and dark halves until it meets a system preference — which happens
+    in the browser, after this page was rendered.
+  */}}
+  {{$c := themeColors .Theme}}
+  <meta name="theme-color" content="{{index $c "light"}}" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="{{index $c "dark"}}" media="(prefers-color-scheme: dark)">
   {{if .User}}
     <script src="/static/vendor/htmx-2.0.9.min.js" defer></script>
     <script src="/static/tome.js" defer></script>
@@ -13,7 +39,7 @@
 <body>
 {{if .User}}
   <header class="chrome">
-    <a class="brand" href="/">Tomekeeper</a>
+    <a class="brand" href="/">{{template "mark"}}<span>Tomekeeper</span></a>
     <nav>
       <a href="/"{{if eq .Nav "unread"}} aria-current="page"{{end}}>Unread{{if .Unread}} <span class="badge count">{{.Unread}}</span>{{end}}</a>
       <a href="/all"{{if eq .Nav "all"}} aria-current="page"{{end}}>Everything</a>
