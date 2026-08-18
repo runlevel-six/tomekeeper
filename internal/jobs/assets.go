@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -234,7 +235,24 @@ func (w *LocalizeAssetsWorker) process(ctx context.Context, raw []byte, mediaTyp
 			return asset.Processed{}, ctx.Err()
 		}
 	}
-	return asset.Process(raw, mediaType)
+	processed, err := asset.Process(raw, mediaType)
+
+	// Hand the arena back to the operating system rather than waiting for the
+	// scavenger.
+	//
+	// A transcode allocates hundreds of megabytes in one contiguous piece and
+	// then drops all of it. Go's collector will reclaim it eventually, but
+	// "eventually" is measured against a heap target the runtime sets from its
+	// own history — it has no idea a cgroup is about to kill the process. The
+	// result was a worker whose live heap sat near 400MB while the memory it
+	// held from the kernel climbed past a 2GB limit.
+	//
+	// This costs a stop-the-world collection per image, which is affordable
+	// precisely because the semaphore above means there is at most one image in
+	// flight and nothing else is waiting on it.
+	defer debug.FreeOSMemory()
+
+	return processed, err
 }
 
 // resolve returns the archived asset for sourceURL, fetching it only if it is

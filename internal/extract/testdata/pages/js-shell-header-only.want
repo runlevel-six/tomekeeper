@@ -1,0 +1,11 @@
+url: https://example.com/blog/packet-capture-for-cloud-native-operations
+extractor: feed_body
+feed_body: js-shell-header-only.feedbody
+min_chars: 900
+
+what actually happened on the wire
+shared troubleshooting language
+capture is expressed against a selector
+
+! Published: July 28, 2026
+! Updated: July 29, 2026

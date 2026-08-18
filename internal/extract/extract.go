@@ -39,7 +39,7 @@ import (
 // reaches the archive it was written for.
 // Version 2 (2026-08-17): the ratio check is skipped for bodies past longBody.
 // See the constant for the measurement that prompted it.
-const Version = "2"
+const Version = "3"
 
 // Extractor names recorded on content rows.
 const (
@@ -172,12 +172,12 @@ func (e *Extractor) Extract(in Input) (Result, error) {
 
 		// Rung 2.
 		if r, ok := e.viaTrafilatura(in, pageURL, visible); ok {
-			return r, nil
+			return e.orTheFeedIfRicher(in, pageURL, r), nil
 		}
 
 		// Rung 3.
 		if r, ok := e.viaReadability(in, pageURL, visible); ok {
-			return r, nil
+			return e.orTheFeedIfRicher(in, pageURL, r), nil
 		}
 	}
 
@@ -189,6 +189,46 @@ func (e *Extractor) Extract(in Input) (Result, error) {
 	}
 
 	return Result{}, ErrNoContent
+}
+
+// feedAdvantage is how many times richer the feed body must be before it is
+// preferred over a body extracted from the page.
+//
+// Three, which is a wide margin, because this rule runs against a rung that
+// already declared success and the cost of being wrong is storing a summary in
+// place of a real article — the failure the whole extraction ladder exists to
+// avoid.
+const feedAdvantage = 3
+
+// orTheFeedIfRicher returns the feed body instead when the page extraction is
+// implausibly thin beside it.
+//
+// The ladder otherwise takes the first rung that succeeds, and "success" is a
+// floor rather than a judgement: an extractor that returns a page's header block
+// clears it. Observed on a real feed, where trafilatura returned 30 words —
+// the title, twice, and two dates — while the feed carried the entire 2,000-word
+// article that the ladder then threw away.
+//
+// The comparison is sound in one direction only, which is what makes it safe. A
+// feed summary is a truncation of the article, so it cannot legitimately be
+// several times longer than the article's own body; when it is, the extraction
+// missed the content rather than the feed having gained any. That is why this
+// cannot cause the failure §1 warns about — storing a truncated summary while
+// the full page sits on disk — because it only ever moves toward the *longer*
+// text, never the shorter.
+func (e *Extractor) orTheFeedIfRicher(in Input, pageURL *url.URL, page Result) Result {
+	if strings.TrimSpace(in.FeedBody) == "" {
+		return page
+	}
+
+	feed, ok := e.viaFeedBody(in, pageURL)
+	if !ok {
+		return page
+	}
+	if feed.WordCount < page.WordCount*feedAdvantage {
+		return page
+	}
+	return feed
 }
 
 func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {

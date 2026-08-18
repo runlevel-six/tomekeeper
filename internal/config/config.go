@@ -145,10 +145,18 @@ const (
 	defaultWorkerConcurrency    = 5
 	defaultFetchRPS             = 1.0
 	defaultFetchConcurrency     = 10
-	// Two, not five: see Config.ImageConcurrency. Two concurrent transcodes is
-	// about 1.2GB, which fits the 2GB limit the manifests set with room for the
-	// rest of the worker.
-	defaultImageConcurrency = 2
+	// One, measured. Repeated transcodes of a 6 megapixel photograph reach a
+	// high-water mark of roughly 1100MB of memory held from the OS at
+	// concurrency 2, against 575MB at concurrency 1 — and with the explicit
+	// release after each transcode, 519MB. Concurrency is the dominant term,
+	// because each call allocates a large contiguous WASM arena and the
+	// fragmentation between them is what accumulates.
+	//
+	// Two survived eighty seconds in production rather than ten, which is the
+	// shape of a limit that was raised rather than removed. One does not
+	// meaningfully slow the archive: transcoding is not on any reader's critical
+	// path, and a backlog of a few hundred images drains in minutes.
+	defaultImageConcurrency = 1
 	defaultBlobRoot         = "/var/lib/tomekeeper"
 )
 

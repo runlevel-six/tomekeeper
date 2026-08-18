@@ -164,6 +164,12 @@ spec:
                 secretKeyRef: { name: tomekeeper, key: postgres-password }
             - name: TOME_DATABASE_URL
               value: postgres://tome:$(POSTGRES_PASSWORD)@postgres:5432/tome?sslmode=disable
+            # The Go runtime cannot see the cgroup limit, so left alone it sizes
+            # the heap from its own history and discovers the ceiling by being
+            # killed at it. Set below the container limit, so the collector works
+            # harder as it approaches rather than after.
+            - name: GOMEMLIMIT
+              value: "1750MiB"
           ports:
             - name: metrics
               containerPort: 9090
