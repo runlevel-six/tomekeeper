@@ -81,6 +81,15 @@ type loginPage struct {
 	Username   string
 	Error      string
 	NoPassword bool
+
+	// Theme is always empty here and exists only because base.html reads it.
+	//
+	// Nobody is signed in, so there is no reader whose palette this could be —
+	// and looking one up before authentication would leak whether an account
+	// exists. It is a field rather than a template guard because base.html is
+	// shared, and a missing field is an execution error that turns the sign-in
+	// page into a 500 with no clue as to why.
+	Theme string
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {

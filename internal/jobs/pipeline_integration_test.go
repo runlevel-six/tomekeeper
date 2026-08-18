@@ -477,12 +477,24 @@ func TestSameImageAcrossArticlesStoresOnce(t *testing.T) {
 	})
 
 	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
-		waitFor(t, "every article to be localized", func() bool {
+		// Waits on the postconditions this test then asserts, not on a status
+		// that is settled earlier.
+		//
+		// The status alone is not enough: SetAssetsStatus runs before the
+		// archive files are written, so a wait on it can return in the gap
+		// between them. Observed once as "9 article-to-image references, want
+		// 10" together with a missing index.html — a real failure that says
+		// nothing about the code, which is the worst kind to leave in CI.
+		waitFor(t, "every article to be localized and written", func() bool {
 			for _, id := range ids {
 				a, err := s.GetArticle(ctx, id)
 				if err != nil || a.AssetsStatus == store.AssetsPending {
 					return false
 				}
+			}
+			st, err := s.System().Stats(ctx)
+			if err != nil || st.AssetLinks != articles {
+				return false
 			}
 			return true
 		})

@@ -1,0 +1,56 @@
+{{define "title"}}Settings — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="settings">
+  <h1>Settings</h1>
+
+  {{if .Saved}}
+    <p class="import-result ok"><span>Saved.</span></p>
+  {{end}}
+
+  <form method="post" action="/settings">
+    <fieldset class="palettes">
+      <legend>Palette</legend>
+      <p class="note">
+        Six from the archive seal designs, each a deep field color, a metallic
+        and a parchment. Every one is checked to stay legible in both light and
+        dark.
+      </p>
+
+      <ul class="swatches">
+        {{range .Palettes}}
+          <li>
+            <label class="swatch{{if eq .Palette $.Palette}} is-chosen{{end}}">
+              <input type="radio" name="palette" value="{{.Palette}}"
+                     {{if eq .Palette $.Palette}}checked{{end}}>
+              {{/*
+                The preview is drawn with the palette's own variables rather than
+                a picture, so it cannot drift from what choosing it actually does.
+              */}}
+              <span class="preview" data-theme="{{.Palette}}" aria-hidden="true">
+                <span class="preview-ink">Aa</span>
+                <span class="preview-accent"></span>
+              </span>
+              <span class="swatch-name">{{.Name}}</span>
+              <span class="swatch-blurb">{{.Blurb}}</span>
+            </label>
+          </li>
+        {{end}}
+      </ul>
+    </fieldset>
+
+    <fieldset>
+      <legend>Light or dark</legend>
+      {{range .Modes}}
+        <label class="radio">
+          <input type="radio" name="mode" value="{{.Value}}"
+                 {{if eq .Value $.Mode}}checked{{end}}>
+          {{.Name}}
+        </label>
+      {{end}}
+    </fieldset>
+
+    <button type="submit">Save</button>
+  </form>
+</div>
+{{end}}

@@ -409,3 +409,327 @@ kbd {
   main { padding: 1.25rem 0.9rem 3rem; }
   .toggle .label { display: none; }
 }
+
+/* Settings. */
+.settings { max-width: 46rem; margin: 0 auto; }
+.settings fieldset {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  padding: 1.25rem 0 0;
+  margin: 0 0 2rem;
+}
+.settings legend {
+  padding: 0 0.6rem 0 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.settings .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+.settings .radio {
+  display: block;
+  margin: 0.4rem 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+}
+
+.swatches {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.75rem;
+}
+.swatch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "radio preview" "name name" "blurb blurb";
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.swatch:hover { border-color: var(--accent); }
+.swatch.is-chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.swatch input { grid-area: radio; margin: 0; }
+.swatch-name {
+  grid-area: name;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.swatch-blurb { grid-area: blurb; font-size: 0.82rem; color: var(--ink-soft); }
+
+/* The preview paints itself with the palette it offers, so it cannot drift from
+   what choosing it actually does. */
+.preview {
+  grid-area: preview;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.preview-ink { font-size: 0.95rem; font-weight: 600; }
+.preview-accent {
+  width: 2.2rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Themes
+ *
+ * Six palettes, each built from three colors: a deep field, a metallic, and a
+ * parchment. Light mode puts the parchment behind deep ink; dark mode inverts it,
+ * putting the parchment on the field. The metallic is the accent in both.
+ *
+ * Every value here is generated rather than picked by eye, by darkening or
+ * lightening the source color until it clears 4.5:1 against its own background.
+ * That matters most for the metallics: gold on parchment is about 1.7:1 and
+ * illegible as link text, so light mode uses a deepened version of it. All 48
+ * foreground/background pairs pass; the measurements are in
+ * docs/reference/themes.md.
+ *
+ * Three selectors per palette, so the palette and the light/dark decision are
+ * independent: "midnight" follows the system, "midnight-light" and
+ * "midnight-dark" do not. Absent the attribute entirely, the original neutral
+ * palette at the top of this file applies.
+ *
+ * Server-rendered onto <html data-theme>, so there is no flash of the wrong
+ * palette on load and no JavaScript is involved.
+ * ------------------------------------------------------------------------- */
+
+/* Default — the original neutral palette, named so that it can be previewed
+   next to the others and so its light/dark can be forced like any of them. */
+[data-theme="auto"],
+[data-theme="auto-light"] {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --ink: #1c1b19;
+  --ink-soft: #5c584f;
+  --rule: #ddd8cc;
+  --accent: #7a4b2a;
+  --error: #8a2b20;
+}
+[data-theme="auto-dark"] {
+  --bg: #16151a;
+  --surface: #1e1d23;
+  --ink: #e9e5dd;
+  --ink-soft: #a29b8e;
+  --rule: #35333c;
+  --accent: #d8a066;
+  --error: #e08074;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --bg: #16151a;
+    --surface: #1e1d23;
+    --ink: #e9e5dd;
+    --ink-soft: #a29b8e;
+    --rule: #35333c;
+    --accent: #d8a066;
+    --error: #e08074;
+  }
+}
+
+/* Midnight — Deep navy and gold leaf. The default: it reads as a library at night. */
+[data-theme="midnight"],
+[data-theme="midnight-light"] {
+  --bg: #f2e8d5;
+  --surface: #f9f5ec;
+  --ink: #0d1e36;
+  --ink-soft: #4f5968;
+  --rule: #b7b5ad;
+  --accent: #7e6539;
+  --error: #8a2b20;
+}
+[data-theme="midnight-dark"] {
+  --bg: #0d1d34;
+  --surface: #20314b;
+  --ink: #f3ead9;
+  --ink-soft: #a4a39e;
+  --rule: #3b4655;
+  --accent: #c8a15a;
+  --error: #e08074;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="midnight"] {
+    --bg: #0d1d34;
+    --surface: #20314b;
+    --ink: #f3ead9;
+    --ink-soft: #a4a39e;
+    --rule: #3b4655;
+    --accent: #c8a15a;
+    --error: #e08074;
+  }
+}
+
+/* Royal Plum — Aubergine and antique gold, the warmest of the dark fields. */
+[data-theme="plum"],
+[data-theme="plum-light"] {
+  --bg: #f1e7d8;
+  --surface: #f9f4ed;
+  --ink: #351f3f;
+  --ink-soft: #6f5a70;
+  --rule: #c2b4b3;
+  --accent: #7f6437;
+  --error: #8a2b20;
+}
+[data-theme="plum-dark"] {
+  --bg: #341e3e;
+  --surface: #4a3255;
+  --ink: #f2e9dc;
+  --ink-soft: #b1a3a4;
+  --rule: #59465d;
+  --accent: #c39a54;
+  --error: #e08074;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="plum"] {
+    --bg: #341e3e;
+    --surface: #4a3255;
+    --ink: #f2e9dc;
+    --ink-soft: #b1a3a4;
+    --rule: #59465d;
+    --accent: #c39a54;
+    --error: #e08074;
+  }
+}
+
+/* Verdant Archive — Bottle green on aged parchment. The most bookish. */
+[data-theme="verdant"],
+[data-theme="verdant-light"] {
+  --bg: #e7d4ae;
+  --surface: #f4ecdb;
+  --ink: #1f4133;
+  --ink-soft: #49634f;
+  --rule: #b4b090;
+  --accent: #715930;
+  --error: #8a2b20;
+}
+[data-theme="verdant-dark"] {
+  --bg: #1e4032;
+  --surface: #325748;
+  --ink: #e9d8b6;
+  --ink-soft: #a5a487;
+  --rule: #465d4b;
+  --accent: #c49d57;
+  --error: #e38b81;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="verdant"] {
+    --bg: #1e4032;
+    --surface: #325748;
+    --ink: #e9d8b6;
+    --ink-soft: #a5a487;
+    --rule: #465d4b;
+    --accent: #c49d57;
+    --error: #e38b81;
+  }
+}
+
+/* Oxblood — Oxblood leather and copper. The highest contrast at reading size. */
+[data-theme="oxblood"],
+[data-theme="oxblood-light"] {
+  --bg: #efe2cf;
+  --surface: #f8f2e9;
+  --ink: #501b21;
+  --ink-soft: #845655;
+  --rule: #c9afa3;
+  --accent: #8e5835;
+  --error: #8a2b20;
+}
+[data-theme="oxblood-dark"] {
+  --bg: #4e1b21;
+  --surface: #662f35;
+  --ink: #f1e5d4;
+  --ink-soft: #b89e94;
+  --rule: #6e4344;
+  --accent: #c08661;
+  --error: #e08074;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="oxblood"] {
+    --bg: #4e1b21;
+    --surface: #662f35;
+    --ink: #f1e5d4;
+    --ink-soft: #b89e94;
+    --rule: #6e4344;
+    --accent: #c08661;
+    --error: #e08074;
+  }
+}
+
+/* Slate & Silver — Graphite and silver, for anyone who finds gold too much. */
+[data-theme="slate"],
+[data-theme="slate-light"] {
+  --bg: #eee7da;
+  --surface: #f7f4ee;
+  --ink: #2f333b;
+  --ink-soft: #66686b;
+  --rule: #bebab3;
+  --accent: #67696b;
+  --error: #8a2b20;
+}
+[data-theme="slate-dark"] {
+  --bg: #2e323a;
+  --surface: #434850;
+  --ink: #f0e9de;
+  --ink-soft: #ada9a3;
+  --rule: #54565a;
+  --accent: #9ea1a4;
+  --error: #e08074;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="slate"] {
+    --bg: #2e323a;
+    --surface: #434850;
+    --ink: #f0e9de;
+    --ink-soft: #ada9a3;
+    --rule: #54565a;
+    --accent: #9ea1a4;
+    --error: #e08074;
+  }
+}
+
+/* Aegean Bronze — Deep teal and bronze; the coolest field with the warmest metal. */
+[data-theme="aegean"],
+[data-theme="aegean-light"] {
+  --bg: #eee4d1;
+  --surface: #f7f3ea;
+  --ink: #0b4353;
+  --ink-soft: #406d76;
+  --rule: #b4bcb3;
+  --accent: #8b5a38;
+  --error: #8a2b20;
+}
+[data-theme="aegean-dark"] {
+  --bg: #0b4151;
+  --surface: #1e5969;
+  --ink: #f0e7d6;
+  --ink-soft: #a1ada5;
+  --rule: #39626a;
+  --accent: #c69f83;
+  --error: #e48f85;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="aegean"] {
+    --bg: #0b4151;
+    --surface: #1e5969;
+    --ink: #f0e7d6;
+    --ink-soft: #a1ada5;
+    --rule: #39626a;
+    --accent: #c69f83;
+    --error: #e48f85;
+  }
+}

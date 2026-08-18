@@ -31,7 +31,7 @@ type ui struct {
 // pageNames are the templates that extend base.html. Listed explicitly rather
 // than globbed, so a stray file cannot become a page and a missing one fails at
 // startup instead of on the request that needed it.
-var pageNames = []string{"login", "stream", "article", "search", "feeds", "attention", "saved"}
+var pageNames = []string{"login", "stream", "article", "search", "feeds", "attention", "saved", "settings"}
 
 // newUI parses every page template.
 //

@@ -1,5 +1,5 @@
 {{define "base"}}<!DOCTYPE html>
-<html lang="en">
+<html lang="en"{{if and .Theme (ne .Theme "auto")}} data-theme="{{.Theme}}"{{end}}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,6 +22,7 @@
       <a href="/search"{{if eq .Nav "search"}} aria-current="page"{{end}}>Search</a>
       <a href="/feeds"{{if eq .Nav "feeds"}} aria-current="page"{{end}}>Feeds</a>
       <a href="/attention"{{if eq .Nav "attention"}} aria-current="page"{{end}}>Attention</a>
+      <a href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
     </nav>
     <form class="signout" method="post" action="/logout">
       <button type="submit">Sign out</button>

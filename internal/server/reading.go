@@ -23,12 +23,24 @@ type pageData struct {
 
 	// Nav marks the current section so the chrome can show where you are.
 	Nav string
+
+	// Theme is the value for <html data-theme>. Rendered into every page rather
+	// than applied by a script, so the palette is right in the first paint.
+	Theme string
 }
 
 func (s *Server) pageData(r *http.Request, nav string) pageData {
 	userID := signedInUser(r)
 
 	d := pageData{User: userID, Username: s.cfg.Username, Nav: nav}
+
+	// A failed lookup costs the reader their palette for one page, which is a
+	// far better outcome than costing them the page.
+	if theme, err := s.store.GetTheme(r.Context(), userID); err != nil {
+		s.log.Warn("reading the theme failed", "error", err)
+	} else {
+		d.Theme = theme
+	}
 
 	// A failed count is not worth failing a page over — the reader came here to
 	// read, not to see a number.

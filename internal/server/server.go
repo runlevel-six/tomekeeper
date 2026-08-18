@@ -135,6 +135,8 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /saved", s.requireUser(s.handleSaved))
 	mux.HandleFunc("POST /save", s.requireUser(s.handleSave))
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
+	mux.HandleFunc("GET /settings", s.requireUser(s.handleSettings))
+	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.
