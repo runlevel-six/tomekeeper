@@ -176,12 +176,13 @@ Queues re-extraction of stored pages at the current extractor version. Makes no
 requests to any site.
 
 ```
-tome reextract [--since-version V] [--domain HOST] [--limit N] [--dry-run]
+tome reextract [--target-version V] [--domain HOST] [--limit N] [--dry-run]
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--since-version` | the compiled-in version | Select articles whose current body came from a version other than this. Pass `0` to select everything, which is what you want after adding a domain rule. |
+| `--target-version` | the compiled-in version | Select articles whose current body came from a version **other than** this — that is, the version you want everything brought *to*, not the version it is at now. The default is almost always what you want: after upgrading, a bare `tome reextract` reprocesses everything the new build would extract differently. Pass `0` to select everything, which is what you want after adding a domain rule. |
+| `--since-version` | — | Deprecated alias for `--target-version`. The name reads as an ordering and is not one; passing the version your bodies are already at selects nothing and reports success. |
 | `--domain` | every host | Restrict to one host and its subdomains. `example.com` covers `blog.example.com`, matching how a domain rule applies. |
 | `--limit` | `0` (no limit) | Stop after queueing this many articles. |
 | `--dry-run` | off | Count without queueing. |
@@ -228,10 +229,10 @@ A rule changes nothing already stored until the affected articles are
 reprocessed, and `set` prints the command to do it. It needs both flags:
 
 ```sh
-tome reextract --since-version 0 --domain example.com
+tome reextract --target-version 0 --domain example.com
 ```
 
-`--since-version 0` because `reextract` selects on extractor version, so a bare
+`--target-version 0` because `reextract` selects on extractor version, so a bare
 run finds nothing when every body is already current. `--domain` because the rule
 can only affect that one site, and reprocessing a large archive to correct a
 handful of articles is hours of needless work.

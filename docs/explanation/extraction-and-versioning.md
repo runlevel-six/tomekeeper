@@ -117,6 +117,18 @@ This rung matters more than its position suggests. When a site goes down
 between publication and the next poll, the feed's copy is the only copy — and
 that is precisely the moment archiving is worth having.
 
+### A domain rule may point at an image
+
+The 200-character floor does not apply to a rule's selection when it contains an
+image. A rule is a human saying "the body is here", and on an image-first page
+that body is a picture and a caption — nowhere near 200 characters. Applying the
+floor rejected the one element the operator had explicitly pointed at, which left
+a webcomic neither extractable automatically nor rescuable by hand.
+
+This is safe precisely because a rule is not a heuristic: nothing selects that
+element except someone who chose it. The floor still applies when the selection
+has no image, so a rule aimed at a paywall stub still falls through.
+
 ### The page images rung
 
 Webcomics defeat every rung above, and not by a small margin. Each of those
@@ -184,8 +196,9 @@ const Version = "3"
 
 **Bump it whenever extraction output could change** — a new rung, a changed
 threshold, a different sanitization policy, an upgraded extractor library.
-`tome reextract --since-version <n>` finds everything produced by older
-behavior and queues it. Forgetting to bump it means an improvement silently
+A bare `tome reextract` finds everything produced by older behavior and queues
+it: the flag it defaults to names the version you want everything brought *to*,
+and selects anything that is not already there. Forgetting to bump it means an improvement silently
 never reaches the archive it was written for.
 
 | Version | Change |
@@ -196,12 +209,12 @@ never reaches the archive it was written for.
 
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not
-select the affected articles on its own. Use `--since-version 0`, which matches
+select the affected articles on its own. Use `--target-version 0`, which matches
 every body because no body carries version `0`, together with `--domain` to keep
 the work to the site the rule affects:
 
 ```sh
-tome reextract --since-version 0 --domain example.com
+tome reextract --target-version 0 --domain example.com
 ```
 
 That asymmetry is worth understanding rather than working around. The version

@@ -281,7 +281,18 @@ func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {
 	}
 
 	text := strings.TrimSpace(selection.Text())
-	if len(text) < minChars {
+
+	// The length floor does not apply to a selection carrying an image.
+	//
+	// A rule is a human saying "the body is here", and on an image-first page
+	// the body is a picture and a caption — nowhere near 200 characters. Judging
+	// it by text length rejects the one thing the operator explicitly pointed
+	// at, which is how a webcomic could be neither extracted automatically nor
+	// rescued by hand.
+	//
+	// Safe because a rule is not a heuristic: nothing selects this element
+	// except someone who chose it.
+	if len(text) < minChars && !hasImage(body) {
 		return Result{}, false
 	}
 

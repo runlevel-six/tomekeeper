@@ -164,3 +164,45 @@ func TestImportOPMLRejectsBadInvocations(t *testing.T) {
 		})
 	}
 }
+
+// The flag was called --since-version, which reads as an ordering — "everything
+// from version 2 onwards" — and is not one: the selection is "any version other
+// than this". Passing the version everything already has therefore selects
+// nothing and reports that everything is up to date, which is true and exactly
+// the wrong thing to hear.
+//
+// This happened for real. The fix is a name that says what it means, an alias so
+// written-down commands keep working, and a message that names the likely
+// mistake.
+func TestReextractFlagNaming(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	// Usage must advertise the honest name.
+	reextract([]string{"--help"}, &out, &errOut)
+	usage := out.String() + errOut.String()
+
+	if !strings.Contains(usage, "--target-version") {
+		t.Errorf("usage does not mention --target-version:\n%s", usage)
+	}
+	if !strings.Contains(usage, "deprecated alias") {
+		t.Errorf("usage does not mark --since-version as deprecated, so nothing tells a reader to stop using it:\n%s", usage)
+	}
+}
+
+// Both spellings must reach the same setting; the alias exists so that commands
+// already written down keep working.
+func TestReextractAcceptsBothFlagSpellings(t *testing.T) {
+	for _, flag := range []string{"--target-version=9", "--since-version=9"} {
+		var out, errOut bytes.Buffer
+		reextract([]string{flag}, &out, &errOut)
+
+		// Asserted on the message rather than the exit code: with no database
+		// configured this fails at configuration, which also exits with a usage
+		// code, so the code alone cannot tell an unknown flag from a missing
+		// setting. "flag provided but not defined" is what an unknown flag says
+		// and is the only thing being ruled out here.
+		if strings.Contains(errOut.String(), "not defined") {
+			t.Errorf("%s is not a recognized flag:\n%s", flag, errOut.String())
+		}
+	}
+}

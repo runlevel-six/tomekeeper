@@ -32,15 +32,26 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("reextract", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	sinceVersion := fs.String("since-version", extract.Version,
+	// --target-version, because the flag names the version you want everything to
+	// be at, and the selection is "not this one".
+	//
+	// It was called --since-version, which reads as an ordering — "everything
+	// from version 2 onwards" — and is not one. The predicate is `<>`. Passing
+	// the *old* version, which is the natural reading, selects nothing and
+	// reports that everything is already up to date, which is both true and
+	// exactly the wrong thing to hear. The old name still works so that written-
+	// down commands do not break.
+	targetVersion := fs.String("target-version", extract.Version,
 		"reprocess articles whose body came from an extractor version other than this")
+	fs.StringVar(targetVersion, "since-version", extract.Version,
+		"deprecated alias for --target-version")
 	domain := fs.String("domain", "",
 		"only reprocess articles from this host and its subdomains (default: every host)")
 	limit := fs.Int("limit", 0, "stop after queueing this many articles (0 means no limit)")
 	dryRun := fs.Bool("dry-run", false, "report what would be queued without queueing it")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: tome reextract [--since-version V] [--domain HOST] [--limit N] [--dry-run]")
+		fmt.Fprintln(stderr, "Usage: tome reextract [--target-version V] [--domain HOST] [--limit N] [--dry-run]")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -79,7 +90,7 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	total, err := queueReextractions(ctx, s, client, *sinceVersion, *domain, *limit, *dryRun, stdout)
+	total, err := queueReextractions(ctx, s, client, *targetVersion, *domain, *limit, *dryRun, stdout)
 	if err != nil {
 		log.Error("reextract failed", "error", err)
 		return exitFailure
@@ -100,10 +111,18 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		// nothing to reprocess, or nothing archived from that host at all — often
 		// a typo in the domain.
 		fmt.Fprintf(stdout, "nothing to do: no article%s has a mutable body at a version other than %s\n",
-			scope, *sinceVersion)
+			scope, *targetVersion)
 		fmt.Fprintln(stdout, "if that is unexpected, check the spelling; `tome archive stats` lists what is stored")
 	case total == 0:
-		fmt.Fprintf(stdout, "nothing to do: every mutable body is already at version %s\n", *sinceVersion)
+		fmt.Fprintf(stdout, "nothing to do: every mutable body is already at version %s\n", *targetVersion)
+		// The overwhelmingly likely mistake, and one whose symptom reads like
+		// success: asking for the version everything already has, rather than the
+		// version you want it brought to.
+		if *targetVersion != extract.Version {
+			fmt.Fprintf(stdout,
+				"this build extracts at version %s, so `tome reextract` with no flag "+
+					"would reprocess those %s bodies\n", extract.Version, *targetVersion)
+		}
 	case *dryRun:
 		fmt.Fprintf(stdout, "%d %s%s would be re-extracted (dry run, nothing queued)\n", total, noun, scope)
 	default:

@@ -114,3 +114,51 @@ func TestAShortArticleWithItsOwnImageIsNotReplaced(t *testing.T) {
 		t.Errorf("the article's text was lost:\n%s", r.Text)
 	}
 }
+
+// A domain rule is a human saying "the body is here". On an image-first page
+// that body is a picture and a caption, far under the 200-character floor — so
+// applying the floor rejects the one element the operator explicitly pointed at,
+// and a comic ends up neither extracted automatically nor rescuable by hand.
+func TestADomainRuleMayPointAtAnImage(t *testing.T) {
+	const page = `<html><body>
+	  <div id="chrome"><p>Navigation and a great deal of other text that goes on for
+	     a while so that a text extractor has something it prefers to find, which is
+	     exactly the situation a domain rule exists to correct on a page like this
+	     one, where the real content is a single picture.</p></div>
+	  <div id="strip"><img src="/comic/unrelated-name.png" alt="Today"></div>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://comics.example.com/comic/some-strip",
+		Rule:    &extract.Rule{ContentSelector: "#strip"},
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	if r.Name != extract.NameDomainRule {
+		t.Errorf("extractor = %q, want %q — the rule's selection was rejected for being short",
+			r.Name, extract.NameDomainRule)
+	}
+	if !strings.Contains(r.HTML, "unrelated-name.png") {
+		t.Errorf("the selected image is not in the body:\n%s", r.HTML)
+	}
+}
+
+// The floor still applies when there is no image: a rule pointing at a paywall
+// stub should still fall through rather than storing two sentences as an article.
+func TestADomainRuleStillNeedsTextWhenThereIsNoImage(t *testing.T) {
+	const page = `<html><body>
+	  <div id="stub"><p>Subscribe to read.</p></div>
+	  <div id="rest"><p>Some other text on the page entirely.</p></div>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://example.com/2026/paywalled",
+		Rule:    &extract.Rule{ContentSelector: "#stub"},
+	})
+	if err == nil && r.Name == extract.NameDomainRule {
+		t.Errorf("a two-sentence imageless selection was accepted as an article:\n%s", r.HTML)
+	}
+}

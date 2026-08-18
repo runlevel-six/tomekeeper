@@ -117,7 +117,7 @@ itself. Extraction quality only improves, so bodies are regenerable.
 Indexes: `article_content_current_idx`, a unique index on `(article_id) WHERE
 is_current`; `article_content_tsv_idx`, a GIN index on `tsv`;
 `article_content_version_idx` on `(extractor_version) WHERE is_current AND NOT
-immutable`, which is what keeps `tome reextract --since-version` from scanning
+immutable`, which is what keeps `tome reextract` from scanning
 the whole archive.
 
 #### Search language
