@@ -93,20 +93,36 @@ tome worker
 All settings are read by every subcommand, because configuration is validated
 as a whole. Only some affect a given command's behavior:
 
-| Setting | `serve` | `worker` | `migrate` | `import-opml` |
-|---|---|---|---|---|
-| `TOME_DATABASE_URL` | yes | yes | yes | yes (not for `--dry-run`) |
-| `TOME_HTTP_ADDR`, `TOME_SHUTDOWN_TIMEOUT` | yes | — | — | — |
-| `TOME_LOG_LEVEL`, `TOME_LOG_FORMAT` | yes | yes | yes | yes |
-| `TOME_USERNAME` | — | — | creates the user | selects the user |
-| `TOME_PASSWORD` | — | — | sets the password | — |
-| `TOME_SESSION_KEY`, `TOME_COOKIE_SECURE` | yes | — | — | — |
-| `TOME_METRICS_ADDR` | yes | yes | — | — |
-| `TOME_RETAIN_AFTER_READ` | — | yes | — | — |
-| `TOME_CONTACT_URL` | — | yes | — | — |
-| `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — |
-| `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — |
-| `TOME_BLOB_ROOT` | — | yes | — | — |
+| Setting | `serve` | `worker` | `migrate` | `import-opml` | `reextract` | `domain-rule` | `archive` |
+|---|---|---|---|---|---|---|---|
+| `TOME_DATABASE_URL` | yes | yes | yes | yes (not for `--dry-run`) | yes | yes | yes |
+| `TOME_HTTP_ADDR`, `TOME_SHUTDOWN_TIMEOUT` | yes | — | — | — | — | — | — |
+| `TOME_LOG_LEVEL`, `TOME_LOG_FORMAT` | yes | yes | yes | yes | yes | yes | yes |
+| `TOME_USERNAME` | — | — | creates the user | selects the user | — | — | — |
+| `TOME_PASSWORD` | — | — | sets the password | — | — | — | — |
+| `TOME_SESSION_KEY`, `TOME_COOKIE_SECURE` | yes | — | — | — | — | — | — |
+| `TOME_METRICS_ADDR` | yes | yes | — | — | — | — | — |
+| `TOME_RETAIN_AFTER_READ` | — | yes | — | — | — | — | — |
+| `TOME_CONTACT_URL` | — | yes | — | — | — | — | — |
+| `TOME_POLL_*`, `TOME_FEED_FAILURE_THRESHOLD`, `TOME_WORKER_CONCURRENCY` | — | yes | — | — | — | — | — |
+| `TOME_FETCH_RPS`, `TOME_FETCH_CONCURRENCY` | — | yes | — | — | — | — | — |
+| `TOME_IMAGE_CONCURRENCY` | — | yes | — | — | — | — | — |
+| `TOME_BLOB_ROOT` | serves images | writes the archive | — | — | — | — | — |
+
+`tome archive stats` is absent from that last row on purpose: it reports the
+archive's size from the database's own byte totals rather than by walking the tree,
+so it answers the same question from a machine that cannot see the volume. Use
+`du -sh "$TOME_BLOB_ROOT"` when you want what the filesystem thinks.
+
+`serve` reads `TOME_BLOB_ROOT` because archived images are served from it: a
+stored body references them as root-relative `/assets/…` paths, and those are
+requests this process answers. It is the one setting both long-running workloads
+need, which is why the deployment has to keep them on the same copy of it — see
+[Install on Kubernetes](../how-to/install-kubernetes.md).
+
+Unlike the worker, `serve` treats an unopenable blob root as survivable: images
+404 and the log says why, rather than the interface refusing to start over a
+directory the worker may create on its next run.
 
 ## Storage
 

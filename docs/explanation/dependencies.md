@@ -10,9 +10,12 @@ worse than the risk of the dependency.*
 
 ## Go module dependencies
 
-Twelve libraries across fourteen modules — River publishes its driver and
-type packages separately. Each is here because the standard library cannot do
-the job and doing it by hand would be worse than the risk of the dependency.
+Seventeen libraries across nineteen modules — River publishes its driver and type
+packages separately. Each is here because the standard library cannot do the job
+and doing it by hand would be worse than the risk of the dependency.
+
+The count is of *direct* dependencies. `go list -m -f '{{if not .Indirect}}…'`
+is the authority; if it disagrees with this table, the table is wrong.
 
 | Dependency | Why |
 |---|---|
@@ -28,7 +31,9 @@ the job and doing it by hand would be worse than the risk of the dependency.
 | `golang.org/x/time/rate` | The per-host token bucket. A correct rate limiter with a burst allowance is not hard, but this one is already in the extended standard library and already correct. |
 | `github.com/gen2brain/avif` | AVIF encoding, which is where most of the archive's storage saving comes from. Encodes through a WebAssembly build of libavif on the same wazero runtime trafilatura already pulls in, so no C toolchain is involved and the libaom bindings are avoided. **Must be built with `-tags nodynamic`:** it otherwise pulls in `ebitengine/purego` for an optional path that `dlopen`s a system libavif, and purego's `//go:cgo_import_dynamic` makes the binary link against libc *even with `CGO_ENABLED=0`* — which the distroless-static runtime image cannot exec. The tag is set in the Dockerfile, the Taskfile, and CI. |
 | `github.com/HugoSmits86/nativewebp` | WebP encoding, as the fallback when AVIF encoding fails. Pure Go, for the same reason. It is lossless-only, which is why the pipeline discards any transcode larger than its source. |
-| `golang.org/x/image` | WebP *decoding*, and the CatmullRom scaler used to downscale. The standard library has neither. |
+| `golang.org/x/image` | WebP *decoding*, and the CatmullRom scaler used to downscale. The standard library has neither. Also what the brand assets are resized with — see [The mark and the lockup](../reference/logo.md). |
+| `golang.org/x/net/html` | The HTML tokenizer the extraction ladder walks. Already in the tree beneath the extractors and `goquery`; the standard library has no HTML parser. |
+| `github.com/prometheus/client_golang` | The metrics endpoint and its custom collector. Writing the exposition format by hand is a morning's work and then a decade of tracking a specification that changes without you; this is the reference implementation, and the collector interface is what lets the archive's gauges be queried on scrape rather than maintained continuously. |
 | `golang.org/x/crypto/argon2` | Password hashing (argon2id). The standard library has no memory-hard KDF, and this is the reference implementation for the algorithm current guidance recommends. Only the KDF is taken from it: the PHC string encoding, parameter parsing, and constant-time comparison are written here, so the encoding is inspectable and no dependency owns the on-disk format of a credential. |
 | `golang.org/x/sync/singleflight` | Collapsing concurrent fetches of the same image URL across articles. The database lookup that dedupes fetches is a check-then-act, so without this the origin serves one request per worker slot for a picture shared between articles. Already in the tree as a transitive dependency, and a hand-rolled map of in-flight keys is the kind of thing that looks right and leaks a goroutine on the error path. |
 

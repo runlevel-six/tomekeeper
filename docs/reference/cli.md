@@ -293,25 +293,80 @@ session.
 | `GET /` | Unread stream |
 | `GET /all` | Everything in the archive |
 | `GET /starred` | Starred articles |
+| `GET /saved` | Reading list — pages saved by hand |
+| `GET /categories` | The categories the feeds are filed under |
+| `GET /categories?name=` | One category's articles. Present-but-empty selects the feeds with no category. |
 | `GET /articles/{id}` | The reader. Opening an article marks it read. |
 | `GET /search?q=` | Search results |
 | `GET /feeds` | Feed list, health, and tags |
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly |
+| `GET /settings` | Palette and preferences |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
+| `POST /articles/{id}/keep` | Keep permanently, or stop. Same form field. |
+| `POST /save` | Save a page by hand. `url=`. |
+| `POST /feeds/import` | Subscribe to everything in an uploaded OPML file |
+| `POST /feeds/refresh` | Bring every enabled feed forward to due |
+| `POST /settings` | Save preferences |
+| `GET /login`, `POST /login`, `POST /logout` | Session |
 | `GET /assets/…` | Archived images, from `TOME_BLOB_ROOT` |
-| `GET /static/…` | Stylesheet, keyboard script, vendored htmx |
+| `GET /static/…` | Stylesheet, keyboard script, logo, vendored htmx |
 
-The two `POST` routes take the state they should end in rather than toggling, so a
-repeated or retried request is idempotent instead of landing back where it started.
-They return the refreshed control alone, which is what htmx swaps in; without
-JavaScript the same forms submit normally and the page reloads.
+The state-changing `POST` routes take the state they should end in rather than
+toggling, so a repeated or retried request is idempotent instead of landing back
+where it started. They return the refreshed control alone, which is what htmx swaps
+in; without JavaScript the same forms submit normally and the page reloads.
 
 An article a reader cannot see is `404`, never `403`. A distinct "forbidden" would
 confirm the article exists, which is exactly what the scoping discipline says one reader must not be
 able to infer about another's archive.
+
+### `POST /feeds/refresh` — check the feeds now
+
+Sets `next_poll_at = now()` on every one of the reader's enabled feeds, so the
+worker's scheduler picks them up on its next pass — within one `ScheduleInterval`,
+which is a minute. It fetches nothing itself: `tome serve` has no job client, and
+polling belongs to the worker.
+
+Three things it deliberately does not do:
+
+- **Feeds polled within the last five minutes are left alone.** The button is one
+  tap and there are dozens of origin servers behind it. The page reports how many
+  were held rather than hiding the fact.
+- **Disabled feeds are not revived.** Re-enable them from the feed list; a refresh
+  that quietly undid auto-disable would undo the feature on every reload.
+- **It does not wait.** The page says the worker will get to them, because claiming
+  otherwise would be a spinner that finishes before any feed has been contacted.
+
+### Navigation between lists and articles
+
+An article link carries the list it was opened from, as `?from=<token>`:
+
+| Token | List |
+|---|---|
+| `unread`, `all`, `starred`, `saved` | The corresponding stream |
+| `feed:{id}` | One feed |
+| `tag:{id}` | One tag |
+| `category:{name}` | One category, `{name}` verbatim |
+| `search:{text}` | The search that found it |
+| `attention` | The attention queue |
+
+The reader uses it for two controls that the browser cannot supply: a way back to
+the list, and previous/next *within that list*. Installed as a web app there is no
+back button at all, and even in a browser the back button cannot say what the next
+article is.
+
+An unrecognized token — a hand-edited URL, or a feed that is not the reader's —
+falls back to a way back to the unread list, and no previous/next. `search:` and
+`attention` grant a way back but no previous/next: search results are ranked by
+relevance and the attention queue is a worklist, and neither is a reading order.
+
+Previous and next within the unread list admit articles read in the last 30
+minutes. Opening an article marks it read, so without that the list would
+rearrange itself the instant a reader arrived and "previous" would point off the
+top of a list holding nothing they had seen.
 
 ### Keyboard
 
@@ -320,21 +375,48 @@ able to infer about another's archive.
 | `j` / `↓` | Next entry |
 | `k` / `↑` | Previous entry |
 | `o` / `Enter` | Open the selected entry |
+| `n` | Next article (in the reader) |
+| `p` | Previous article (in the reader) |
+| `u` / `Escape` | Back to the list the article was opened from |
+| `r` | Reload this page |
 | `s` | Star or unstar |
 | `m` | Mark read or unread |
 | `/` | Search |
-| `g` then `u` `a` `s` `f` | Go to unread, everything, starred, feeds |
+| `g` then `u` `a` `s` `f` `c` | Go to unread, everything, starred, feeds, categories |
+
+Every one of these presses a control the page has already drawn, so a shortcut can
+never reach somewhere there was no visible way to.
+
+### Installed as a web app
+
+`/static/manifest.webmanifest` declares `display: standalone`, so the app can be
+installed to a home screen or a dock. That removes the browser's own chrome, which
+is why the page draws the navigation it does:
+
+- A **tab bar** fixed to the foot of the screen below 34rem — unread, categories,
+  search, starred, saved — since there is no browser UI and a thumb reaches the
+  bottom. The same links live in the header nav at wider widths, and are hidden
+  from it below the threshold so each exists once in the document.
+- A **reload control** in the header, which is a link to the page itself. There is
+  no address bar, no reload button, and no pull-to-refresh in a standalone window.
+- The **unread count leads the `<title>`**, as `(12) Unread — Tomekeeper`, and is
+  mirrored onto the app icon with the Badging API where the platform has one. The
+  count is per page load; nothing polls in the background.
 
 ### Response headers
 
 HTML responses carry
 `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self';
-img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none';
-frame-ancestors 'none'`.
+img-src 'self' data:; connect-src 'self'; manifest-src 'self'; form-action 'self';
+base-uri 'none'; frame-ancestors 'none'`.
 
 Nothing is `unsafe-inline` and nothing is third-party. That is affordable precisely
 because the script is vendored and the images are localized — a page needing a CDN
 could not have a policy this tight.
+
+`manifest-src` is there because `default-src 'none'` blocks the web app manifest
+outright, and the symptom is not an error anyone sees: "add to home screen" simply
+offers a generic icon and the wrong name.
 
 Archived images are served `Cache-Control: public, max-age=31536000, immutable`.
 They are content-addressed, so the bytes at a path genuinely never change; this is
@@ -360,16 +442,30 @@ Returns `200` when every registered dependency check passes, `503` when any
 fails. The whole probe is bounded at 3 seconds.
 
 ```json
-{"status": "ready", "checks": {"database": "ok"}}
+{"status": "ready", "checks": {"database": "ok", "schema": "ok"}}
 ```
 
 ```json
-{"status": "not ready", "checks": {"database": "connection refused"}}
+{"status": "not ready", "checks": {"database": "connection refused", "schema": "ok"}}
 ```
 
-`tome serve` registers one check, `database`, which pings the connection pool.
-A failing database therefore takes this instance out of the load balancer while
-leaving the process alive to recover. The blob root check arrives with the asset pipeline.
+`tome serve` registers two checks:
+
+- **`database`** pings the connection pool. A failing database takes this instance
+  out of the load balancer while leaving the process alive to recover.
+- **`schema`** compares the applied migration version against the one this build
+  needs, and fails readiness with both numbers and the remedy when they differ.
+  It is a readiness check rather than a startup check on purpose: refusing to boot
+  would mean a crash loop with the reason buried in a restarting container's logs.
+  This matters because CI republishes `:latest` on every green build, so a pod
+  restart can pull a binary newer than the schema with nobody having erred.
+  (`tome worker` takes the stricter line and refuses to start, because a worker
+  writing through a schema it does not understand is a data problem rather than a
+  serving one.)
+
+The blob root is deliberately **not** a check. A blob root that cannot be opened
+costs the reader images, not the interface: the pages still work, the log says why,
+and the worker may well create the directory on its next run.
 
 The `checks` field is omitted entirely when no checks are registered.
 

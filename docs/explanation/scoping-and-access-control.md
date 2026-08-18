@@ -72,6 +72,38 @@ misused beats five that are subtly right.
 It costs one coupling — every query embedding it must pass the user id as `$1` —
 and that is a deliberate trade.
 
+### Where it is not enough on its own
+
+The predicate answers "may this reader see this article". It does not answer "is
+this the reader's *filing*", and a filter over a shared article can leak the
+second while respecting the first.
+
+Categories are the case. A category is `feeds.category`, and two readers subscribed
+to the same site legitimately see the same article through their own feed rows —
+filed under whatever folder each of them used. So the category filter carries its
+own scope as well:
+
+```sql
+EXISTS (SELECT 1 FROM feed_items fi JOIN feeds f ON f.id = fi.feed_id
+         WHERE fi.article_id = a.id AND f.user_id = $1
+           AND COALESCE(f.category, '') = $n)
+```
+
+Drop `f.user_id = $1` from that and the visibility predicate still holds — the
+article really is the reader's to read — but another reader's folder names become
+working filters over it. Someone could confirm what a second reader calls a feed by
+finding their own article under it.
+
+The same doubling applies to `article_tags`, which has no `user_id` of its own: the
+article must be visible *and* the tag must be the reader's.
+
+This is also a warning about tests. An isolation test built from an article only the
+*other* reader can see proves nothing here, because the visibility predicate
+excludes it before the filter is reached — such a test passes with the filter's own
+scoping deleted. The article has to be **shared** for the assertion to have any
+force. That is how the category test is written, and it fails when the clause is
+removed.
+
 ## Search is not a side door
 
 Searching `article_content` directly would work, be faster to write, and leak.
@@ -108,6 +140,10 @@ discipline was kept rather than reconstructed.
 Its value was confirmed by deliberately weakening the visibility predicate to
 `(true)`: five of those tests fail. A test on an access boundary that cannot be
 shown to fail is decoration.
+
+Do that to every scoping clause, not just the shared one. The first version of the
+category isolation test passed with the category filter's `user_id` deleted, and
+looked like coverage while providing none — see the warning above.
 
 ## What is deliberately not built
 

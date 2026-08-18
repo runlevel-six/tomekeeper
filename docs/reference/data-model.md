@@ -37,8 +37,9 @@ is a later milestone; the schema is user-scoped from the start regardless.
 |---|---|---|
 | `id` | `bigserial` | Primary key. The seed user is always `1`. |
 | `username` | `text` | Unique. |
-| `password_hash` | `text` | Empty until authentication lands. |
-| `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API. It cannot be derived from `password_hash`, so it is written whenever the password is set. |
+| `password_hash` | `text` | An argon2id hash in PHC string form, written by `tome migrate` from `TOME_PASSWORD`. Empty means the web interface cannot be signed into, which is what a first run with no password set produces. The parameters live inside each hash, so raising the cost later is an upgrade rather than a lockout. |
+| `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API, which does not exist yet. It cannot be derived from `password_hash`, so it has to be written while the cleartext is in hand — that is why the column exists ahead of the API that reads it. |
+| `theme` | `text` | The reader's palette and light/dark preference, as one value such as `plum-dark` or `auto`. See [Themes](themes.md). |
 | `created_at` | `timestamptz` | |
 
 ### `feeds`
@@ -52,7 +53,7 @@ A user's subscriptions, and everything the poller needs to know about each.
 | `feed_url` | `text` | The URL polled. Unique per user. Stored exactly as imported — **not** canonicalized, because a query parameter on a feed endpoint may select which feed is served. |
 | `site_url` | `text` | The human-readable site. Used as the base for resolving relative entry links. |
 | `title` | `text` | Never empty; falls back to the feed URL. |
-| `category` | `text` | From the OPML folder. Nested folders are joined with `/`. |
+| `category` | `text` | From the OPML folder. Nested folders are joined with `/`. Nullable, and a null and an empty string mean the same thing — a feed the export listed outside any folder. This column *is* the category list: there is no `categories` table, so a category exists as long as some feed claims one, and re-importing a rearranged OPML rearranges them. |
 | `etag`, `last_modified` | `text` | Conditional-GET validators from the last successful poll. |
 | `poll_interval` | `interval` | Current adaptive interval. |
 | `next_poll_at` | `timestamptz` | When this feed becomes due. Defaults to `now()`, so a new subscription is polled promptly. |
@@ -63,6 +64,12 @@ A user's subscriptions, and everything the poller needs to know about each.
 
 Indexes: `UNIQUE (user_id, feed_url)`; `feeds_due_idx` on `(next_poll_at) WHERE
 NOT disabled`, which is the scheduler's hot path.
+
+`next_poll_at` is also the whole mechanism behind **Check all feeds now** in the
+web interface: it sets this column to `now()` for the reader's enabled feeds and
+lets the scheduler pick them up. Nothing else about a feed changes, which is why
+pressing the button repeatedly is safe — and why it declines to move a feed polled
+in the last five minutes.
 
 ### `articles`
 
@@ -83,6 +90,14 @@ The root entity. A feed item, a manual save, and an imported entry are all
 | `fetch_status` | `text` | `pending`, `ok`, `failed`, `skipped`. Constrained by `CHECK`. Polling alone leaves everything `pending`. |
 | `fetch_error` | `text` | |
 | `assets_status` | `text` | `pending`, `ok`, `partial`, `none`. Constrained by `CHECK`. `partial` means at least one image could not be localized. `pending` is strictly transient: an article whose pipeline ended without a body is set to `none` when the failure is recorded, because the asset scheduler joins the current content row and could never reach it otherwise. |
+| `content_expired_at` | `timestamptz` | When [retention](retention.md) released this article's body and images. Non-null means the article is still here and what it said is not — the row, its URL and its metadata survive, so the link still works and re-fetching re-archives it. Null under the default configuration, which expires nothing. |
+
+Note which of these are *not* per-reader. Whether a page was fetched, and whether
+its images were localized, is a fact about the page rather than about anyone
+reading it — so the failed-fetch queue is built from `fetch_status`, never from
+per-reader state. `assets_status` is the trap: it looks like progress and is not a
+readable/unreadable signal, and an early version of that queue keyed on it and
+therefore hid 346 articles that had already settled.
 
 **There is deliberately no `origin` or `immutable` column here.** This row is
 shared by every user, so "how did this arrive" has no single answer.
@@ -161,11 +176,16 @@ three feeds has one state rather than three.
 |---|---|---|
 | `user_id`, `article_id` | `bigint` | Composite primary key. |
 | `read`, `starred` | `boolean` | |
-| `saved_at` | `timestamptz` | Non-null marks a manual save, which is one of the per-reference provenance signals. |
-| `read_at` | `timestamptz` | |
+| `kept` | `boolean` | Keep this article's body and images permanently. Exempts it from [retention](retention.md), independently of starring — starring is a reaction, keeping is an instruction to the retention policy. |
+| `saved_at` | `timestamptz` | Non-null marks a manual save, which is one of the per-reference provenance signals. Starring sets it too, which is what keeps a starred article reachable after the feed that introduced it is gone; unstarring leaves it alone. |
+| `read_at` | `timestamptz` | The **first** time it was read, not the latest. Cleared when an article goes back to unread, so the column never claims a read that was undone. |
 
 Rows are created on demand, not when an article is ingested. Polling writes none;
 unread state is the absence of a row.
+
+This table is also the second half of what makes an article visible to a reader: a
+row here keeps an article reachable even after the feed that introduced it is
+deleted. See [Scoping and access control](../explanation/scoping-and-access-control.md).
 
 ### `assets` and `article_assets`
 
@@ -205,8 +225,27 @@ about that site, identical for every reader. Managed with
 
 ### `tags`, `article_tags`, `highlights`
 
-User-scoped annotation. `tags` is unique per `(user_id, name)`; `article_tags`
-joins articles to tags, so the user scope travels via the tag. Unused until the web interface lands.
+User-scoped annotation.
+
+| Table | Columns | Notes |
+|---|---|---|
+| `tags` | `id`, `user_id`, `name` | Unique per `(user_id, lower(name))` in effect: names are compared case-insensitively on write, so "Rust" and "rust" are one tag and the first spelling wins. |
+| `article_tags` | `article_id`, `tag_id` | The join. It has no `user_id` of its own, so the scope has to be enforced from both sides — the article must be visible *and* the tag must be the reader's. |
+| `highlights` | `id`, `article_id`, `user_id`, `quote`, `note`, `created_at` | A passage and an optional note. |
+
+**Both are readable and neither is yet writable.** The web interface lists tags on
+the Feeds page and serves `/tags/{id}` as a stream, but nothing in the application
+creates a tag or attaches one — there is no control for it. `highlights` is not
+read or written anywhere at all.
+
+They are in the schema early because retrofitting a `user_id` onto an annotation
+table means a migration over data that already exists, and because the shape is
+what fixes the scoping rule while it is still cheap to get right.
+
+Do not confuse tags with **categories**. A category is the folder an OPML import
+put a feed in, stored as `feeds.category` and not a table of its own — a category
+exists exactly as long as some feed claims one. Tags are per-article and per-reader;
+categories are per-feed and come from somebody else's reader.
 
 ### `import_records`
 

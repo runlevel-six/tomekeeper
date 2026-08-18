@@ -3,10 +3,17 @@
 A feed that stops producing articles is either failing to fetch, failing to
 parse, or genuinely quiet. This tells them apart.
 
-Until the feed health view exists, the answers come from SQL. Connect with
-`psql "$TOME_DATABASE_URL"`.
-
 ## Find failing feeds
+
+Start on the **Feeds** page in the web interface. It lists every subscription with
+its unread count, when it last succeeded, and — for anything failing — the failure
+count and the last error verbatim. A banner at the top says how many feeds are
+failing, because a slow puncture in the archive is the thing worth noticing.
+
+That answers "which feeds are broken and why" without a database client. The SQL
+below is for the parts the page does not do: comparing a poll against the items it
+produced, and the surgery in the last three sections. Connect with
+`psql "$TOME_DATABASE_URL"`.
 
 ```sql
 SELECT id, title, consecutive_failures, disabled,
@@ -77,7 +84,16 @@ Every poll logs one line with the item counts and the next interval; failures
 log the cause. Health probes are logged at `debug` too, so this is noisy — it
 is a diagnostic mode, not a default.
 
-To force a poll now rather than waiting for the schedule:
+To force a poll now rather than waiting for the schedule, press **Check all feeds
+now** on the Feeds page. It brings every enabled feed forward and the worker picks
+them up within a minute.
+
+Two things it will not do, both on purpose. It leaves alone any feed polled in the
+last five minutes — so pressing it twice while watching a debug log looks like
+nothing happening, and the page says how many were held. And it does not revive
+disabled feeds; that is the section above.
+
+For one specific feed, or for a disabled one you have just fixed:
 
 ```sql
 UPDATE feeds SET next_poll_at = now() WHERE id = $1;

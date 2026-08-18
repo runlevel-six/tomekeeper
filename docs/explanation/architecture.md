@@ -8,9 +8,12 @@ commands and settings *are*, see [CLI](../reference/cli.md) and
 
 `tome` is a single Go binary with subcommands. Two of them are long-running:
 
-- `tome serve` — the HTTP surface: web UI, Fever API, health endpoints.
-- `tome worker` — the job pool: feed polling now; fetching, extraction, and
-  assets.
+- `tome serve` — the HTTP surface: the web interface and the health endpoints.
+  A Fever API for mobile clients is planned and does not exist yet; the column it
+  will authenticate against is already written, because it is derived from the
+  password and could not be added afterwards without asking for the password again.
+- `tome worker` — the job pool: feed polling, fetching, extraction, image
+  localization, and retention.
 
 They are deployed as two workloads built from one image. The alternative — one
 process doing both — is simpler to start and wrong to run: extraction is CPU-
@@ -80,7 +83,49 @@ become a crash loop that outlasts the original problem. Readiness failing is
 the correct response: stop sending traffic, keep the process alive, recover
 when the dependency does.
 
-`tome serve` registers one check, the database. The blob root joins it when the asset pipeline lands.
+`tome serve` registers two: the database connection, and whether the applied
+schema version is the one this binary was built against.
+
+The schema check is on readiness rather than startup because the image is
+republished on every green build, so a pod restart can quietly pull a binary newer
+than the database. Failing readiness with both version numbers and the remedy is
+findable; refusing to boot would bury the same information in a restarting
+container's logs. `tome worker` makes the opposite call and refuses to start
+outright — a worker writing through a schema it does not understand does not fail
+cleanly, it fails every job it picks up, burns the retries, and discards real work
+while looking busy.
+
+The blob root is deliberately not a check at all. If it cannot be opened the
+reader loses images, not the interface, and the directory may simply not exist yet
+because the worker has not run.
+
+## Metrics are on a different port
+
+Both long-running commands serve Prometheus metrics, and neither serves them on
+the port the reader is on.
+
+The reason is not tidiness. An Ingress routing `/` to `tome serve` would publish
+whatever else that port answered — and the outbound metrics name every host the
+archive fetches from, which is a reading list. A separate listener means exposing
+the archive to the internet and exposing its metrics are two decisions instead of
+one, and the second one has to be taken deliberately.
+
+`TOME_METRICS_ADDR` set to empty disables it.
+
+## Preferences live in the database, not in a cookie
+
+The reader's palette is a column on `users`, read on every page render and written
+into the `<html>` element server-side.
+
+A cookie would have been less work and is what most applications do. It is wrong
+here for a reason worth stating: a preference in a cookie is applied by
+JavaScript after the document arrives, which means a visible flash of the wrong
+palette on every load — and this is a reading tool, on a page someone opens
+hundreds of times. Rendering it into the first paint costs one column and one
+query that is already being made.
+
+It also means the choice follows the reader to another browser, which is what
+someone who set it once expects.
 
 ## What runs where
 
@@ -105,7 +150,7 @@ when the dependency does.
                     └──────────────┘
                            ▲
                     ┌──────┴───────┐
-                    │  serve       │  web UI, Fever API, health
+                    │  serve       │  web interface, health
                     └──────────────┘
 ```
 
@@ -138,6 +183,23 @@ A `poll_feed` job is unique per feed while one is pending or running. Without
 that, a scheduler run overlapping a slow poll would enqueue a second poll of the
 same feed, and the two would race to write the same conditional-GET validators
 while the origin server watched what looked a lot like hammering.
+
+### Asking for a poll from the web interface
+
+The **Check all feeds now** button on the Feeds page does not enqueue anything. It
+sets `next_poll_at = now()` and lets the scheduler find the feeds a moment later.
+
+That is a consequence of the split above rather than a limitation of it. `tome
+serve` has no job client and wants none: giving the request path the ability to
+insert polls would mean two processes able to enqueue the same work, and the
+obvious next step — doing the fetch inline so the button could report a result —
+would have a request handler holding a connection open while seventy origin
+servers think about it. Nudging the schedule keeps polling entirely in the worker,
+at the cost of "now" meaning "within a scheduler pass", which the page says out
+loud.
+
+The five-minute floor on that button lives in the store rather than the handler,
+because it is a fact about how often a feed may be polled and not about who asked.
 
 ## Adaptive polling
 

@@ -307,7 +307,7 @@ curl -s localhost:8080/readyz
 
 ```json
 {"status":"ok"}
-{"status":"ready","checks":{"database":"ok"}}
+{"status":"ready","checks":{"database":"ok","schema":"ok"}}
 ```
 
 That is the health surface an orchestrator needs, and it is honest: stop the
@@ -321,17 +321,54 @@ set.
 
 You should see the unread stream. Click an article to read it — the images are
 served from your own archive, not from the original site. Try `j` and `k` to move
-between entries, `o` to open one, and `s` to star it. Search for a word you
-remember from one of the articles.
+between entries, `o` to open one, and `s` to star it. Then, from inside an article,
+`n` for the next one, `p` for the one before, and `u` to go back to the list you
+came from. Search for a word you remember from one of the articles.
 
-Two pages worth visiting once, because they are what makes the rest maintainable:
+Three pages worth visiting once, because they are what makes the rest
+maintainable:
 
+- **Categories** groups your subscriptions by the folders your OPML export used,
+  so you can read only the comics or only the tech feeds. If your export had no
+  folders, everything lands in one bucket.
 - **Feeds** shows every subscription with the last error it gave. A feed is never
-  dropped silently.
+  dropped silently. It also has **Check all feeds now**, which brings every feed's
+  next poll forward — useful in a tutorial, where you do not want to wait fifteen
+  minutes to see the adaptive interval do something.
 - **Attention** lists anything that did not come through cleanly — usually a site
   that needs a [domain rule](../how-to/add-a-domain-rule.md), sometimes a page no
   extractor will ever read. Nothing there is lost; the stored page can be
   re-extracted once a rule exists.
+
+### Save something nothing subscribed to
+
+Go to **Saved** and paste a link to any article — something a colleague sent you,
+not something a feed brought. The page is queued, and the worker fetches, extracts
+and archives it exactly as it does a feed item: same pipeline, same
+standalone-`index.html` on disk. This is the half of the tool that replaces a
+read-later app, and it is why the article rather than the feed item is the root
+entity — a saved page needs no feed to hang off.
+
+### Make it yours
+
+**Settings** has six palettes plus the neutral one it starts with. They are not decoration: this is a page you look
+at for hours, and each palette is a field color, a metallic, and a parchment taken
+from the archive seal's own design. Each can follow the system light/dark
+preference or be pinned to one. The choice is stored against your user and rendered
+into the page server-side, so there is no flash of the wrong colors on load.
+
+The same page is where retention would be explained if you turned it on. You have
+not: it is off by default, and until you set `TOME_RETAIN_AFTER_READ` nothing in
+this archive is ever released.
+
+### Try it as an installed app
+
+Worth doing once, because the interface changes shape. Install it from your
+browser's menu — in Chrome, the icon in the address bar; on iOS, *Add to Home
+Screen*. Opened from the home screen there is no address bar, no back button and no
+reload, so the page draws its own: a tab bar along the bottom, a reload control in
+the header, and a way back to the list from every article. The unread count leads
+the window title, and on platforms that support it rides the app icon as a badge.
 
 If signing in fails, the page says whether a password has been set at all. Every
 other rejection reads the same on purpose, and the reason is in the server's log.

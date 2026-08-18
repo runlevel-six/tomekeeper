@@ -1,6 +1,10 @@
-# Tomekeeper
+<h1 align="center">
+  <img src="docs/assets/logo.png" alt="Tomekeeper" width="520">
+</h1>
 
-A self-hosted feed aggregator that permanently archives what it reads.
+<p align="center">
+  A self-hosted feed aggregator that permanently archives what it reads.
+</p>
 
 Feed readers treat articles as transient, and most feeds are truncated, so what
 you keep is a headline and two sentences. Read-later apps archive well but
@@ -13,15 +17,40 @@ gone.
 politely, extracts readable bodies, localizes the images, and writes each
 article as a standalone page — open `index.html` from a file manager with this
 service stopped and the database gone, and the article renders with its images.
-It also serves a web interface to read in: an unread stream, a reader, full-text
-search across the archive, feed health, and a queue of anything that did not come
-through cleanly. Keyboard-driven, no build step, no CDN.
 
-**Not built yet:** mobile-client sync, importing from other read-later tools,
-exporting, Kubernetes manifests, headless rendering for JavaScript-only sites,
-and more than one user account. Those are planned, roughly in that order.
+What is there:
+
+- **Reading.** Unread stream, article reader, full-text search across the whole
+  archive, browsing by category, starred and a manual reading list. Keyboard-driven
+  throughout; no build step, no CDN, no JavaScript required for anything but the
+  shortcuts.
+- **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
+  anything a feed brought.
+- **Installable.** Add it to a home screen and it draws its own navigation — a tab
+  bar, a way back from every article, previous/next, a reload control, and the
+  unread count in the title and on the app icon — because a standalone window
+  provides none of that.
+- **Subscriptions.** OPML import from the CLI or by upload. Feed health with the
+  last error each feed gave, a queue of anything that did not come through
+  cleanly, and a button to check every feed now rather than waiting for the
+  adaptive interval.
+- **Keeping, and letting go.** Star or keep an article to protect its stored copy
+  forever; optional retention releases the bodies of things you have read and did
+  not keep. Off by default.
+- **Looking at it for hours.** Six palettes plus the neutral one it starts with,
+  each following your system light/dark preference or pinned to one, chosen from a
+  settings page.
+- **Running it.** Kubernetes manifests that stand up the service, its worker, its
+  PostgreSQL, a migration Job and a nightly backup CronJob, plus Prometheus metrics
+  on their own port — deliberately not the port the reader is on.
+
+**Not built yet:** mobile-client sync (the Fever API), importing from other
+read-later tools, exporting, headless rendering for JavaScript-only sites, and
+more than one user account. Those are planned, roughly in that order.
 
 ## Quick start
+
+Locally, from source:
 
 ```sh
 docker run -d --name tome-db -e POSTGRES_USER=tome -e POSTGRES_PASSWORD=tome \
@@ -32,11 +61,11 @@ cd tomekeeper
 task build
 
 export TOME_DATABASE_URL='postgres://tome:tome@localhost:5432/tome?sslmode=disable'
-
 export TOME_BLOB_ROOT="$PWD/archive"
 export TOME_CONTACT_URL='https://example.com/about'   # be contactable
+export TOME_PASSWORD='choose-something'               # read only by migrate
 
-./bin/tome migrate                        # create the schema
+./bin/tome migrate                        # create the schema, seed the user
 ./bin/tome import-opml subscriptions.opml # your OPML from any other reader
 ./bin/tome worker                         # poll, fetch, extract, localize images
 
@@ -47,10 +76,30 @@ find "$TOME_BLOB_ROOT/articles" -name index.html | head -1
 ```console
 $ ./bin/tome serve &
 $ curl -s localhost:8080/readyz
-{"status":"ready","checks":{"database":"ok"}}
+{"status":"ready","checks":{"database":"ok","schema":"ok"}}
 ```
 
-The full walkthrough is [Tutorial 1](docs/tutorials/01-first-run.md).
+Then sign in at <http://localhost:8080>. The full walkthrough is
+[Tutorial 1](docs/tutorials/01-first-run.md).
+
+On Kubernetes, where the manifests bring their own PostgreSQL:
+
+```sh
+cp -r deploy/overlays/example deploy/overlays/local
+$EDITOR deploy/overlays/local/kustomization.yaml   # hostname, storage class, image
+
+kubectl create namespace tomekeeper
+kubectl -n tomekeeper create secret generic tomekeeper \
+  --from-literal=password="$(openssl rand -base64 24)" \
+  --from-literal=postgres-password="$(openssl rand -base64 24)" \
+  --from-literal=session-key="$(openssl rand -base64 32)"
+kubectl apply -k deploy/overlays/local
+```
+
+`deploy/overlays/local` is gitignored on purpose — a hostname and a storage class
+are yours, not the project's. See
+[Install on Kubernetes](docs/how-to/install-kubernetes.md) for the handful of
+things that will confuse you once.
 
 ## Documentation
 
