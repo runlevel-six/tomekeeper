@@ -41,7 +41,7 @@ func TestSaveAPageArchivesIt(t *testing.T) {
 	if strings.Contains(list, "(untitled)") {
 		t.Errorf("an untitled saved page renders with no way to identify it:\n%s", list)
 	}
-	if !strings.Contains(list, "not fetched yet") {
+	if !strings.Contains(list, ">queued</span>") {
 		t.Errorf("a queued page is not distinguished from one that failed to extract:\n%s", list)
 	}
 }
@@ -185,3 +185,58 @@ func TestPartiallyArchivedImagesAreExplained(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// "Is this worth opening yet" is the question the badge answers. Getting it
+// wrong in the optimistic direction is the expensive one: an article marked
+// complete that renders as blank rectangles is why this exists.
+func TestStreamBadgeReportsArchivingState(t *testing.T) {
+	tests := []struct {
+		name         string
+		fetchStatus  string
+		assetsStatus string
+		dropBody     bool
+		want         string
+		notWant      string
+	}{
+		{name: "fully archived", fetchStatus: "ok", assetsStatus: "ok", want: "complete"},
+		{name: "images still queued", fetchStatus: "ok", assetsStatus: "pending",
+			want: "images pending", notWant: "complete"},
+		{name: "images incomplete", fetchStatus: "ok", assetsStatus: "partial",
+			want: "images incomplete", notWant: "complete"},
+		{name: "not fetched yet", fetchStatus: "pending", assetsStatus: "pending",
+			dropBody: true, want: "queued", notWant: "complete"},
+		{name: "fetch failed", fetchStatus: "failed", assetsStatus: "none",
+			dropBody: true, want: "no body", notWant: "complete"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rd, tr := readingFixture(t)
+
+			if _, err := tr.pool.Exec(t.Context(),
+				`UPDATE articles SET fetch_status = $2, assets_status = $3 WHERE id = $1`,
+				tr.aliceOnly, tt.fetchStatus, tt.assetsStatus); err != nil {
+				t.Fatalf("setting article state: %v", err)
+			}
+			if tt.dropBody {
+				if _, err := tr.pool.Exec(t.Context(),
+					`DELETE FROM article_content WHERE article_id = $1`, tr.aliceOnly); err != nil {
+					t.Fatalf("removing the body: %v", err)
+				}
+			}
+
+			// Matched with the tag delimiters, because "images incomplete"
+			// contains "complete" and a bare substring check passes for exactly
+			// the case this is meant to catch.
+			body := rd.body("/all")
+			if want := ">" + tt.want + "</span>"; !strings.Contains(body, want) {
+				t.Errorf("the stream does not show the %q badge:\n%s", tt.want, body)
+			}
+			if tt.notWant != "" {
+				if bad := ">" + tt.notWant + "</span>"; strings.Contains(body, bad) {
+					t.Errorf("the stream shows the %q badge for an article that is not:\n%s", tt.notWant, body)
+				}
+			}
+		})
+	}
+}

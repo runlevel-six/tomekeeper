@@ -58,13 +58,24 @@
     {{if $item.Author}}<span class="byline">{{$item.Author}}</span>{{end}}
     <time datetime="{{$item.SortAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since $item.SortAt}}</time>
     {{with readingTime $item.WordCount}}<span class="length">{{.}}</span>{{end}}
-    {{if eq $item.AssetsStatus "partial"}}<span class="warn" title="Some images could not be archived">images incomplete</span>{{end}}
+    {{/*
+      One badge for the whole archiving state, because "is this worth opening
+      yet" is one question. An article whose images are still queued renders as
+      blank rectangles — the content security policy blocks the origin site's
+      copies — and looks broken rather than unfinished.
+    */}}
     {{if not $item.HasBody}}
       {{if eq $item.FetchStatus "pending"}}
-        <span class="pending" title="The worker has not reached this page yet">not fetched yet</span>
+        <span class="badge pending" title="The worker has not reached this page yet">queued</span>
       {{else}}
-        <span class="warn" title="Nothing was extracted from this page">no body</span>
+        <span class="badge bad" title="Nothing was extracted from this page">no body</span>
       {{end}}
+    {{else if eq $item.AssetsStatus "pending"}}
+      <span class="badge pending" title="The text is here; its images are still being archived">images pending</span>
+    {{else if eq $item.AssetsStatus "partial"}}
+      <span class="badge warn" title="Some images could not be archived and are not shown">images incomplete</span>
+    {{else}}
+      <span class="badge ok" title="Text and images are archived; this reads offline">complete</span>
     {{end}}
   </p>
 

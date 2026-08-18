@@ -112,6 +112,18 @@ type Config struct {
 	// FetchConcurrency caps outbound requests in flight across all hosts.
 	FetchConcurrency int
 
+	// ImageConcurrency caps how many images are transcoded at once.
+	//
+	// Its own setting rather than sharing WorkerConcurrency because the two
+	// bound completely different things. Most jobs are network-bound and cost
+	// almost nothing to hold open; transcoding one image costs roughly 600MB,
+	// near enough regardless of the image's size, because the AVIF encoder
+	// instantiates a WASM module per call. Five of those at once is 3GB.
+	//
+	// This is the number to change if the worker is being OOM-killed, and the
+	// one to raise if it has memory to spare and images are the bottleneck.
+	ImageConcurrency int
+
 	// BlobRoot is the filesystem root of the archive. Raw fetched pages are
 	// stored under it, along with the extracted articles and their images.
 	BlobRoot string
@@ -133,7 +145,11 @@ const (
 	defaultWorkerConcurrency    = 5
 	defaultFetchRPS             = 1.0
 	defaultFetchConcurrency     = 10
-	defaultBlobRoot             = "/var/lib/tomekeeper"
+	// Two, not five: see Config.ImageConcurrency. Two concurrent transcodes is
+	// about 1.2GB, which fits the 2GB limit the manifests set with room for the
+	// rest of the worker.
+	defaultImageConcurrency = 2
+	defaultBlobRoot         = "/var/lib/tomekeeper"
 )
 
 // LookupFunc matches os.LookupEnv. Taking it as a parameter keeps Load a pure
@@ -332,6 +348,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 	cfg.FeedFailureThreshold = positiveInt("FEED_FAILURE_THRESHOLD", defaultFeedFailureThreshold)
 	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
 	cfg.FetchConcurrency = positiveInt("FETCH_CONCURRENCY", defaultFetchConcurrency)
+	cfg.ImageConcurrency = positiveInt("IMAGE_CONCURRENCY", defaultImageConcurrency)
 
 	// TOME_FETCH_RPS — the per-host politeness budget. Fractional rates are
 	// the useful ones: 0.5 is one request every two seconds.
@@ -418,6 +435,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Int("worker_concurrency", c.WorkerConcurrency),
 		slog.Float64("fetch_rps", c.FetchRPS),
 		slog.Int("fetch_concurrency", c.FetchConcurrency),
+		slog.Int("image_concurrency", c.ImageConcurrency),
 		slog.String("blob_root", c.BlobRoot),
 		slog.Duration("retain_after_read", c.RetainAfterRead),
 	)

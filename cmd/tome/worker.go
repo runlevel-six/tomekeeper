@@ -41,6 +41,20 @@ func worker(args []string, stderr io.Writer) int {
 	}
 	defer pool.Close()
 
+	// Before any work is attempted. A worker running against a schema older than
+	// its binary does not fail cleanly: it fails every job it picks up, burns the
+	// retries, and eventually discards real work — all while looking busy.
+	// Refusing to start is a crash loop, which is loud, findable, and exactly
+	// what the first deploy already does while the migration Job runs.
+	if state, err := db.CheckSchema(ctx, pool); err != nil {
+		log.Warn("could not determine the schema version", "error", err)
+	} else if !state.UpToDate() {
+		log.Error("the database schema is older than this build, so no work will be attempted",
+			"applied", state.Applied, "expected", state.Expected,
+			"remedy", "run `tome migrate`")
+		return exitFailure
+	}
+
 	blobs, err := blob.NewFilesystem(cfg.BlobRoot)
 	if err != nil {
 		log.Error("cannot open the blob store", "error", err)
@@ -57,15 +71,16 @@ func worker(args []string, stderr io.Writer) int {
 	}
 
 	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
-		Pool:            pool,
-		Store:           s,
-		Poller:          newPoller(cfg, s, client, log),
-		Client:          client,
-		Blobs:           blobs,
-		Extractor:       extract.New(),
-		Log:             log,
-		Concurrency:     cfg.WorkerConcurrency,
-		RetainAfterRead: cfg.RetainAfterRead,
+		Pool:             pool,
+		Store:            s,
+		Poller:           newPoller(cfg, s, client, log),
+		Client:           client,
+		Blobs:            blobs,
+		Extractor:        extract.New(),
+		Log:              log,
+		Concurrency:      cfg.WorkerConcurrency,
+		RetainAfterRead:  cfg.RetainAfterRead,
+		ImageConcurrency: cfg.ImageConcurrency,
 	})
 	if err != nil {
 		log.Error("cannot start the worker", "error", err)

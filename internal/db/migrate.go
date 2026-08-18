@@ -91,3 +91,65 @@ func migrateRiver(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) err
 	}
 	return nil
 }
+
+// SchemaState compares the schema in the database against the one this binary
+// was built with.
+type SchemaState struct {
+	// Applied is the highest migration version the database has.
+	Applied int64
+
+	// Expected is the highest migration version embedded in this binary.
+	Expected int64
+}
+
+// UpToDate reports whether the database is new enough for this binary.
+//
+// Newer than expected is fine: that is a rollback in progress, and the old
+// binary's queries still work against a superset schema. Older is not, because
+// this binary will reference columns that do not exist.
+func (s SchemaState) UpToDate() bool { return s.Applied >= s.Expected }
+
+// CheckSchema reports whether the database has the migrations this binary needs.
+//
+// This exists because of a real outage. `tome serve` and `tome migrate` ship in
+// one image, CI republishes that image on every green build, and a pod restart
+// pulls it — so a binary can start against a schema that predates it without
+// anything having gone wrong procedurally. What the reader sees is every page
+// returning 500 with "column st.kept does not exist" in a log they are not
+// reading.
+//
+// Wiring this into readiness turns that into a pod that never goes ready, an
+// unchanged site still served by the old replica where possible, and a message
+// naming the exact remedy. The schema is still never migrated automatically —
+// that remains a deliberate step — but running without it is now loud.
+func CheckSchema(ctx context.Context, pool *pgxpool.Pool) (SchemaState, error) {
+	var state SchemaState
+
+	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return state, fmt.Errorf("opening embedded migrations: %w", err)
+	}
+
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer func() { _ = sqlDB.Close() }()
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, sub)
+	if err != nil {
+		return state, fmt.Errorf("creating migration provider: %w", err)
+	}
+
+	for _, src := range provider.ListSources() {
+		state.Expected = max(state.Expected, src.Version)
+	}
+
+	// A database with no migration table at all reports zero rather than an
+	// error: "nothing has ever been migrated" is a schema state, and it is the
+	// one a first deployment is in.
+	applied, err := provider.GetDBVersion(ctx)
+	if err != nil {
+		return state, fmt.Errorf("reading the applied schema version: %w", err)
+	}
+	state.Applied = applied
+
+	return state, nil
+}

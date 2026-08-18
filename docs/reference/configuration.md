@@ -29,6 +29,7 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_WORKER_CONCURRENCY` | int | `5` | no | Jobs `tome worker` runs at once. At least 1. |
 | `TOME_FETCH_RPS` | float | `1` | no | Default per-host request rate. Fractional values are the useful ones: `0.5` is one request every two seconds. A domain rule's `--rate` overrides it for one host. |
 | `TOME_FETCH_CONCURRENCY` | int | `10` | no | Outbound requests in flight across all hosts. Protects this machine; the per-host rate is what protects the sites. |
+| `TOME_IMAGE_CONCURRENCY` | int | `2` | no | How many images are transcoded at once. **The setting to change if the worker is being OOM-killed.** One transcode costs roughly 600MB, near enough regardless of the image's size — the AVIF encoder instantiates a WASM module per call, so the cost is the call, not the pixels. At 2 the worker peaks around 1.2GB, which is why the manifests set a 2Gi limit. |
 | `TOME_BLOB_ROOT` | path | `/var/lib/tomekeeper` | no | Filesystem root of the archive. Must be absolute — a relative path would resolve against whatever directory the process started in, and the archive would move between deployments. |
 
 ### Value handling

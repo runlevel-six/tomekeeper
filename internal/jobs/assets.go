@@ -69,6 +69,26 @@ type LocalizeAssetsWorker struct {
 	archive *archive.Writer
 	log     *slog.Logger
 
+	// transcode bounds how many images are decoded and re-encoded at once,
+	// independently of how many jobs run at once.
+	//
+	// Measured, after this OOM-killed the worker repeatedly: one asset.Process
+	// call costs roughly 600MB, and — the surprising part — that figure barely
+	// moves with the size of the image. A 3 megapixel photograph costs about as
+	// much as a 27 megapixel one, because the cost is not the pixels. The AVIF
+	// encoder runs libaom under a WASM runtime and instantiates a fresh module,
+	// with its own linear memory, for every call.
+	//
+	// So the pixel ceiling in the asset policy does not bound this, and neither
+	// does anything else about the image. Only the number of simultaneous calls
+	// does. At the default worker concurrency of 5 that was 3GB of transcoding
+	// against a 2GB limit, which is why the worker died within seconds of
+	// reaching a run of illustrated articles.
+	//
+	// Held only around the transcode. Fetching is network-bound and cheap, and
+	// serializing that too would make image-heavy feeds crawl for no benefit.
+	transcode chan struct{}
+
 	// inflight collapses concurrent work on the same source URL.
 	//
 	// The database check in resolve is a check-then-act: two articles sharing an
@@ -201,6 +221,22 @@ func (w *LocalizeAssetsWorker) localize(
 	return stored.FSPath, nil
 }
 
+// process transcodes one image, waiting for a transcoding slot first.
+//
+// The wait is on ctx as well as the semaphore so that a shutdown does not have
+// to queue behind however many images are ahead of it.
+func (w *LocalizeAssetsWorker) process(ctx context.Context, raw []byte, mediaType string) (asset.Processed, error) {
+	if w.transcode != nil {
+		select {
+		case w.transcode <- struct{}{}:
+			defer func() { <-w.transcode }()
+		case <-ctx.Done():
+			return asset.Processed{}, ctx.Err()
+		}
+	}
+	return asset.Process(raw, mediaType)
+}
+
 // resolve returns the archived asset for sourceURL, fetching it only if it is
 // not already stored and no other job is fetching it at this moment.
 func (w *LocalizeAssetsWorker) resolve(
@@ -237,7 +273,7 @@ func (w *LocalizeAssetsWorker) download(
 		return store.Asset{}, err
 	}
 
-	processed, err := asset.Process(raw, mediaType)
+	processed, err := w.process(ctx, raw, mediaType)
 	if err != nil {
 		return store.Asset{}, err
 	}

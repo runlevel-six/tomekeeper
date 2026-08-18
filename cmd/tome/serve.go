@@ -70,10 +70,43 @@ func serve(args []string, stderr io.Writer) int {
 		deps.Blobs = blobs
 	}
 
-	srv := server.New(cfg, log, deps, server.Check{
-		Name: "database",
-		Func: func(ctx context.Context) error { return db.Ping(ctx, pool) },
-	})
+	srv := server.New(cfg, log, deps,
+		server.Check{
+			Name: "database",
+			Func: func(ctx context.Context) error { return db.Ping(ctx, pool) },
+		},
+		// Readiness, not startup. Refusing to boot would mean a crash loop with
+		// the reason buried in a restarting container's logs; failing readiness
+		// keeps the process up and answering, with the remedy readable at
+		// /readyz and in one warning per probe.
+		server.Check{
+			Name: "schema",
+			Func: func(ctx context.Context) error {
+				state, err := db.CheckSchema(ctx, pool)
+				if err != nil {
+					return err
+				}
+				if !state.UpToDate() {
+					return fmt.Errorf(
+						"the database is at schema version %d but this build needs %d; "+
+							"run `tome migrate` (the migration Job, on Kubernetes) before serving",
+						state.Applied, state.Expected)
+				}
+				return nil
+			},
+		},
+	)
+
+	// Said once at startup as well, because a reader reporting "every page is an
+	// error" should be answerable from the log without anyone thinking to curl a
+	// readiness endpoint.
+	if state, err := db.CheckSchema(ctx, pool); err != nil {
+		log.Warn("could not determine the schema version", "error", err)
+	} else if !state.UpToDate() {
+		log.Error("the database schema is older than this build; pages that use new columns will fail",
+			"applied", state.Applied, "expected", state.Expected,
+			"remedy", "run `tome migrate`")
+	}
 
 	// Metrics run beside the server rather than inside it, on their own port. An
 	// archive that cannot publish metrics is still an archive, so a failure here

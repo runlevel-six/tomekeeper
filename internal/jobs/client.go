@@ -48,6 +48,10 @@ type Deps struct {
 
 	Concurrency int
 
+	// ImageConcurrency bounds simultaneous image transcoding, which is far more
+	// expensive per call than anything else the worker does.
+	ImageConcurrency int
+
 	// RetainAfterRead mirrors the config setting. Zero means keep everything,
 	// which is the default.
 	RetainAfterRead time.Duration
@@ -67,9 +71,14 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	river.AddWorker(workers, &ExtractArticleWorker{
 		store: d.Store, blobs: d.Blobs, extractor: d.Extractor, log: d.Log,
 	})
+	imageSlots := d.ImageConcurrency
+	if imageSlots <= 0 {
+		imageSlots = 1
+	}
 	river.AddWorker(workers, &LocalizeAssetsWorker{
 		store: d.Store, client: d.Client, blobs: d.Blobs,
 		archive: archive.NewWriter(d.Blobs), log: d.Log,
+		transcode: make(chan struct{}, imageSlots),
 	})
 
 	// The schedulers need the client in order to enqueue, and the client needs

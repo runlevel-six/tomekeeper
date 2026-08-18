@@ -173,17 +173,18 @@ spec:
               memory: 256Mi
             limits:
               # Raised from 1Gi after the first real archive OOM-killed the
-              # worker during asset localization.
+              # worker during asset localization, and kept at 2Gi after
+              # measuring why.
               #
-              # The per-image ceiling is MaxPixels (30 megapixels, ~120MB
-              # decoded), but TOME_WORKER_CONCURRENCY defaults to 5, so the peak
-              # is five simultaneous decodes plus their resize destinations plus
-              # whatever the Go heap has not returned yet. 1Gi left no margin for
-              # that, and the symptom — a worker that restarts every few minutes
-              # mid-import — reads like a crash rather than a limit.
+              # One image transcode costs about 600MB and — the part that made
+              # this hard to find — that figure barely changes with the size of
+              # the image, because the AVIF encoder instantiates a WASM module
+              # per call. Pixel limits therefore do nothing for it. The number
+              # that matters is TOME_IMAGE_CONCURRENCY, which defaults to 2 and
+              # puts the peak near 1.2GB.
               #
-              # If you lower the worker concurrency you can lower this with it;
-              # the two numbers move together.
+              # So: change TOME_IMAGE_CONCURRENCY and this together, not
+              # TOME_WORKER_CONCURRENCY.
               memory: 2Gi
           securityContext:
             allowPrivilegeEscalation: false

@@ -222,6 +222,24 @@ kubectl -n tomekeeper run backup-shell --rm -it --restart=Never \
 
 ## Things that will confuse you once
 
+**Every page returns "Internal error" after an upgrade.** The image was
+upgraded without the migration being run, so the new binary is querying columns
+that do not exist. `/readyz` names it directly:
+
+```bash
+kubectl -n tomekeeper exec deploy/tomekeeper-server -- \
+  wget -qO- http://127.0.0.1:8080/readyz
+```
+
+The fix is the upgrade sequence above: delete the old Job, re-apply, wait for the
+new one. This is easy to hit because CI republishes `:latest` on every green
+build and any pod restart pulls it — pin the overlay to a `sha-` tag if you would
+rather upgrades never happen by surprise.
+
+**The worker is in `CrashLoopBackOff` right after an upgrade.** Same cause. It
+refuses to start against a schema older than itself rather than failing every job
+it picks up and burning their retries.
+
 **The worker sits `Pending` with "didn't match pod affinity rules."** The blob
 volume is `ReadWriteOnce`, so the worker has to run on the same node as the
 server, and it is waiting for a server pod to exist. It resolves itself when the
