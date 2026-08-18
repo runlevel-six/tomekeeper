@@ -210,22 +210,12 @@ func TestImportSanitizesWhatItStores(t *testing.T) {
 		t.Errorf("sanitizing took the prose with it:\n%s", content.HTML)
 	}
 
-	// An inline data: image does *not* survive, because the shared sanitizer allows
-	// only http and https URL schemes.
-	//
-	// Asserted rather than wished away, because this is where the behavior is
-	// visible and it is not what three other places in the codebase assume:
-	// resolveURLs deliberately steps over data: URIs, the asset policy has a
-	// SkipDataURI reason for them, and the reader's content security policy allows
-	// `img-src data:` with a comment about "the small inline images the asset policy
-	// leaves in place". None of those can be reached while the sanitizer strips the
-	// scheme first. Changing it is an extraction-behavior change that would want an
-	// extract.Version bump and a re-extraction of the whole archive, so it is a
-	// decision rather than a fix to make in passing — and for an import the loss is
-	// small: in the maintainer's real library the data: URIs are 1x1 tracking gifs.
-	if strings.Contains(content.HTML, "data:image/gif;base64") {
-		t.Errorf("the sanitizer now keeps inline images; if that was deliberate, "+
-			"this test and the extractor version both need updating:\n%s", content.HTML)
+	// An inline raster image survives, because the bytes are the picture: nothing is
+	// fetched and nobody is reached. This test used to assert the opposite, with a
+	// comment saying it would need updating if the behavior ever became deliberate.
+	// It did, at extractor version 4.
+	if !strings.Contains(content.HTML, "data:image/gif;base64") {
+		t.Errorf("the inline image was stripped:\n%s", content.HTML)
 	}
 }
 

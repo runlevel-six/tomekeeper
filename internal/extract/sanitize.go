@@ -1,7 +1,9 @@
 package extract
 
 import (
+	"encoding/base64"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -42,10 +44,28 @@ func newSanitizer() *sanitizer {
 	// highlighting possible later without re-guessing.
 	p.AllowAttrs("class").Matching(bluemonday.SpaceSeparatedTokens).OnElements("code", "pre", "span")
 
-	// Only http and https. This is what rejects javascript:, data:, and
-	// file: URLs, each of which is a way for archived markup to do something
-	// other than be read.
+	// Only http and https. This is what rejects javascript:, and file: URLs, each of
+	// which is a way for archived markup to do something other than be read.
 	p.AllowURLSchemes("http", "https")
+
+	// With one exception: an inline raster image. A data: URI carrying image bytes
+	// fetches nothing, reaches nobody, and is the picture itself rather than a
+	// reference to one — and three other parts of this archive already assume it
+	// survives. resolveURLs deliberately steps over data: URIs, the asset policy has
+	// a SkipDataURI reason for them, and the reader's content security policy allows
+	// `img-src data:` with a comment about the small inline images "the asset policy
+	// leaves in place". None of that was reachable while the scheme allowlist
+	// stripped them first, so the allowance was dead code and every inline image was
+	// quietly dropped.
+	//
+	// Written out rather than using bluemonday's AllowDataURIImages, which is looser
+	// than its own documentation: the comment lists gif, jpeg, png and webp, and the
+	// regex beneath it also matches `image/svg+xml`. An SVG is not a picture, it is a
+	// document that can carry script — and a scheme policy applies wherever a URL
+	// attribute is allowed, so it would be permitted in an `href` as well as an
+	// `img`. Neither risk is large on its own; both are avoidable by naming the four
+	// formats this archive actually means.
+	p.AllowURLSchemeWithCustomPolicy("data", isInlineRasterImage)
 
 	// Relative URLs are rejected because finish() has already resolved every
 	// reference against the article's own URL. Anything still relative at this
@@ -62,6 +82,33 @@ func newSanitizer() *sanitizer {
 	p.AddTargetBlankToFullyQualifiedLinks(true)
 
 	return &sanitizer{policy: p}
+}
+
+// inlineRasterImage is the only shape of data: URI this archive stores: one of
+// four raster image types, base64, and nothing else on the URL.
+//
+// Deliberately not svg+xml, which is a document; not text/html, which is a page;
+// and not the percent-encoded form, whose payload cannot be checked as cheaply and
+// which real markup does not use for images.
+var inlineRasterImage = regexp.MustCompile(`^image/(gif|jpeg|png|webp);base64,`)
+
+// isInlineRasterImage reports whether a data: URI is an image worth keeping.
+//
+// The payload is decoded rather than trusted. A prefix check alone would accept
+// `data:image/png;base64,` followed by anything at all, which is a way to smuggle a
+// string past a filter that only read its first thirty characters.
+func isInlineRasterImage(u *url.URL) bool {
+	if u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+
+	prefix := inlineRasterImage.FindString(u.Opaque)
+	if prefix == "" {
+		return false
+	}
+
+	_, err := base64.StdEncoding.DecodeString(u.Opaque[len(prefix):])
+	return err == nil
 }
 
 func (s *sanitizer) sanitize(body string) string {

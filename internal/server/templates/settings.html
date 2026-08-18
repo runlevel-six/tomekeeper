@@ -52,5 +52,41 @@
 
     <button type="submit">Save</button>
   </form>
+
+  {{/*
+    Taking the archive away. A plain link rather than a form, because it is a
+    download and a download is a GET — long-pressing it, copying it, or fetching it
+    with curl and a session cookie all work the way anyone would expect.
+  */}}
+  <section class="export">
+    <h2>Export</h2>
+    {{with .Export}}
+      <p class="note">
+        Every article you can see, with its metadata, your reading state, tags and
+        highlights, as one file that <code>tome import</code> reads back — restoring
+        into an empty database reproduces this archive, every stored body byte for
+        byte.
+      </p>
+      <p class="note">
+        Images and stored original pages are <strong>referenced by path, not
+        included</strong>: they are already files on disk, and a decade of pictures
+        inside a JSON document is not something anyone can open. A complete backup is
+        this file plus the archive directory.
+      </p>
+      <p>
+        <a class="download" href="/export" download="{{.Filename}}">
+          Download {{plural .Articles "article"}} as {{.Filename}}
+        </a>
+      </p>
+      <p class="note">
+        A large archive takes a while and the download begins immediately, so the
+        browser will show it arriving rather than a progress bar. If it is cut off,
+        the file is incomplete JSON and importing it will say so rather than
+        restoring half an archive.
+      </p>
+    {{else}}
+      <p class="note">The archive could not be counted just now; the log will say why.</p>
+    {{end}}
+  </section>
 </div>
 {{end}}

@@ -496,6 +496,36 @@ kbd {
 }
 .save-box input[type="url"]:focus-visible { border-color: var(--accent); outline: none; }
 
+/* Taking the archive away, on the settings page. */
+.export { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); max-width: var(--measure); }
+.export h2 { font-size: 1rem; }
+.export .note { color: var(--ink-soft); font-size: 0.9rem; }
+.export .download {
+  display: inline-block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.45rem 0.9rem;
+}
+.export .download:hover { border-color: var(--accent); }
+
+/* Marked passages. Quoted rather than highlighted in place, because a highlight is
+   stored as text rather than as an offset into one rendering of the body. */
+.highlights { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+.highlights h2 { font-size: 1rem; }
+.highlights ul { list-style: none; padding: 0; margin: 1rem 0 0; }
+.highlights li { margin-bottom: 1.25rem; }
+.highlights blockquote {
+  margin: 0;
+  padding: 0.4rem 0 0.4rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+}
+.highlights .note { margin: 0.35rem 0 0 1rem; color: var(--ink-soft); font-size: 0.9rem; }
+.highlights .meta { margin: 0.2rem 0 0 1rem; }
+
 /* Choosing between an article's stored copies. Below the article, quiet, and only
    drawn when there is a choice to make — which is rare. */
 .bodies {

@@ -3,6 +3,16 @@
 You want a copy of the archive that does not depend on this service, this database,
 or this machine — to move it, to back it up, or to satisfy yourself that you can.
 
+## In the browser
+
+**Settings → Export** downloads the same file `tome export` writes, named for
+today's date. Everything below about what it contains, and what it does not, applies
+to it exactly.
+
+The command line is the better choice for a scheduled backup — it pipes into `gzip`
+and needs no session — and for an archive large enough that a ten-minute download is
+a nuisance.
+
 ## The short version
 
 ```sh

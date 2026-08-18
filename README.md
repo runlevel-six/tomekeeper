@@ -27,7 +27,8 @@ What is there:
   for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
-- **Taking it away again.** `tome export` writes the whole archive as one file that
+- **Taking it away again.** A download on the settings page, or `tome export` —
+  the whole archive as one file that
   `tome import` reads back — verified by restoring into an empty database and
   comparing, with every stored body identical. No lock-in beyond the pictures, which
   are files on disk you already have.

@@ -8,6 +8,10 @@ Each case is two files with the same stem:
   contain, one per line. A line beginning with `!` is a substring the extracted
   text **must not** contain.
 
+A line beginning with `#` is a comment. `tome corpus add` uses them to quote the
+article's opening and closing sentences into a captured case, so that choosing what
+to assert on means reading rather than hunting through a browser tab.
+
 Recognized headers:
 
 | Header | Meaning |
@@ -33,6 +37,22 @@ content blocks while reporting the text of all three, so every threshold and eve
 substring assertion passed while the reader saw a third of the article. The text and
 the body are two renderings of one document; a fixture that only reads one of them
 cannot notice them diverging.
+
+## Capturing a real page
+
+```sh
+export TOME_TEST_CORPUS_DIR=/path/to/tomekeeper-corpus
+tome corpus add https://example.com/posts/one-that-extracts-badly
+```
+
+That fetches the page with this archive's own client — same user agent, same rate
+limits, same robots.txt handling — saves it exactly as fetched, runs the current
+extractor over it, and writes a starter `.want` with the headers filled in and the
+assertions left to you. Extraction failing on the page is a good reason to have
+captured it: the starter file says so and the corpus stays red until it is fixed.
+
+The `!` lines are worth the minute they take. A case that only asserts what should
+be present still passes when an extractor starts dragging in the navigation.
 
 ## Two corpora
 

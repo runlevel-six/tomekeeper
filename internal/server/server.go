@@ -161,6 +161,9 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// than only a command line: the people with a library to bring are not
 	// necessarily the people with a shell in the container.
 	mux.HandleFunc("POST /import", s.requireUser(s.handleImportLibrary))
+	// The counterpart to that upload. A GET because it is a download, and the one
+	// route allowed to take longer than the server's write timeout.
+	mux.HandleFunc("GET /export", s.requireUser(s.handleExport))
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
 	mux.HandleFunc("GET /settings", s.requireUser(s.handleSettings))
 	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))

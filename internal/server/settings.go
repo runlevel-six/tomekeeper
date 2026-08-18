@@ -16,6 +16,10 @@ type settingsPage struct {
 	Palette string
 	Mode    string
 	Saved   bool
+
+	// Export describes the download offered here, or is nil when the archive could
+	// not be counted.
+	Export *exportSummary
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +56,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 		Palettes: store.Palettes,
 		Modes:    store.Modes,
 		Saved:    saved,
+		Export:   s.exportSummaryFor(r),
 	}
 	page.Palette, page.Mode = store.SplitTheme(page.Theme)
 

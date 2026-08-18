@@ -39,7 +39,17 @@ import (
 // reaches the archive it was written for.
 // Version 2 (2026-08-17): the ratio check is skipped for bodies past longBody.
 // See the constant for the measurement that prompted it.
-const Version = "3"
+//
+// Version 4 (2026-08-18): two changes to what a body contains, adopted together so
+// that one re-extraction pays for both.
+//
+//   - Inline images survive. The sanitizer stripped every data: URI, including the
+//     image ones, while three other parts of the archive assumed they did not.
+//   - Text has a boundary where the markup has one. Block edges produced
+//     "service.Data" out of `<p>service.</p><h2>Data center</h2>`, which the length
+//     checks measured, the search index tokenized, and an excerpt showed to a
+//     reader. 16 of 341 bodies in a real archive carried at least one.
+const Version = "4"
 
 // Extractor names recorded on content rows.
 const (
@@ -536,7 +546,33 @@ func visibleTextLength(raw []byte) int {
 	return len(strings.TrimSpace(textOf(raw)))
 }
 
-// textOf returns the visible text of an HTML fragment or document.
+// blockElements are the tags a reader sees a boundary at.
+//
+// Not an exhaustive list of block-level HTML, and not meant to be: what matters is
+// the elements that actually separate words in real markup. `<br>` is here because
+// it is a line break; `<td>` because a table row read without separators becomes one
+// long word.
+var blockElements = map[string]bool{
+	"address": true, "article": true, "aside": true, "blockquote": true, "br": true,
+	"dd": true, "div": true, "dl": true, "dt": true, "figcaption": true,
+	"figure": true, "footer": true, "form": true, "h1": true, "h2": true,
+	"h3": true, "h4": true, "h5": true, "h6": true, "header": true, "hr": true,
+	"li": true, "main": true, "nav": true, "ol": true, "p": true, "pre": true,
+	"section": true, "table": true, "td": true, "th": true, "tr": true, "ul": true,
+}
+
+// textOf returns the visible text of an HTML fragment or document, with a boundary
+// where the markup has one.
+//
+// goquery's Text() concatenates text nodes with nothing between them, so
+// `<p>service.</p><h2>Data center</h2>` comes out as "service.Data center" — two
+// words welded into one. That is wrong in three places at once: the length checks
+// measure it, the search index tokenizes it, and an excerpt shows it to a reader.
+//
+// Measured on a real 385-article archive while building the export: 16 of 341 bodies
+// carried at least one of these, 46 words in total. Small, and the kind of small
+// that is invisible until somebody searches for a word that got welded to the one
+// before it.
 func textOf(raw []byte) string {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(raw))
 	if err != nil {
@@ -546,7 +582,69 @@ func textOf(raw []byte) string {
 	// visible; counting them would inflate the denominator and reject good
 	// extractions from script-heavy pages.
 	doc.Find("script, style, noscript, template").Remove()
-	return doc.Text()
+
+	var out textWriter
+	for _, node := range doc.Nodes {
+		out.write(node)
+	}
+	return out.b.String()
+}
+
+// textWriter accumulates visible text, collapsing the boundaries it inserts.
+//
+// It tracks whether the last thing written was whitespace rather than asking the
+// builder, because asking means copying the whole string on every element of every
+// page.
+type textWriter struct {
+	b       strings.Builder
+	pending bool // a boundary is owed before the next text
+	written bool
+}
+
+func (w *textWriter) write(n *html.Node) {
+	switch n.Type {
+	case html.TextNode:
+		w.text(n.Data)
+		return
+	case html.ElementNode:
+		if blockElements[n.Data] {
+			w.boundary()
+		}
+	}
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		w.write(c)
+	}
+
+	if n.Type == html.ElementNode && blockElements[n.Data] {
+		w.boundary()
+	}
+}
+
+// text writes a text node, honoring any boundary owed from an element edge.
+func (w *textWriter) text(s string) {
+	if s == "" {
+		return
+	}
+	if w.pending && w.written && !startsWithSpace(s) {
+		w.b.WriteByte('\n')
+	}
+	w.pending = false
+	w.b.WriteString(s)
+	w.written = true
+}
+
+// boundary records that the next text is separated from what came before. Recorded
+// rather than written, so that a run of nested block elements — a div inside a
+// section inside an article — produces one separator rather than three.
+func (w *textWriter) boundary() { w.pending = true }
+
+func startsWithSpace(s string) bool {
+	switch s[0] {
+	case ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
 }
 
 // renderNode serializes an html.Node back to markup.

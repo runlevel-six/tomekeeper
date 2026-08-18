@@ -333,6 +333,11 @@ type articlePage struct {
 	Newer store.ArticleID
 	Older store.ArticleID
 
+	// Highlights are the passages this reader marked, in the order they were made.
+	// Empty for almost every article: nothing in the interface creates one yet, and
+	// the ones that exist arrived with an imported library.
+	Highlights []store.ImportHighlight
+
 	// Bodies are the other stored copies of this page, when there is more than one.
 	// Empty in the ordinary case, which is most articles: one page, one body.
 	Bodies []bodyChoice
@@ -440,6 +445,16 @@ func (s *Server) serveArticle(w http.ResponseWriter, r *http.Request, id store.A
 		} else {
 			page.Newer, page.Older = neighbors.Newer, neighbors.Older
 		}
+	}
+
+	// The passages this reader marked. Shown because they exist and are otherwise
+	// invisible: an imported library can carry years of them, and an archive that
+	// silently held somebody's annotations without ever showing them would be
+	// keeping them rather than preserving them.
+	if highlights, err := s.store.HighlightsForArticle(r.Context(), userID, view.Article.ID); err != nil {
+		s.log.Warn("listing highlights failed", "article_id", view.Article.ID, "error", err)
+	} else {
+		page.Highlights = highlights
 	}
 
 	// The other stored copies of this page, when there are any. Looked up on every

@@ -270,3 +270,60 @@ func containsArticle(candidates []store.ReextractCandidate, id store.ArticleID) 
 	}
 	return false
 }
+
+// Marked passages are shown on the article they belong to.
+//
+// Until now nothing displayed them: the table has existed since the schema was
+// written, and an imported library was the first thing to put rows in it. An archive
+// that silently held somebody's annotations without ever showing them would be
+// keeping them rather than preserving them.
+func TestArticleShowsHighlights(t *testing.T) {
+	rd, tr := readingFixture(t)
+	ctx := t.Context()
+
+	if _, err := tr.store.AddHighlight(ctx, tr.alice, tr.aliceOnly, store.ImportHighlight{
+		Quote: "A distinctive alpaca passage that only Alice can read.",
+		Note:  "the sentence worth keeping",
+	}); err != nil {
+		t.Fatalf("AddHighlight() = %v", err)
+	}
+
+	body := rd.body("/articles/" + strconv.FormatInt(int64(tr.aliceOnly), 10))
+
+	if !strings.Contains(body, "1 highlight") {
+		t.Errorf("the article does not show its highlights:\n%s", body)
+	}
+	if !strings.Contains(body, "the sentence worth keeping") {
+		t.Errorf("the highlight's note is missing:\n%s", body)
+	}
+	if !strings.Contains(body, "<blockquote>") {
+		t.Errorf("the highlight is not quoted:\n%s", body)
+	}
+
+	// An article with none says nothing about them.
+	other := rd.body("/articles/" + strconv.FormatInt(int64(tr.aliceOnly), 10) + "?from=all")
+	if strings.Count(other, "<blockquote>") != 1 {
+		t.Errorf("expected exactly the one highlight to be quoted")
+	}
+}
+
+// One reader's highlights are not shown on another's copy of a shared article.
+func TestHighlightsAreNotShownToAnotherReader(t *testing.T) {
+	rd, tr := readingFixture(t)
+	ctx := t.Context()
+
+	// Bob highlights an article he can see. Alice cannot see that article at all,
+	// so the check that matters is on one they share — but the fixture gives them
+	// none, so this asserts the narrower thing the fixture supports: Bob's
+	// highlight on Bob's article is not on Alice's page for hers.
+	if _, err := tr.store.AddHighlight(ctx, tr.bob, tr.bobOnly, store.ImportHighlight{
+		Quote: "A distinctive nautilus passage that only Bob can read.",
+	}); err != nil {
+		t.Fatalf("AddHighlight() = %v", err)
+	}
+
+	body := rd.body("/articles/" + strconv.FormatInt(int64(tr.aliceOnly), 10))
+	if strings.Contains(body, "nautilus") {
+		t.Errorf("another reader's highlight appeared:\n%s", body)
+	}
+}

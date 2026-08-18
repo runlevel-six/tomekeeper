@@ -396,6 +396,48 @@ This exists because the acceptance criterion asks for storage across 1,000
 real articles to be measured and recorded. See [Storage
 layout](storage-layout.md#measuring-your-archive).
 
+### `tome corpus`
+
+Captures a real page into the private extraction corpus.
+
+```
+tome corpus add [--name NAME] <url>
+```
+
+The corpus is the regression suite for every extraction change, and the pages in it
+are third-party content that does not belong in this repository — so they live in
+the directory `TOME_TEST_CORPUS_DIR` names, and this is what puts them there.
+
+It fetches the page with this archive's own client (same user agent, same rate
+limits, same robots.txt handling), saves it exactly as fetched, runs the current
+extractor over it, and writes a starter `.want` beside it with the headers filled in
+and the assertions left to you — with the article's opening and closing sentences
+quoted as comments, so choosing what to assert on means reading rather than hunting
+through a browser tab.
+
+```console
+$ export TOME_TEST_CORPUS_DIR=~/tomekeeper-corpus
+$ tome corpus add https://example.com/posts/one-that-reads-badly
+saved ~/tomekeeper-corpus/example-one-that-reads-badly.html (153 KB)
+extracted 2661 characters via trafilatura
+
+Now edit ~/tomekeeper-corpus/example-one-that-reads-badly.want:
+  - keep a few phrases from the middle and the end of the article
+  - add ! lines for navigation, bylines or promotional text that must not appear
+```
+
+**A page extraction currently fails on is worth capturing.** The starter file says
+so and leaves the expectation to you, and the corpus stays red until the page
+extracts properly — which is the difference between a known problem and a forgotten
+one.
+
+The `!` lines earn their minute: a case that only asserts what should be present
+still passes when an extractor starts dragging in the navigation.
+
+See the README in `internal/extract/testdata/pages/` for the file format, and
+[Reprocess the archive](../how-to/reprocess-the-archive.md) for applying an
+extraction change once it is made.
+
 ### `tome version`
 
 Prints the build identity to stdout and exits `0`.
@@ -449,6 +491,7 @@ session.
 | `POST /articles/{id}/promote` | Show a different stored body. `body=` is its id. |
 | `POST /save` | Save a page by hand. `url=`. |
 | `POST /import` | Import an uploaded reading library. `library=` is the file; `report_only=true` reports without importing. |
+| `GET /export` | Download the archive as a file. The one route allowed to exceed the write timeout. |
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
 | `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
 | `POST /domain-rules` | Save one rule. |
@@ -583,6 +626,22 @@ fact about that site, identical for every reader — so they reach through the
 cross-user store methods that the rest of the interface deliberately avoids. That is
 correct for a single-user archive and is one of the things multi-user work has to
 gate.
+
+### `GET /export` — download the archive
+
+The counterpart to the import upload, on the **Settings** page. Streams rather than
+buffering, because an export is the one response whose size grows with the archive.
+
+It extends its own write deadline to ten minutes rather than raising the server's
+30-second timeout for everything: an export runs at roughly three seconds per 385
+articles, so the default would start failing somewhere past eight thousand — a
+number an archive reaches quietly, years in, with no explanation attached.
+
+Streaming costs one thing worth knowing: the status is sent before the work is done,
+so a failure partway through cannot be reported as an error and the download simply
+ends early. That is survivable because the file is JSON and the importer refuses a
+truncated one outright, naming it as ending before its last record. A cut-off
+download is caught on the way back in rather than restored as half an archive.
 
 ### `POST /import` — import a library through the browser
 

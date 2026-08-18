@@ -440,7 +440,14 @@ func loadCase(t *testing.T, dir, name, wantPath string) corpusCase {
 			continue
 		}
 
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
+		trimmed := strings.TrimSpace(line)
+		// A comment. `tome corpus add` writes the article's opening and closing
+		// sentences into a captured case as comments, so that choosing a phrase to
+		// assert on means reading rather than hunting through a browser tab.
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed != "" {
 			if after, found := strings.CutPrefix(trimmed, "!"); found {
 				tc.excludes = append(tc.excludes, strings.TrimSpace(after))
 				continue
@@ -534,4 +541,72 @@ func textOfHTML(body string) string {
 // fail for being written across two lines.
 func normalizeSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// An inline image survives extraction; anything else wearing a data: URI does not.
+//
+// Three other parts of the archive assume inline images are kept — resolveURLs steps
+// over them, the asset policy has a skip reason for them, and the reader's content
+// security policy allows `img-src data:` for them. None of that was reachable while
+// the sanitizer's scheme allowlist stripped every data: URI first, so the allowance
+// was dead code and every inline image was quietly dropped.
+//
+// The narrow part matters as much as the allowance: `data:image/svg+xml` is a
+// document that can carry script, and `data:text/html` is a page. Neither is an
+// image for this purpose, whatever its media type claims.
+func TestInlineImagesSurviveButOtherDataURIsDoNot(t *testing.T) {
+	tc := findCase(t, "hostile-markup")
+
+	got, err := extract.New().Extract(tc.input)
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+
+	if !strings.Contains(got.HTML, "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==") {
+		t.Errorf("the inline image was stripped:\n%s", got.HTML)
+	}
+
+	for _, forbidden := range []struct{ fragment, why string }{
+		{"data:text/html", "a data: URI carrying a page is not an image"},
+		{"data:image/svg+xml", "an SVG is a document and can carry script"},
+	} {
+		if strings.Contains(got.HTML, forbidden.fragment) {
+			t.Errorf("%s survived: %s\n\n%s", forbidden.fragment, forbidden.why, got.HTML)
+		}
+	}
+}
+
+// Text has a boundary where the markup has one.
+//
+// goquery's Text() welds text nodes together, so `<p>service.</p><h2>Data center</h2>`
+// became "service.Data center" — measured at 16 of 341 bodies in a real archive. The
+// length checks measure that text, the search index tokenizes it, and an excerpt
+// shows it to a reader.
+func TestTextHasBoundariesAtBlockEdges(t *testing.T) {
+	body := `<div><p>Ubuntu on real servers turns your data center into a bare metal cloud.` +
+		`Welcome to metal-as-a-service.</p><h2>Data center automation</h2>` +
+		`<ul><li>Provisioning</li><li>Deployment</li></ul>` +
+		`<table><tr><td>Rack</td><td>Ready</td></tr></table>` +
+		`<p>One sentence<br>split across a line break.</p></div>`
+
+	got := extract.TextForTest([]byte(body))
+	collapsed := strings.Join(strings.Fields(got), " ")
+
+	for _, want := range []string{
+		"metal-as-a-service. Data center automation",
+		"Provisioning Deployment",
+		"Rack Ready",
+		"One sentence split across a line break.",
+	} {
+		if !strings.Contains(collapsed, want) {
+			t.Errorf("no boundary where the markup has one: want %q in\n%s", want, collapsed)
+		}
+	}
+
+	// And no boundary where the markup has none: inline elements do not separate
+	// words, or every emphasized word in the archive would split in two.
+	inline := extract.TextForTest([]byte(`<p>a <em>single</em> word: un<strong>break</strong>able</p>`))
+	if collapsed := strings.Join(strings.Fields(inline), " "); collapsed != "a single word: unbreakable" {
+		t.Errorf("inline markup introduced a boundary: %q", collapsed)
+	}
 }

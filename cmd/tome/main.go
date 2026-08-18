@@ -65,6 +65,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "archive":
 		return archiveCmd(args[1:], stdout, stderr)
 
+	case "corpus":
+		return corpusCmd(args[1:], stdout, stderr)
+
 	case "version":
 		fmt.Fprintln(stdout, version.String())
 		return exitOK
@@ -96,6 +99,7 @@ Subcommands:
   reextract     Re-extract stored pages at the current extractor version
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds
+  corpus        Capture a real page into the private extraction corpus
   version       Print build version and exit
   help          Print this message
 

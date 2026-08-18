@@ -53,6 +53,30 @@
   */}}
   <footer class="reader-foot">
     {{/*
+      The passages this reader marked, which until now nothing displayed. An
+      imported library can carry years of them.
+
+      Quoted rather than highlighted in place: a highlight is stored as its text,
+      not as an offset into a rendering, precisely so that it survives the body
+      being re-extracted by a different extractor — and text that survives that
+      cannot be located in the body with any confidence afterwards.
+    */}}
+    {{if .Highlights}}
+      <section class="highlights">
+        <h2>{{plural (len .Highlights) "highlight"}}</h2>
+        <ul>
+          {{range .Highlights}}
+            <li>
+              <blockquote>{{.Quote}}</blockquote>
+              {{if .Note}}<p class="note">{{.Note}}</p>{{end}}
+              {{with .CreatedAt}}<p class="meta"><time datetime="{{.Format "2006-01-02T15:04:05Z07:00"}}">{{since .}}</time></p>{{end}}
+            </li>
+          {{end}}
+        </ul>
+      </section>
+    {{end}}
+
+    {{/*
       Choosing which stored copy of this page to show. Drawn only when there is
       more than one, which is unusual: an article imported with a body and then
       fetched here, or one kept from an older extraction.
