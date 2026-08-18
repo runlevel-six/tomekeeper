@@ -198,6 +198,39 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 .badge.count { background: var(--accent); color: var(--bg); border-color: transparent; }
 .badge.pending { color: var(--ink-soft); font-style: italic; }
 
+/* Marking a whole list read: the offer, and the question it leads to.
+
+   The offer is deliberately quiet — small, unaccented, sitting opposite the
+   heading — because it is a bulk action nobody should reach for by accident. The
+   question it leads to is the loud one, since by then the reader has asked for it
+   and needs to see the number. */
+.mark-read {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  margin-bottom: 1rem;
+  white-space: nowrap;
+}
+.mark-read:hover { color: var(--accent); border-color: var(--accent); }
+
+.confirm-mark {
+  padding: 0.9rem 1rem;
+  margin-bottom: 1.5rem;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  max-width: var(--measure);
+}
+.confirm-mark p { margin: 0 0 0.5rem; }
+.confirm-mark .note { color: var(--ink-soft); font-size: 0.85rem; }
+/* The two answers side by side, and far enough apart that a thumb aiming for
+   Cancel does not find the other one. */
+.confirm-mark button { margin-right: 1.25rem; }
+.confirm-mark a { font-size: 0.9rem; }
+
 /* Stream entries. */
 .entry {
   padding: 1.1rem 0.9rem;

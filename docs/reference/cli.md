@@ -303,6 +303,8 @@ session.
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly |
 | `GET /settings` | Palette and preferences |
+| `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
+| `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
 | `POST /articles/{id}/keep` | Keep permanently, or stop. Same form field. |
@@ -339,6 +341,44 @@ Three things it deliberately does not do:
   that quietly undid auto-disable would undo the feature on every reload.
 - **It does not wait.** The page says the worker will get to them, because claiming
   otherwise would be a spinner that finishes before any feed has been contacted.
+
+### `GET`/`POST /mark-read` — mark a whole list read
+
+Scoped to the list on screen, never to the archive. `from=` carries the same list
+token an article link does (see the table below), and the mark applies exactly the
+query that drew that list: marking **Comics** read marks Comics, and marking
+**Unread** read marks what is unread.
+
+Two requests rather than one. The `GET` renders the list again with a confirmation
+that names the count and the list; the `POST` does the work and re-renders with what
+it marked. That is not ceremony — it is the one control here that is not its own
+inverse. Every other button on a row can be pressed again to undo it; this one can
+only be undone article by article, so the count goes in front of the reader first.
+A confirmation page rather than a scripted dialog, because the content security
+policy has no `unsafe-inline` and nothing in this interface requires JavaScript to
+do something a reader could otherwise do.
+
+Which lists may be marked, and why it is a short list:
+
+| List | Marked in bulk? | Why |
+|---|---|---|
+| Unread, Everything, a feed, a tag, a category | Yes | The list is a filter, and the filter is what gets applied. |
+| Starred, Saved | No | Hand-picked, one article at a time; a bulk control over them answers a question nobody asked. |
+| Search | **No** | Results are ranked against a query string, so the list carries no filter to scope a mark by — applying its empty query would mark the whole archive read from a page showing four results. |
+| Attention | No | A worklist selected by fetch status, not a reading order. |
+
+Anything else — an unknown token, a feed belonging to somebody else, a list that
+must not be marked — is `404`, the same nothing in every case.
+
+Two properties worth knowing:
+
+- **It marks the list, not the page.** A stream page is 50 rows with a cursor; the
+  mark ignores both, because a control that emptied only what was on screen would
+  read as broken.
+- **An article already read keeps its original read timestamp.** Only unread rows
+  are touched. `read_at` is what [retention](retention.md) measures from, so a bulk
+  mark that re-stamped everything would quietly extend the life of what the reader
+  had already finished.
 
 ### Navigation between lists and articles
 

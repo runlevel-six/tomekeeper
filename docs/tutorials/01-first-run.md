@@ -325,6 +325,11 @@ between entries, `o` to open one, and `s` to star it. Then, from inside an artic
 `n` for the next one, `p` for the one before, and `u` to go back to the list you
 came from. Search for a word you remember from one of the articles.
 
+If a first import left you with hundreds of unread articles you have no intention
+of reading, **Mark _n_ as read** at the top right of any list clears that list —
+that list only, and it asks first, with the count. From a category page it marks the
+category; from **Unread** it marks everything unread.
+
 Three pages worth visiting once, because they are what makes the rest
 maintainable:
 

@@ -21,9 +21,10 @@ service stopped and the database gone, and the article renders with its images.
 What is there:
 
 - **Reading.** Unread stream, article reader, full-text search across the whole
-  archive, browsing by category, starred and a manual reading list. Keyboard-driven
-  throughout; no build step, no CDN, no JavaScript required for anything but the
-  shortcuts.
+  archive, browsing by category, starred and a manual reading list. Any list can be
+  marked read in one go — scoped to that list, and it tells you how many before it
+  does it. Keyboard-driven throughout; no build step, no CDN, no JavaScript required
+  for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
 - **Installable.** Add it to a home screen and it draws its own navigation — a tab

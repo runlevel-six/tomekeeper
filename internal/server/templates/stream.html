@@ -2,7 +2,58 @@
 
 {{define "content"}}
 <div class="stream" id="stream" data-keyboard="stream">
-  <h1>{{.Heading}}</h1>
+  <div class="page-head">
+    <h1>{{.Heading}}</h1>
+
+    {{/*
+      Marking the whole list read. A link rather than a button, because it does
+      nothing on its own — it asks. The count is in the label so that the size of
+      what is about to happen is visible before the first click as well as the
+      second, which is the difference between a control a reader trusts and one
+      they avoid.
+    */}}
+    {{if and .Mark.Offered (not .Mark.Confirming)}}
+      <a class="mark-read" href="/mark-read?from={{.Mark.From}}"
+         title="Mark everything in this list as read">Mark {{.Mark.Unread}} as read</a>
+    {{end}}
+  </div>
+
+  {{with .Mark.Done}}
+    {{if .Problem}}
+      <p class="import-result bad">{{.Problem}}</p>
+    {{else}}
+      <p class="import-result ok">
+        {{if .Count}}
+          Marked {{plural .Count "article"}} read.
+        {{else}}
+          Nothing here was unread.
+        {{end}}
+      </p>
+    {{end}}
+  {{end}}
+
+  {{if .Mark.Confirming}}
+    {{if .Mark.Unread}}
+      <form class="confirm-mark" method="post" action="/mark-read">
+        <input type="hidden" name="from" value="{{.Mark.From}}">
+        <p>Mark {{plural .Mark.Unread "article"}} in <strong>{{.Heading}}</strong> as read?</p>
+        {{/*
+          Said out loud because it is true and because the alternative is a reader
+          discovering it: every other control on a row is its own inverse, and this
+          one is not. Individual articles can still be marked unread afterwards, one
+          at a time, which is exactly as much undo as there is.
+        */}}
+        <p class="note">
+          Only this list. Articles can be marked unread again individually, but there
+          is no way to undo this in one step.
+        </p>
+        <button type="submit">Mark them read</button>
+        <a href="{{.Mark.Path}}">Cancel</a>
+      </form>
+    {{else}}
+      <p class="import-result ok">Nothing here is unread.</p>
+    {{end}}
+  {{end}}
 
   {{if .Items}}
     {{template "stream-rows" .}}

@@ -149,6 +149,11 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
 	mux.HandleFunc("GET /articles/{id}", s.requireUser(s.handleArticle))
 
+	// Marking a whole list read: the question, then the answer. Two steps because
+	// this is the one control that cannot be undone one button at a time.
+	mux.HandleFunc("GET /mark-read", s.requireUser(s.handleMarkReadConfirm))
+	mux.HandleFunc("POST /mark-read", s.requireUser(s.handleMarkRead))
+
 	mux.HandleFunc("POST /articles/{id}/read", s.requireUser(s.handleToggleRead))
 	mux.HandleFunc("POST /articles/{id}/star", s.requireUser(s.handleToggleStar))
 	mux.HandleFunc("POST /articles/{id}/keep", s.requireUser(s.handleToggleKept))

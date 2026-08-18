@@ -73,6 +73,42 @@ type streamPage struct {
 	// From is the token every article link in this list carries, so that the
 	// article page knows which list it was opened from.
 	From string
+
+	// Mark is the state of this list's mark-all-read control.
+	Mark markControl
+}
+
+// markControl is the "mark all as read" control on a stream page: whether to
+// offer it, what it would do, and what it did.
+type markControl struct {
+	// Offered is whether to draw the control at all. False for a list that cannot
+	// be marked in bulk, and for one with nothing unread in it.
+	Offered bool
+
+	// Unread is how many articles the control would mark, which is the number it
+	// puts in front of the reader before doing it. Counted over the whole list
+	// rather than the page on screen, because that is what would be marked.
+	Unread int64
+
+	// Confirming is set on the page that asks. A bulk mark is the one control here
+	// that cannot be undone in bulk — every other button on a stream row is its own
+	// inverse — so it is two steps rather than one, and the count is what makes the
+	// second step an informed one.
+	Confirming bool
+
+	// Done reports a mark that has just happened, and is nil otherwise.
+	Done *markOutcome
+
+	// From is the list's token, which is how the confirm and the POST name the list
+	// they mean. Path is the list itself, for the cancel link.
+	From string
+	Path string
+}
+
+// markOutcome is what a stream page says after a bulk mark.
+type markOutcome struct {
+	Count   int64
+	Problem string
 }
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +152,19 @@ func (s *Server) handleTagStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, spec streamSpec) {
+	s.renderStream(w, r, spec, http.StatusOK, markControl{})
+}
+
+// renderStream draws one list, optionally asking about or reporting on a bulk
+// mark.
+//
+// Split out of serveStream for the same reason renderFeeds was: the result of a
+// POST belongs on the page that produced it, freshly counted. A mark that clears
+// 247 articles has to leave behind a list that no longer contains them and a
+// chrome badge that no longer counts them, and only a re-render can do that.
+func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec streamSpec,
+	status int, mark markControl,
+) {
 	userID := signedInUser(r)
 
 	q := spec.Query
@@ -145,6 +194,7 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, spec stream
 		Heading:  spec.Heading,
 		Empty:    spec.Empty,
 		From:     spec.Token,
+		Mark:     mark,
 	}
 	if len(items) > store.DefaultStreamLimit {
 		last := items[store.DefaultStreamLimit-1]
@@ -158,7 +208,90 @@ func (s *Server) serveStream(w http.ResponseWriter, r *http.Request, spec stream
 		s.renderFragment(w, http.StatusOK, "stream-rows", page)
 		return
 	}
-	s.render(w, http.StatusOK, "stream", page)
+
+	page.Mark.From, page.Mark.Path = spec.Token, spec.Path
+	if spec.Markable {
+		// A failed count costs the reader one control rather than the page they came
+		// for, exactly as a failed unread tally does.
+		if n, err := s.store.CountUnreadIn(r.Context(), userID, spec.Query); err != nil {
+			s.log.Warn("counting unread in a stream failed", "from", spec.Token, "error", err)
+		} else {
+			page.Mark.Unread = n
+			page.Mark.Offered = n > 0
+		}
+	}
+
+	// The mark requests live at their own path, and pageData took this request's
+	// path for the reload control — which would leave the reload button on a
+	// /mark-read URL, pointing at a confirmation rather than at the list. The list
+	// is what a reader means by reloading here.
+	if mark.Confirming || mark.Done != nil {
+		page.Path = spec.Path
+	}
+
+	s.render(w, status, "stream", page)
+}
+
+// handleMarkReadConfirm asks before marking a whole list read.
+//
+// A GET, and a page rather than a scripted dialog: the content security policy has
+// no 'unsafe-inline' and this interface does not require JavaScript for anything a
+// reader cannot otherwise do. It also means the question is reloadable and
+// linkable, and answering "no" is navigating away — which is the cheapest possible
+// cancel.
+func (s *Server) handleMarkReadConfirm(w http.ResponseWriter, r *http.Request) {
+	spec, ok := s.markableSpec(w, r, r.URL.Query().Get("from"))
+	if !ok {
+		return
+	}
+
+	s.renderStream(w, r, spec, http.StatusOK, markControl{Confirming: true})
+}
+
+// handleMarkRead marks everything unread in one list read.
+//
+// Rendered rather than redirected, like the import and the on-demand poll: the
+// count belongs to the request that earned it. Re-posting is harmless — the second
+// one finds nothing unread and says so.
+func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	spec, ok := s.markableSpec(w, r, r.PostFormValue("from"))
+	if !ok {
+		return
+	}
+
+	n, err := s.store.MarkReadIn(r.Context(), signedInUser(r), spec.Query)
+	if err != nil {
+		s.log.Error("marking a list read failed", "from", spec.Token, "error", err)
+		s.renderStream(w, r, spec, http.StatusInternalServerError, markControl{
+			Done: &markOutcome{Problem: "Nothing was marked read. The log will say why."},
+		})
+		return
+	}
+
+	s.log.Info("marked a list read", "from", spec.Token, "count", n)
+
+	s.renderStream(w, r, spec, http.StatusOK, markControl{Done: &markOutcome{Count: n}})
+}
+
+// markableSpec resolves the list a mark-read request names.
+//
+// Not found covers three cases on purpose: a token that means nothing, a feed
+// belonging to somebody else — GetFeed already reports that as missing rather than
+// forbidden — and a list that exists but must not be marked in bulk. A reader who
+// hand-crafts `from=search:x` gets the same nothing as one who invents a feed id,
+// and neither learns anything from the difference.
+func (s *Server) markableSpec(w http.ResponseWriter, r *http.Request, token string) (streamSpec, bool) {
+	spec, ok := s.streamSpecFor(r.Context(), signedInUser(r), token)
+	if !ok || !spec.Markable {
+		http.NotFound(w, r)
+		return streamSpec{}, false
+	}
+	return spec, true
 }
 
 // articlePage is the reader.

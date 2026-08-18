@@ -218,6 +218,80 @@ func (q StreamQuery) filter(userID UserID) streamFilter {
 	return f
 }
 
+// unreadOnly narrows a stream to whatever is unread in it, and discards the
+// paging.
+//
+// Both bulk operations over a stream — counting what is unread in it, and marking
+// it read — act on the whole list rather than on the page the reader can see, so
+// the cursor and the limit have no business surviving. ReadWithin goes too: it
+// exists to keep a list stable while somebody reads it, and admitting
+// already-read articles into a count of unread ones would simply be a wrong
+// number, then a wrong number of rows written.
+func (q StreamQuery) unreadOnly() StreamQuery {
+	q.UnreadOnly = true
+	q.ReadWithin = 0
+	q.Limit = 0
+	q.BeforeSort, q.BeforeID = time.Time{}, 0
+	return q
+}
+
+// CountUnreadIn counts what is unread in one stream.
+//
+// This is what the "mark all as read" control offers to mark, so it is deliberately
+// the same StreamQuery the list was drawn from: a control that offers to mark 247
+// articles read and then marks a different set is worse than no control.
+func (s *Store) CountUnreadIn(ctx context.Context, userID UserID, q StreamQuery) (int64, error) {
+	f := q.unreadOnly().filter(userID)
+
+	var n int64
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM articles a
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE `+strings.Join(f.where, "\n		  AND "),
+		f.args...,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("counting unread in a stream for user %d: %w", userID, err)
+	}
+	return n, nil
+}
+
+// MarkReadIn marks everything unread in one stream read, and reports how many
+// articles that was.
+//
+// Scoped by the same StreamQuery that drew the list, which is the whole point:
+// "mark all as read" on a category means that category, and there is no code path
+// here that can widen it to the archive. A stream whose query does not describe
+// its contents — search, which is ranked against a query string — must not be
+// offered this, and the web interface decides that per list rather than here.
+//
+// Only unread rows are touched, so read_at keeps the time an article was first
+// read rather than being pushed forward by a later bulk mark. That matters beyond
+// tidiness: read_at is what the retention policy measures from.
+func (s *Store) MarkReadIn(ctx context.Context, userID UserID, q StreamQuery) (int64, error) {
+	f := q.unreadOnly().filter(userID)
+
+	// One row per article, which is what makes ON CONFLICT safe here: the state
+	// join is on the primary key, and every filter this query can carry is an
+	// EXISTS rather than a join. A filter that joined feed_items directly would
+	// yield an article twice for a reader subscribed to two feeds carrying it, and
+	// Postgres refuses to let one statement update the same row twice.
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO article_state (user_id, article_id, read, read_at)
+		SELECT $1, a.id, true, now()
+		FROM articles a
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE `+strings.Join(f.where, "\n		  AND ")+`
+		ON CONFLICT (user_id, article_id) DO UPDATE
+		SET read = true,
+		    read_at = COALESCE(article_state.read_at, now())`,
+		f.args...)
+	if err != nil {
+		return 0, fmt.Errorf("marking a stream read for user %d: %w", userID, err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // Stream returns a page of the user's articles, newest first.
 func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]StreamItem, error) {
 	limit := q.Limit

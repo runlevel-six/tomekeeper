@@ -62,6 +62,21 @@ type streamSpec struct {
 	// store would have to re-run, and for the attention queue, which is a
 	// worklist rather than a reading order.
 	Ordered bool
+
+	// Markable says whether this list may be marked read in bulk.
+	//
+	// Opt-in, and the reason is not taste. Marking a list read applies Query to
+	// every article it selects, so a list whose Query does not describe its
+	// contents would mark something else entirely: search and the attention queue
+	// both carry an empty Query — they are built from a query string and a status
+	// filter respectively — and offering them this control would mark the reader's
+	// whole archive read from a page showing four results. A new stream is
+	// therefore unmarkable until somebody says otherwise.
+	//
+	// Left off the hand-picked lists too, for a plainer reason: starring and saving
+	// are per-article decisions, so a bulk control over them answers a question
+	// nobody asked.
+	Markable bool
 }
 
 // feedStream and friends build the token for a list that needs an argument.
@@ -172,17 +187,19 @@ func (s *Server) streamSpecFor(ctx context.Context, userID store.UserID, token s
 func (s *Server) unreadSpec() streamSpec {
 	return streamSpec{
 		Token: streamUnread, Nav: "unread", Heading: "Unread", Path: "/",
-		Empty:   "Nothing unread. The worker fills this in as feeds are polled.",
-		Query:   store.StreamQuery{UnreadOnly: true},
-		Ordered: true,
+		Empty:    "Nothing unread. The worker fills this in as feeds are polled.",
+		Query:    store.StreamQuery{UnreadOnly: true},
+		Ordered:  true,
+		Markable: true,
 	}
 }
 
 func (s *Server) allSpec() streamSpec {
 	return streamSpec{
 		Token: streamAll, Nav: "all", Heading: "Everything", Path: "/all",
-		Empty:   "The archive is empty. Import feeds and run the worker.",
-		Ordered: true,
+		Empty:    "The archive is empty. Import feeds and run the worker.",
+		Ordered:  true,
+		Markable: true,
 	}
 }
 
@@ -207,30 +224,33 @@ func (s *Server) savedSpec() streamSpec {
 func (s *Server) feedSpec(feed store.Feed) streamSpec {
 	return streamSpec{
 		Token: feedStream(feed.ID), Nav: "feeds", Heading: feed.Title,
-		Path:    "/feeds/" + strconv.FormatInt(int64(feed.ID), 10),
-		Empty:   "Nothing stored from this feed yet.",
-		Query:   store.StreamQuery{FeedID: feed.ID},
-		Ordered: true,
+		Path:     "/feeds/" + strconv.FormatInt(int64(feed.ID), 10),
+		Empty:    "Nothing stored from this feed yet.",
+		Query:    store.StreamQuery{FeedID: feed.ID},
+		Ordered:  true,
+		Markable: true,
 	}
 }
 
 func (s *Server) tagSpec(id store.TagID) streamSpec {
 	return streamSpec{
 		Token: tagStream(id), Nav: "tags", Heading: "Tagged",
-		Path:    "/tags/" + strconv.FormatInt(int64(id), 10),
-		Empty:   "Nothing carries this tag.",
-		Query:   store.StreamQuery{TagID: id},
-		Ordered: true,
+		Path:     "/tags/" + strconv.FormatInt(int64(id), 10),
+		Empty:    "Nothing carries this tag.",
+		Query:    store.StreamQuery{TagID: id},
+		Ordered:  true,
+		Markable: true,
 	}
 }
 
 func (s *Server) categorySpec(name string) streamSpec {
 	return streamSpec{
 		Token: categoryStream(name), Nav: "categories",
-		Heading: categoryHeading(name),
-		Path:    categoryPath(name),
-		Empty:   "Nothing stored from the feeds in this category yet.",
-		Query:   store.StreamQuery{Category: name, Categorized: true},
-		Ordered: true,
+		Heading:  categoryHeading(name),
+		Path:     categoryPath(name),
+		Empty:    "Nothing stored from the feeds in this category yet.",
+		Query:    store.StreamQuery{Category: name, Categorized: true},
+		Ordered:  true,
+		Markable: true,
 	}
 }
