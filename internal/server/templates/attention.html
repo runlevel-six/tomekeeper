@@ -7,9 +7,9 @@
   <p class="hint">
     Articles that did not come through cleanly. This is routine
     maintenance rather than a crisis: most entries are a site that needs a
-    <code>tome domain-rule</code>, and some are pages that no extractor will ever
-    read. Nothing here is lost — the original link still works, and the stored page
-    can be re-extracted once a rule exists.
+    <a href="/domain-rules">domain rule</a>, and some are pages that no extractor
+    will ever read. Nothing here is lost — the original link still works, and the
+    stored page can be re-extracted once a rule exists.
   </p>
 
   {{if .Items}}
@@ -20,6 +20,7 @@
           <th scope="col">Feed</th>
           <th scope="col">Problem</th>
           <th scope="col">Seen</th>
+          <th scope="col">Fix</th>
         </tr>
       </thead>
       <tbody>
@@ -43,6 +44,12 @@
             {{end}}
           </td>
           <td><time datetime="{{.FirstSeenAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since .FirstSeenAt}}</time></td>
+          {{/*
+            The way out, on the row where the problem is noticed. Writing a rule
+            used to begin by leaving the browser for a shell, which is most of the
+            reason rules got written rarely.
+          */}}
+          <td>{{if .RulePath}}<a class="rule-link" href="{{.RulePath}}" title="Write an extraction rule for {{.Host}}">Rule for {{.Host}}</a>{{end}}</td>
         </tr>
         {{end}}
       </tbody>

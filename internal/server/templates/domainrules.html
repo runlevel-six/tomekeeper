@@ -1,0 +1,170 @@
+{{define "title"}}Domain rules — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="rules">
+  <h1>Domain rules</h1>
+
+  <p class="note">
+    Per-domain extraction overrides, for sites the heuristics get wrong. A rule is
+    you saying <em>the body is here</em>, so it overrides the length and ratio
+    checks that guess. Rules cover subdomains: one for <code>example.com</code>
+    also applies to <code>blog.example.com</code> unless that has a rule of its own.
+  </p>
+
+  {{with .Outcome}}
+    {{if .Problem}}
+      <p class="import-result bad">{{.Problem}}</p>
+    {{else if .Saved}}
+      <p class="import-result ok">
+        Saved the rule for <strong>{{.Saved}}</strong>. It applies to everything
+        extracted from now on — use <strong>Reprocess</strong> on its row to apply it
+        to what is already stored.
+      </p>
+    {{else if .Deleted}}
+      <p class="import-result ok">
+        Removed the rule for <strong>{{.Deleted}}</strong>. Articles already stored
+        keep the bodies it produced until that domain is reprocessed.
+      </p>
+    {{else if .Reprocessed}}
+      <p class="import-result ok">
+        {{if .Queued}}
+          Queued {{plural .Queued "article"}} from <strong>{{.Reprocessed}}</strong>
+          for re-extraction. The worker processes them from the pages already stored,
+          so nothing is fetched and no site is touched.
+        {{else}}
+          Nothing to reprocess for <strong>{{.Reprocessed}}</strong>: no stored
+          article from that host has a body that can be replaced. Imported bodies are
+          never re-extracted, and an article whose page was never fetched has nothing
+          to extract from.
+        {{end}}
+      </p>
+    {{end}}
+  {{end}}
+
+  {{if .Rules}}
+    <table class="rule-table">
+      <thead>
+        <tr>
+          <th scope="col">Domain</th>
+          <th scope="col">Body selector</th>
+          <th scope="col" class="num">Articles</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rules}}
+        <tr>
+          <th scope="row">
+            {{.Domain}}
+            {{if .RequiresJS}}<span class="badge warn" title="Marked as needing a headless render, which does not exist yet">needs JS</span>{{end}}
+            {{if .Notes}}<span class="reason">{{.Notes}}</span>{{end}}
+          </th>
+          <td>
+            {{if .ContentSelector}}<code>{{.ContentSelector}}</code>{{else}}<span class="reason">none</span>{{end}}
+            {{if .Strip}}<span class="reason">strips <code>{{.Strip}}</code></span>{{end}}
+            {{if .RateLimitRPS}}<span class="reason">{{.RateLimitRPS}} requests/second</span>{{end}}
+          </td>
+          <td class="num">{{if .Articles}}{{.Articles}}{{end}}</td>
+          <td class="rule-actions">
+            <a href="/domain-rules?edit={{.Domain}}">Edit</a>
+            {{if $.ReprocessAvailable}}
+              {{/*
+                The control that was only ever a shell command. It queues exactly what
+                `tome reextract --target-version 0 --domain X` queues, through the same
+                function, so the button and the documented command cannot drift.
+              */}}
+              <form method="post" action="/domain-rules/reprocess">
+                <input type="hidden" name="domain" value="{{.Domain}}">
+                <button type="submit" title="Re-extract this domain's stored pages with the current rule">Reprocess</button>
+              </form>
+            {{end}}
+            <form method="post" action="/domain-rules/delete">
+              <input type="hidden" name="domain" value="{{.Domain}}">
+              <button type="submit" class="danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="placeholder">
+      No rules yet. Most sites need none — write one when an article in
+      <a href="/attention">Attention</a> turns out to be a page the heuristics read
+      badly rather than one that could not be fetched.
+    </p>
+  {{end}}
+
+  <section class="rule-form">
+    <h2>{{if .Editing}}Edit {{.Editing}}{{else}}Add a rule{{end}}</h2>
+
+    <form method="post" action="/domain-rules">
+      <div class="field">
+        <label for="rule-domain">Domain</label>
+        <input type="text" id="rule-domain" name="domain" autocomplete="off" spellcheck="false"
+               placeholder="example.com" value="{{.Form.Domain}}" required>
+        <p class="hint-inline">A host, not a URL — a pasted address is reduced to its host.</p>
+      </div>
+
+      <div class="field">
+        <label for="rule-selector">Body selector</label>
+        <input type="text" id="rule-selector" name="selector" autocomplete="off" spellcheck="false"
+               placeholder=".post-content" value="{{.Form.ContentSelector}}">
+        <p class="hint-inline">
+          Every matching element is used, in document order, so a body broken across
+          several blocks by advertising is reassembled by naming the class they share.
+          A comma-separated list picks up more than one kind of element — a lead image
+          outside the body, say — and anything inside another match is skipped rather
+          than repeated.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="rule-strip">Strip</label>
+        <textarea id="rule-strip" name="strip" rows="3" spellcheck="false"
+                  placeholder=".ad-wrapper&#10;.related-stories">{{.Form.Strip}}</textarea>
+        <p class="hint-inline">One selector per line, removed before extraction.</p>
+      </div>
+
+      <div class="field">
+        <label for="rule-rate">Requests per second</label>
+        <input type="text" id="rule-rate" name="rate" autocomplete="off" inputmode="decimal"
+               placeholder="leave blank for the default" value="{{.Form.Rate}}">
+        <p class="hint-inline">
+          Fractional values are the useful ones: 0.5 is one request every two seconds.
+          Read once when the worker starts, so a change here needs a worker restart.
+        </p>
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" name="requires_js" value="true"{{if .Form.RequiresJS}} checked{{end}}>
+          This site needs JavaScript to render
+        </label>
+        <p class="hint-inline">
+          Recorded only. Headless rendering does not exist yet, so this changes nothing
+          today beyond marking the site for when it does.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="rule-notes">Notes</label>
+        <input type="text" id="rule-notes" name="notes" autocomplete="off"
+               placeholder="why this rule exists" value="{{.Form.Notes}}">
+      </div>
+
+      <div class="actions-row">
+        <button type="submit">{{if .Editing}}Save rule{{else}}Add rule{{end}}</button>
+        {{if .Editing}}<a href="/domain-rules">Cancel</a>{{end}}
+      </div>
+    </form>
+  </section>
+
+  <p class="note">
+    Reprocessing re-extracts from pages already on disk, so it asks no site for
+    anything and works for articles whose sites are gone. It never touches an
+    imported body — those may be the only surviving copy of a page. This build
+    extracts at version {{.ExtractorVersion}}.
+  </p>
+</div>
+{{end}}

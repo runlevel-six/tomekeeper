@@ -8,6 +8,8 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/runlevel-six/tomekeeper/internal/auth"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
@@ -55,6 +57,18 @@ func serve(args []string, stderr io.Writer) int {
 	// Postgres restart should take this instance out of the load balancer, not
 	// get every replica killed and restarted. See docs/reference/cli.md.
 	deps := server.Deps{Store: store.New(pool), Sessions: sessions}
+
+	// Insert-only, and the distinction is the whole point: the web interface queues
+	// re-extraction when somebody presses reprocess on a domain rule, and processes
+	// none of it. `tome reextract` has exactly this role. A failure to open the queue
+	// costs that one control rather than the service, because a reader whose archive
+	// is fine should not lose the interface over a button they may never press.
+	if jobClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Logger: log}); err != nil {
+		log.Warn("the job queue is unavailable, so re-extraction cannot be queued from the interface",
+			"error", err)
+	} else {
+		deps.Jobs = jobClient
+	}
 
 	// The one outbound request the reader-facing process makes: testing a feed URL
 	// somebody is about to subscribe to. Its own client with a small concurrency

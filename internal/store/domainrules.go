@@ -101,6 +101,50 @@ func (s *SystemStore) ListDomainRules(ctx context.Context) ([]DomainRule, error)
 	return out, rows.Err()
 }
 
+// ArticlesPerRuleDomain counts stored articles per rule domain.
+//
+// Keyed by the rule's domain and counting its subdomains with it, matching how a
+// rule applies and — more importantly — matching exactly what reprocessing that
+// domain would select. A count shown next to a reprocess control that disagreed
+// with what the control does would be worse than no count.
+//
+// The host is derived from url_canonical the same way ReextractCandidates derives
+// it, and compared as a host rather than with a LIKE over the whole URL:
+// `LIKE '%example.com%'` also matches notexample.com and, worse,
+// evil.com/?ref=example.com.
+//
+// Admin surface, like everything else about rules: this counts across every
+// reader's articles, which is right for a global rule and is one of the places a
+// multi-user build has to grow a role check.
+func (s *SystemStore) ArticlesPerRuleDomain(ctx context.Context) (map[string]int64, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH hosts AS (
+			SELECT split_part(split_part(split_part(a.url_canonical, '://', 2), '/', 1), ':', 1) AS host
+			FROM articles a
+		)
+		SELECT r.domain, count(h.host)
+		FROM domain_rules r
+		LEFT JOIN hosts h ON h.host = r.domain OR h.host LIKE '%.' || r.domain
+		GROUP BY r.domain`)
+	if err != nil {
+		return nil, fmt.Errorf("counting articles per rule domain: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int64)
+	for rows.Next() {
+		var (
+			domain string
+			n      int64
+		)
+		if err := rows.Scan(&domain, &n); err != nil {
+			return nil, fmt.Errorf("scanning a domain count: %w", err)
+		}
+		counts[domain] = n
+	}
+	return counts, rows.Err()
+}
+
 // UpsertDomainRule creates or replaces a rule.
 func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error {
 	domain := strings.ToLower(strings.TrimSpace(r.Domain))
@@ -113,7 +157,13 @@ func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error 
 			domain, content_selector, strip_selectors, requires_js,
 			user_agent, rate_limit_rps, notes
 		)
-		VALUES ($1, NULLIF($2, ''), $3, $4, NULLIF($5, ''), NULLIF($6, 0)::numeric, NULLIF($7, ''))
+		-- The rate is cast before the comparison, not after. Written as
+		-- NULLIF($6, 0)::numeric, Postgres infers the parameter's type from the
+		-- integer literal it is compared with, so pgx sent 0.5 as an integer, it
+		-- arrived as 0, and NULLIF turned it into NULL. Fractional rates — the
+		-- useful ones, since 0.5 is one request every two seconds — were silently
+		-- discarded while whole numbers worked, which is why it went unnoticed.
+		VALUES ($1, NULLIF($2, ''), $3, $4, NULLIF($5, ''), NULLIF($6::numeric, 0), NULLIF($7, ''))
 		ON CONFLICT (domain) DO UPDATE SET
 			content_selector = EXCLUDED.content_selector,
 			strip_selectors  = EXCLUDED.strip_selectors,

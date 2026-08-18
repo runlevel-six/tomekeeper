@@ -496,6 +496,88 @@ kbd {
 }
 .save-box input[type="url"]:focus-visible { border-color: var(--accent); outline: none; }
 
+/* Domain rules: a table of overrides and the form that writes one. Wider than the
+   reading measure because a selector is long and wrapping one mid-token makes it
+   unreadable. */
+.rules { max-width: 52rem; margin: 0 auto; }
+.rules .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+
+.rule-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+.rule-table th, .rule-table td {
+  text-align: left;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.rule-table thead th {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.rule-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rule-table code { word-break: break-all; }
+.rule-table .reason { display: block; color: var(--ink-soft); font-size: 0.82rem; margin-top: 0.2rem; }
+
+/* Edit, reprocess and remove sit in one cell, so they are laid out rather than
+   inheriting whatever the table does with inline forms. */
+.rule-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.rule-actions form { display: inline; }
+.rule-actions button { font-size: 0.85rem; padding: 0.25rem 0.6rem; }
+/* Remove is the one control here that destroys something. Marked, but not made
+   loud: it sits beside two ordinary buttons and shouting would be worse than
+   useless next to a control pressed on purpose. */
+.rule-actions button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, var(--rule)); }
+.rule-actions button.danger:hover { border-color: var(--error); }
+
+.rule-form {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+.rule-form .field { margin-bottom: 1.1rem; }
+.rule-form label {
+  display: block;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+.rule-form input[type="text"], .rule-form textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.rule-form textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.rule-form input[type="text"]:focus-visible,
+.rule-form textarea:focus-visible { border-color: var(--accent); outline: none; }
+/* The explanation under a field, which is where the hard-won knowledge about
+   selectors lives. Small, but not so small it reads as decoration. */
+.rule-form .hint-inline {
+  margin: 0.3rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.rule-form label.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+}
+.rule-form .actions-row { display: flex; align-items: center; gap: 1rem; }
+
 /* Importing a library, below the reading list it adds to. Constrained like the
    list itself rather than inheriting main's full width. */
 .import-library {

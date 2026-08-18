@@ -42,6 +42,9 @@ What is there:
   OPML import from the CLI or by upload. Feed health with the last error each feed
   gave, a queue of anything that did not come through cleanly, and a button to check
   every feed now rather than waiting for the adaptive interval.
+- **Fixing a site that extracts badly.** Domain rules are a page rather than a
+  shell command: write the selector, and reprocess that domain from the same screen.
+  The failed-fetch queue links to the form for the host that failed.
 - **Keeping, and letting go.** Star or keep an article to protect its stored copy
   forever; optional retention releases the bodies of things you have read and did
   not keep. Off by default.

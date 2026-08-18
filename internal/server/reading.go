@@ -672,7 +672,19 @@ func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
 // attentionPage is the failed-fetch queue.
 type attentionPage struct {
 	pageData
-	Items []store.NeedsAttention
+	Items []attentionRow
+}
+
+// attentionRow is one entry, with the way out of it.
+type attentionRow struct {
+	store.NeedsAttention
+
+	// Host is the article's host, and RulePath is the form for writing a rule
+	// against it. This page is where a badly-extracted site is discovered, and
+	// until now the fix started by leaving the browser — which is most of why
+	// rules got written rarely.
+	Host     string
+	RulePath string
 }
 
 func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
@@ -683,10 +695,17 @@ func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, http.StatusOK, "attention", attentionPage{
-		pageData: s.pageData(r, "attention"),
-		Items:    items,
-	})
+	page := attentionPage{pageData: s.pageData(r, "attention")}
+	for _, item := range items {
+		row := attentionRow{NeedsAttention: item}
+		if host, ok := hostOf(item.URLCanonical); ok {
+			row.Host = host
+			row.RulePath = "/domain-rules?edit=" + url.QueryEscape(host)
+		}
+		page.Items = append(page.Items, row)
+	}
+
+	s.render(w, http.StatusOK, "attention", page)
 }
 
 // actions is the data behind the read/star controls, rendered both inside a page

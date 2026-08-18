@@ -89,6 +89,18 @@ The path is in `articles.raw_blob_path`.
 
 ## Write the rule
 
+### In the browser
+
+**Rules** in the navigation, or the *Rule for …* link on the row in **Attention**
+that sent you here. Fill in the body selector, put strip selectors one per line,
+save, then press **Reprocess** on the rule's row — that second step is what applies
+it to articles already stored, and the page says how many were queued.
+
+The rest of this page uses the command line, which does the same thing and is what
+a script or a runbook wants.
+
+### At the command line
+
 ```sh
 tome domain-rule set \
   --selector 'div[data-role="story-body"]' \

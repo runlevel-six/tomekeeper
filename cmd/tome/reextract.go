@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
@@ -90,7 +88,15 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
-	total, err := queueReextractions(ctx, s, client, *targetVersion, *domain, *limit, *dryRun, stdout)
+	total, err := jobs.QueueReextraction(ctx, s, client, jobs.ReextractRequest{
+		Version: *targetVersion,
+		Domain:  *domain,
+		Limit:   *limit,
+		DryRun:  *dryRun,
+		Progress: func(queued int) {
+			fmt.Fprintf(stdout, "  … %d articles so far\n", queued)
+		},
+	})
 	if err != nil {
 		log.Error("reextract failed", "error", err)
 		return exitFailure
@@ -130,58 +136,4 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 			total, noun, scope)
 	}
 	return exitOK
-}
-
-// queueReextractions walks the candidates in batches and enqueues each one.
-func queueReextractions(
-	ctx context.Context,
-	s *store.Store,
-	client *river.Client[pgx.Tx],
-	version string,
-	domain string,
-	limit int,
-	dryRun bool,
-	stdout io.Writer,
-) (int, error) {
-	const batch = 500
-
-	var (
-		total  int
-		cursor store.ArticleID
-	)
-
-	for {
-		// Candidates are selected by the store with `NOT immutable` in the
-		// WHERE clause rather than filtered here. That is deliberate: the
-		// acceptance criterion is that imported bodies are *provably* skipped,
-		// and a WHERE clause is a proof while a conditional in a loop is a
-		// promise.
-		candidates, err := s.System().ReextractCandidates(ctx, version, domain, cursor, batch)
-		if err != nil {
-			return total, err
-		}
-		if len(candidates) == 0 {
-			return total, nil
-		}
-
-		for _, c := range candidates {
-			cursor = c.ArticleID
-
-			if limit > 0 && total >= limit {
-				return total, nil
-			}
-			if !dryRun {
-				// Forced: these articles all have a current body already, and
-				// without it the worker would see one and skip.
-				if err := jobs.EnqueueExtraction(ctx, client, c.ArticleID, true); err != nil {
-					return total, err
-				}
-			}
-			total++
-		}
-
-		if total > 0 && total%2000 == 0 {
-			fmt.Fprintf(stdout, "  … %d articles so far\n", total)
-		}
-	}
 }

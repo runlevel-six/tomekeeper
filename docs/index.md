@@ -49,7 +49,8 @@ doing.
 Dry, complete descriptions of the machinery. Look things up here.
 
 - [Configuration](reference/configuration.md) — every environment variable
-- [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint
+- [CLI](reference/cli.md) — every subcommand, exit code, and HTTP endpoint, plus
+  the web interface's own routes
 - [Metrics](reference/metrics.md) — every metric, and why they are on their own port
 - [The mark and the lockup](reference/logo.md) — two drawings, which to use where, and four things about icons that fail silently
 - [Themes](reference/themes.md) — the six palettes, and the contrast measurements

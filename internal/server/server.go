@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
@@ -51,6 +54,14 @@ type Deps struct {
 	// rather than refusing to start.
 	Blobs blob.Store
 
+	// Jobs queues work for the worker pool. Insert-only: the web interface enqueues
+	// re-extraction when somebody presses reprocess on a domain rule, and runs none
+	// of it — the same role `tome reextract` has.
+	//
+	// Nil is supported and means the reprocess control says so, naming the command
+	// that does the same thing.
+	Jobs *river.Client[pgx.Tx]
+
 	// Fetch makes the one outbound request the web interface has a use for:
 	// testing a feed URL somebody is about to subscribe to.
 	//
@@ -73,6 +84,7 @@ type Server struct {
 	search   store.SearchIndex
 	blobs    blob.Store
 	fetch    *httpclient.Client
+	jobs     *river.Client[pgx.Tx]
 	ui       *ui
 }
 
@@ -87,7 +99,7 @@ func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Serv
 	s := &Server{
 		log: log, cfg: cfg, checks: checks,
 		store: deps.Store, sessions: deps.Sessions,
-		search: deps.Search, blobs: deps.Blobs, fetch: deps.Fetch,
+		search: deps.Search, blobs: deps.Blobs, fetch: deps.Fetch, jobs: deps.Jobs,
 	}
 	if s.search == nil && s.store != nil {
 		s.search = s.store.Search()
@@ -166,6 +178,14 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /categories", s.requireUser(s.handleCategories))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
+
+	// Extraction overrides. Admin surface rather than reader surface — rules are
+	// global — which is why these are grouped apart and why a multi-user build has
+	// to gate them.
+	mux.HandleFunc("GET /domain-rules", s.requireUser(s.handleDomainRules))
+	mux.HandleFunc("POST /domain-rules", s.requireUser(s.handleSaveDomainRule))
+	mux.HandleFunc("POST /domain-rules/delete", s.requireUser(s.handleDeleteDomainRule))
+	mux.HandleFunc("POST /domain-rules/reprocess", s.requireUser(s.handleReprocessDomain))
 	mux.HandleFunc("GET /articles/{id}", s.requireUser(s.handleArticle))
 
 	// Marking a whole list read: the question, then the answer. Two steps because

@@ -412,6 +412,7 @@ session.
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly |
 | `GET /settings` | Palette and preferences |
+| `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
 | `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
@@ -421,6 +422,9 @@ session.
 | `POST /import` | Import an uploaded reading library. `library=` is the file; `report_only=true` reports without importing. |
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
 | `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
+| `POST /domain-rules` | Save one rule. |
+| `POST /domain-rules/delete` | Remove one rule. `domain=`. |
+| `POST /domain-rules/reprocess` | Queue re-extraction of one domain. `domain=`. |
 | `POST /feeds/import` | Subscribe to everything in an uploaded OPML file |
 | `POST /feeds/refresh` | Bring every enabled feed forward to due |
 | `POST /settings` | Save preferences |
@@ -485,6 +489,44 @@ still works: a broken feed shows up in the feed list's health column and in
 category and disturbs nothing about its polling — the same idempotency the OPML
 import has. A URL with no scheme is assumed to be `https`, because an address bar
 does not show one and that is where the URL was copied from.
+
+### The domain rules page
+
+Everything `tome domain-rule` does, plus the reprocess that has to follow it. The
+form takes strip selectors one per line, reduces a pasted URL to its host, and
+refuses a rule that would do nothing — a rule with no selector, no strips, no rate
+and no JavaScript flag saves happily and changes nothing, and the only symptom is a
+site that still extracts badly.
+
+**Reprocess queues exactly what `tome reextract --target-version 0 --domain X`
+queues**, through the same function, so the button and the command cannot drift. It
+re-extracts from pages already stored, so it asks no site for anything and works for
+articles whose sites are gone, and it never selects an imported body. Version `0`
+rather than the current version is the subtlety: selection is "any version other
+than this one", and a rule is data that changes between runs of one binary, so no
+rule edit can bump a constant compiled into it. No body carries "0", so every
+mutable body matches.
+
+Each rule shows how many stored articles come from its host — the same host
+expression the reprocess uses, so the count is what the button would act on.
+
+**Rows in [Attention](#) link straight to the rule form for their host**, because
+that is where a badly-extracted site is discovered and the fix used to begin by
+leaving the browser.
+
+Two things this page cannot do anything about, and says so rather than pretending:
+a **rate** change is read once when the worker starts, so it needs a worker restart;
+and **needs JavaScript** is recorded only, since headless rendering does not exist
+yet.
+
+An instance with no job queue hides the reprocess control and, if posted to anyway,
+names the command that does the same thing.
+
+**These routes are admin surface.** Rules are global — how to extract a site is a
+fact about that site, identical for every reader — so they reach through the
+cross-user store methods that the rest of the interface deliberately avoids. That is
+correct for a single-user archive and is one of the things multi-user work has to
+gate.
 
 ### `POST /import` — import a library through the browser
 
