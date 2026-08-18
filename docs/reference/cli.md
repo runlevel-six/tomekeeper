@@ -279,6 +279,34 @@ is unknown rather than merely broken.
 The user is selected by `TOME_USERNAME` and must already exist; run `tome migrate`
 first. The command exits `1` if any record failed to import.
 
+### `tome export`
+
+Writes the archive as a file `tome import` reads back.
+
+```
+tome export [--out FILE]
+```
+
+| Flag | Description |
+|---|---|
+| `--out` | Write to this file. Without it the export goes to stdout, so it composes: piping into `gzip`, into a bucket, or into another machine's `tome import` needs no temporary file. |
+
+The summary goes to stderr when the export is going to stdout, so a pipe carries
+the archive and nothing else.
+
+```console
+$ tome export --out archive.json
+exported 385 articles to archive.json: 341 bodies, 0 tags, 0 highlights, 0 images referenced
+44 articles carry no body: a fetch that failed, or a body retention released. The article, its metadata and your reading state are still exported.
+```
+
+**Images and stored pages are referenced, not included.** The file is the database's
+half of the archive; `TOME_BLOB_ROOT` is the other half, and a complete backup is
+both. The command says so whenever the export references any.
+
+See [Export format](export-format.md) for the record, and for what a round trip
+preserves exactly and what it does not.
+
 ### `tome reextract`
 
 Queues re-extraction of stored pages at the current extractor version. Makes no
@@ -734,7 +762,6 @@ among the things that may have just failed to validate.
 
 | Subcommand | Status |
 |---|---|
-| `tome export` | Planned. The format it will emit already exists and is what `tome import` reads — see [Export format](export-format.md). The archive is not locked in meanwhile: every article is already written to disk as a standalone page with its `meta.json` beside it. |
 | `tome reindex` — rebuild the search index | Not currently needed: the search index is a generated column PostgreSQL maintains itself. |
 
 Invoking either exits `2` as an unknown subcommand. They are named here so that

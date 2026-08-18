@@ -37,6 +37,8 @@ doing.
 
 - [Add a domain rule](how-to/add-a-domain-rule.md) — fixing a site that
   extracts badly
+- [Export everything](how-to/export-everything.md) — a portable copy of the whole
+  archive, and what a round trip preserves
 - [Import from Wallabag](how-to/import-from-wallabag.md) — a read-later library,
   and what the report is telling you before you commit to it
 - [Install on Kubernetes](how-to/install-kubernetes.md) — the manifests in

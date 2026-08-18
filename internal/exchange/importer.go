@@ -82,8 +82,13 @@ type Source struct {
 
 // Importers is every adapter compiled into this build, in the order Detect tries
 // them.
+//
+// This archive's own format first. The two cannot be confused — a Wallabag export
+// has no schema_version and this one has no is_archived — but trying the native
+// format first means a restore is never at the mercy of another adapter's
+// detection becoming looser later.
 func Importers() []Importer {
-	return []Importer{Wallabag{}}
+	return []Importer{Tomekeeper{}, Wallabag{}}
 }
 
 // DetectImporter finds the adapter that recognizes a file on disk.

@@ -49,6 +49,36 @@ someone finally needs it is the format that loses the archive.
 }
 ```
 
+## Reading and writing it
+
+`tome export` writes a JSON array of these records; `tome import` reads one back,
+detecting the format from the file rather than a flag. The same type serves both
+directions, so one round-trip test exercises the format from both ends and a backup
+cannot be written in a shape nothing reads.
+
+**What the file contains, and what it does not.** Every article, its metadata, your
+reading state, tags, highlights, and the body currently shown. Images and stored
+original pages are *referenced by path*, not carried — base64 of a decade of
+pictures is not a document anyone can open. The file plus `TOME_BLOB_ROOT` is the
+whole archive; the file alone is everything except the pictures, which can be
+fetched again from the sites that still exist.
+
+### What a round trip preserves
+
+Measured against a real 385-article archive:
+
+| | |
+|---|---|
+| **The stored body, byte for byte** | All 341 bodies came back identical. |
+| Metadata, reading state, tags, highlights | Identical. |
+| Body provenance | Identical: a fetched body comes back fetched and re-extractable, an imported one comes back immutable. |
+| Import identity | Identical: an article imported from Wallabag is still that article, so re-importing that library recognizes it rather than adding it twice. |
+| **The derived text**, in 16 of 341 bodies | Differs by a word boundary where two block elements abut — `service.Data` against `service. Data`, 46 words across the whole archive. The text is recomputed from the body on the way in rather than carried. Fixing it means changing how text extraction handles block boundaries, which changes every extraction and carries a version bump. |
+
+An article this archive collected itself gains one thing on restore: a source of
+`tomekeeper` keyed on its canonical URL. That is not a lost fact but a true new one
+— it is what lets a second restore of the same file know it has already run.
+
 ## Fields
 
 | Field | Type | Notes |
@@ -65,6 +95,7 @@ someone finally needs it is the format that loses the archive.
 | `tags` | string[] | |
 | `read`, `starred`, `archived` | bool | Reader state. |
 | `extractor`, `extractor_version` | string | What produced `content_html`, so an imported body can be told from an extracted one. |
+| `content_origin` | string | Where the body came from: `fetched`, `feed_body`, `import:wallabag`. Optional, added after version 1 without a bump — an older reader ignoring an unknown field is the intended behavior. It is what makes a restore reproduce an archive instead of converting it: without it, every restored body would be recorded as a fresh import, permanently immutable and never re-extracted. |
 | `immutable` | bool | The body must never be regenerated — typically an import that is the only surviving copy of a dead URL. |
 | `word_count` | int | Derived, stored anyway: a reader browsing the files without this service running has no other way to get it. |
 | `assets` | object[] | Localized images. |

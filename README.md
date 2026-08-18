@@ -27,6 +27,10 @@ What is there:
   for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
+- **Taking it away again.** `tome export` writes the whole archive as one file that
+  `tome import` reads back — verified by restoring into an empty database and
+  comparing, with every stored body identical. No lock-in beyond the pictures, which
+  are files on disk you already have.
 - **Bringing a library with you.** `tome import`, or an upload on the Saved page,
   reads a Wallabag JSON export:
   deduplicated against what your feeds already carried, dated when you saved each
@@ -56,8 +60,8 @@ What is there:
   on their own port — deliberately not the port the reader is on.
 
 **Not built yet:** mobile-client sync (the Fever API), importing from read-later
-tools other than Wallabag, exporting, headless rendering for JavaScript-only
-sites, and more than one user account. Those are planned, roughly in that order.
+tools other than Wallabag, headless rendering for JavaScript-only sites, and more
+than one user account. Those are planned, roughly in that order.
 
 ## Quick start
 

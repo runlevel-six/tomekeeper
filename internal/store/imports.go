@@ -55,6 +55,20 @@ type ImportParams struct {
 	// arriving all at once with today's date.
 	SavedAt *time.Time
 
+	// Extractor, ExtractorVersion and ContentOrigin describe where the body came
+	// from, when the source knows. Empty means it does not, and the body is
+	// recorded as this source's import — which is right for another system's
+	// library and wrong for a restore of this archive's own export, where the body
+	// may have been fetched and extracted here and must stay replaceable.
+	//
+	// Immutable is honored only alongside a stated ContentOrigin. An import that
+	// does not say where its body came from is always immutable, because it may be
+	// the only surviving copy of a dead URL.
+	Extractor        string
+	ExtractorVersion string
+	ContentOrigin    string
+	Immutable        bool
+
 	// ContentHTML is empty when the source had no usable body — including when it
 	// held a placeholder its own fetch left behind. Empty means the article is
 	// stored with no body and left for this archive's own fetch to fill, which is
@@ -150,27 +164,39 @@ func (s *Store) ImportArticle(ctx context.Context, userID UserID, p ImportParams
 	// content row, and an article that already carries this source's body has
 	// nothing to gain from a second copy of it.
 	if p.ContentHTML != "" {
-		has, err := s.hasImportedBody(ctx, articleID, p.SourceName)
+		has, err := s.hasBodyFrom(ctx, articleID, p)
 		if err != nil {
 			return Imported{}, err
 		}
 		if !has {
-			if _, err := s.InsertContent(ctx, ContentParams{
-				ArticleID:        articleID,
-				ExtractorName:    "imported",
-				ExtractorVersion: p.SourceName,
-				ContentOrigin:    OriginImport(p.SourceName),
-
-				// Immutable, because this body may be the only surviving copy of a
-				// page that no longer exists. It is never demoted by a later
-				// extraction and never selected by reextract; a fetched body is
-				// stored alongside it, and promoting one is a deliberate act.
-				Immutable: true,
-
+			body := ContentParams{
+				ArticleID: articleID,
 				HTML:      p.ContentHTML,
 				Text:      p.ContentText,
 				WordCount: p.WordCount,
-			}); err != nil {
+
+				ExtractorName:    p.Extractor,
+				ExtractorVersion: p.ExtractorVersion,
+				ContentOrigin:    p.ContentOrigin,
+				Immutable:        p.Immutable,
+			}
+			if body.ContentOrigin == "" {
+				// A source that does not say where its body came from. Recorded as this
+				// source's import, and immutable: it may be the only surviving copy of a
+				// page that no longer exists, so it is never demoted by a later
+				// extraction and never selected by reextract. A fetched body is stored
+				// alongside it, and promoting one is a deliberate act.
+				//
+				// A source that *does* say — this archive's own export — is reproduced
+				// as it was, because a restore has to give back the archive rather than
+				// convert every body in it into an unreplaceable import.
+				body.ExtractorName = "imported"
+				body.ExtractorVersion = p.SourceName
+				body.ContentOrigin = OriginImport(p.SourceName)
+				body.Immutable = true
+			}
+
+			if _, err := s.InsertContent(ctx, body); err != nil {
 				return Imported{}, fmt.Errorf("storing the imported body: %w", err)
 			}
 			result.BodyStored = true
@@ -328,16 +354,25 @@ func (s *Store) recordImport(ctx context.Context, userID UserID,
 	return nil
 }
 
-// hasImportedBody reports whether an article already carries a body from this
-// source.
-func (s *Store) hasImportedBody(ctx context.Context, id ArticleID, sourceName string) (bool, error) {
+// hasBodyFrom reports whether an article already carries a body of this
+// provenance, which is what keeps a repeated import from stacking content rows.
+//
+// Asked about the origin rather than about the source, because a restore states its
+// own origins: re-running one must not add a second copy of a body that says it was
+// fetched, any more than re-running a Wallabag import adds a second imported one.
+func (s *Store) hasBodyFrom(ctx context.Context, id ArticleID, p ImportParams) (bool, error) {
+	origin := p.ContentOrigin
+	if origin == "" {
+		origin = OriginImport(p.SourceName)
+	}
+
 	var exists bool
 	if err := s.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1 FROM article_content
 			WHERE article_id = $1 AND content_origin = $2)`,
-		id, OriginImport(sourceName)).Scan(&exists); err != nil {
-		return false, fmt.Errorf("checking for an imported body on article %d: %w", id, err)
+		id, origin).Scan(&exists); err != nil {
+		return false, fmt.Errorf("checking for an existing body on article %d: %w", id, err)
 	}
 	return exists, nil
 }

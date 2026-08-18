@@ -152,6 +152,25 @@ func lock(t *testing.T, pool *pgxpool.Pool) {
 
 // truncate empties every application table.
 //
+// Empty clears every application table, leaving the schema in place.
+//
+// For the one test shape that needs a *second* archive rather than a second run:
+// export from a populated database, empty it, restore into it, and compare. A
+// second Setup cannot serve that — the per-test advisory lock belongs to one
+// connection, so asking for it twice in one test deadlocks, and the second call
+// would truncate away the archive the first one built.
+//
+// The caller re-seeds whatever user it needs, because emptying takes the users
+// with it.
+func Empty(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)
+	defer cancel()
+
+	truncate(ctx, t, pool)
+}
+
 // TRUNCATE with CASCADE and RESTART IDENTITY rather than DROP and re-migrate:
 // it is far faster, and restarting the sequences means ids are predictable
 // from one test to the next.

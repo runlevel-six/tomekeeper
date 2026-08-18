@@ -53,6 +53,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "import":
 		return importArticles(args[1:], stdout, stderr)
 
+	case "export":
+		return exportArchive(args[1:], stdout, stderr)
+
 	case "reextract":
 		return reextract(args[1:], stdout, stderr)
 
@@ -89,6 +92,7 @@ Subcommands:
   migrate       Apply database migrations and seed the user
   import-opml   Add subscriptions from an OPML file
   import        Import a reading library exported from another system
+  export        Write the archive as a file the import command reads back
   reextract     Re-extract stored pages at the current extractor version
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds

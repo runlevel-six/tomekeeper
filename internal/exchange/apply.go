@@ -289,6 +289,16 @@ func paramsFor(e *extract.Extractor, a *Article) (store.ImportParams, error) {
 		Read:         a.Read,
 		Starred:      a.Starred,
 		Tags:         a.Tags,
+
+		// Passed through rather than assumed. A record that says where its body came
+		// from is describing an archive being restored, and a restore has to
+		// reproduce what was there — including whether the body can be re-extracted
+		// later. A record that says nothing is another system's library, and gets
+		// the immutable import treatment.
+		Extractor:        a.Extractor,
+		ExtractorVersion: a.ExtractorVersion,
+		ContentOrigin:    a.ContentOrigin,
+		Immutable:        a.Immutable,
 	}
 
 	for _, h := range a.Highlights {

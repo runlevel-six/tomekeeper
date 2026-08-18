@@ -85,6 +85,17 @@ type Article struct {
 	Extractor        string `json:"extractor,omitempty"`
 	ExtractorVersion string `json:"extractor_version,omitempty"`
 
+	// ContentOrigin is where the body came from: "fetched", "feed_body",
+	// "import:wallabag". Optional, and adding it needed no version bump — an older
+	// reader ignoring a field it does not know is the intended behavior.
+	//
+	// It exists because a restore has to reproduce an archive rather than convert
+	// it into one. Without this, re-importing an export would record every body as
+	// a fresh import: permanently immutable, never re-extracted, never released by
+	// retention. An archive restored from its own backup would quietly be a
+	// different archive.
+	ContentOrigin string `json:"content_origin,omitempty"`
+
 	// Immutable marks a body that must never be regenerated — typically an
 	// import that is the only surviving copy of a dead URL.
 	Immutable bool `json:"immutable,omitempty"`
@@ -164,19 +175,32 @@ func Decode(r io.Reader) (Article, error) {
 		return Article{}, fmt.Errorf("decoding the article record: %w", err)
 	}
 
+	if err := validate(a); err != nil {
+		return Article{}, err
+	}
+	return a, nil
+}
+
+// validate rejects a record this build must not guess at.
+//
+// Shared by Decode and by the adapter that reads a whole export, so that reading
+// one meta.json and restoring ten thousand records apply the same rules. They are
+// the same rules because they answer the same question: is this a record, and is it
+// one this build understands.
+func validate(a Article) error {
 	if a.SchemaVersion == 0 {
-		return Article{}, fmt.Errorf("the record has no schema_version; it is not an article record")
+		return fmt.Errorf("the record has no schema_version; it is not an article record")
 	}
 	if a.SchemaVersion > SchemaVersion {
 		// Refusing is kinder than guessing. A newer file may have changed the
 		// meaning of a field this build thinks it understands, and silently
 		// misreading an archive is worse than not reading it.
-		return Article{}, fmt.Errorf(
+		return fmt.Errorf(
 			"the record is schema version %d and this build reads up to %d: upgrade tomekeeper",
 			a.SchemaVersion, SchemaVersion)
 	}
 	if a.URL == "" {
-		return Article{}, fmt.Errorf("the record has no url")
+		return fmt.Errorf("the record has no url")
 	}
-	return a, nil
+	return nil
 }
