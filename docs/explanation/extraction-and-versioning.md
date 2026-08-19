@@ -167,7 +167,7 @@ this rung earlier would trade real prose for a picture on every one of them.
 ### Second-guessing a rung that succeeded
 
 Two corrections apply to a rung that already declared success, because
-"acceptable" is a floor rather than a judgement — a page's header block or its
+"acceptable" is a floor rather than a judgment — a page's header block or its
 navigation sidebar clears a floor as easily as an article does.
 
 **A much richer feed body wins.** Observed on a real article where trafilatura

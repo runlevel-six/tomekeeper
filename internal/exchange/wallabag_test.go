@@ -125,7 +125,7 @@ func TestWallabagMapsARealLibrary(t *testing.T) {
 
 // The source's own fetch-failure message is not a body.
 //
-// This is the single most consequential judgement in the adapter. An imported body
+// This is the single most consequential judgment in the adapter. An imported body
 // is immutable, so storing this placeholder would make a paragraph of another
 // program's error message the permanent, unreplaceable content of the article —
 // and would count it as a successful import. In the maintainer's real library it is

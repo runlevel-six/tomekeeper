@@ -682,7 +682,7 @@ func srvURLFor(r *http.Request) string {
 // wants to know why the fetch never landed — and they used to be the same sentence
 // in the attention queue. That cost a long investigation once: a stray job extracted
 // an article that had never been fetched, and "extraction produced no content" sent
-// the search towards the extraction ladder.
+// the search toward the extraction ladder.
 func TestExtractionWithNothingToExtractFromSaysSo(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)
 

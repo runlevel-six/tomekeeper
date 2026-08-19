@@ -424,7 +424,7 @@ const feedAdvantage = 3
 // implausibly thin beside it.
 //
 // The ladder otherwise takes the first rung that succeeds, and "success" is a
-// floor rather than a judgement: an extractor that returns a page's header block
+// floor rather than a judgment: an extractor that returns a page's header block
 // clears it. Observed on a real feed, where trafilatura returned 30 words —
 // the title, twice, and two dates — while the feed carried the entire 2,000-word
 // article that the ladder then threw away.
@@ -454,7 +454,7 @@ func (e *Extractor) orTheFeedIfRicher(in Input, pageURL *url.URL, page Result) R
 // bestOf second-guesses a rung that declared success.
 //
 // Both corrections it applies exist because "acceptable" is a floor rather than
-// a judgement, and a page's header block or its navigation sidebar clears a
+// a judgment, and a page's header block or its navigation sidebar clears a
 // floor as easily as an article does.
 func (e *Extractor) bestOf(in Input, pageURL *url.URL, page Result) Result {
 	page = e.orTheFeedIfRicher(in, pageURL, page)

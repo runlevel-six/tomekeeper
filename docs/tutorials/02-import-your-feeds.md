@@ -77,7 +77,7 @@ tome worker
 
 The first poll of a fresh subscription list is the busiest this archive ever gets.
 Every feed is due at once, and a feed that has been running for years may list its
-whole back catalogue on the first fetch — so a "74 feed" import can produce well over
+whole back catalog on the first fetch — so a "74 feed" import can produce well over
 a thousand articles.
 
 Leave it running. Watch the shape of it:
@@ -89,7 +89,7 @@ level=INFO msg="extracted article" article_id=431 extractor=trafilatura words=12
 level=INFO msg="localized assets" article_id=431 found=3 localized=3 failed=0
 ```
 
-**First-run volume overstates steady state, considerably.** Once the back catalogues
+**First-run volume overstates steady state, considerably.** Once the back catalogs
 are in, a day's polling of the same list is dozens of articles rather than thousands.
 Do not size anything on what you see today.
 

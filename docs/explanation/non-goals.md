@@ -44,7 +44,7 @@ The second is that they change what the thing is. This archive is a record of wh
 one person chose to read. A recommendation engine makes it a system that decides what
 they read next, which is the opposite; auto-tagging makes the tags a machine's
 opinion rather than a reader's. The value of a personal archive is that every
-judgement in it is the reader's own.
+judgment in it is the reader's own.
 
 Full-text search over what you actually read is the feature this replaces, and it is
 already here.

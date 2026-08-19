@@ -179,7 +179,7 @@ func TestMarkReadInHandlesAnArticleOnTwoFeeds(t *testing.T) {
 //   - Deleting `f4.user_id = $1` from the category filter would let Alice mark her
 //     own copy of the article read by naming a folder only Bob created.
 //   - Writing the state row against anything but Alice's user id would mark it read
-//     for Bob, who never asked and cannot tell why his article turned grey.
+//     for Bob, who never asked and cannot tell why his article turned gray.
 func TestMarkReadInIsScopedToOneReader(t *testing.T) {
 	pool, s, alice := dbtest.SetupWithUser(t)
 	ctx := t.Context()

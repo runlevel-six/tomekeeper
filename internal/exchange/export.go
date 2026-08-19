@@ -159,7 +159,7 @@ func Export(ctx context.Context, s *store.Store, userID store.UserID, w io.Write
 //
 // Every field this sets is a claim the importer will act on, so the mapping is
 // deliberately literal: nothing is derived, nothing is prettied up, and the only
-// judgement is which of the archive's internal facts are none of an export's
+// judgment is which of the archive's internal facts are none of an export's
 // business — the article's own id, which means nothing anywhere else, and the
 // per-user rows another reader owns.
 func articleFrom(row store.ExportRow, tags []string, highlights []store.ImportHighlight,

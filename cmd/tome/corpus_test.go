@@ -43,7 +43,7 @@ func TestCorpusStem(t *testing.T) {
 	}
 }
 
-// The starter file records what happened and leaves the judgement to a person.
+// The starter file records what happened and leaves the judgment to a person.
 func TestStarterWant(t *testing.T) {
 	result := extract.Result{
 		Name:      "trafilatura",

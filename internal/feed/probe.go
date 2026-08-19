@@ -145,7 +145,7 @@ func fetchForProbe(ctx context.Context, c *httpclient.Client, feedURL string) ([
 		return nil, fmt.Errorf("the server answered HTTP %d", resp.StatusCode)
 	}
 
-	// The client's own response cap applies, which is where that judgement belongs:
+	// The client's own response cap applies, which is where that judgment belongs:
 	// a probe reads exactly what a poll would read.
 	body, err := httpclient.ReadBody(resp.Body)
 	if err != nil {

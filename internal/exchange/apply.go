@@ -181,7 +181,7 @@ func count(r *Report, a *Article) {
 // Apply imports an export.
 //
 // One record's failure does not stop the run. That is deliberate and it is the
-// same judgement the OPML import makes: in a library of thousands, the useful
+// same judgment the OPML import makes: in a library of thousands, the useful
 // outcome of one unreadable record is a line in a report, not the loss of
 // everything after it. A failure that ends the file still stops, because past that
 // point there is nothing to read.
