@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Daily Strip: Deadline Season</title>
+  <meta property="og:title" content="Deadline Season">
+</head>
+<body>
+  <!--
+    The other shape a webcomic comes in. This one's article URLs are bare numbers,
+    so no image on the page can carry the article's slug — and the strip is instead
+    named after its title, which is the second signal the image rung keys on.
+
+    The footer is what makes the page a regression test rather than a variation. It
+    is the longest run of words here, so a text extractor settles on it, and it
+    carries images of its own: a thumbnail and a banner. A check for "the body has
+    an image" is therefore satisfied by an extraction that found none of the comic,
+    which is how every strip on a site shaped like this was archived as its own
+    footer.
+  -->
+  <div id="top">
+    <a href="/"><img src="/s/site-logo.png" alt="Daily Strip"></a>
+  </div>
+
+  <ul class="comicNav">
+    <li><a href="/1/">|&lt;</a></li>
+    <li><a href="/481/">&lt; Prev</a></li>
+    <li><a href="/483/">Next &gt;</a></li>
+  </ul>
+
+  <div id="comic">
+    <img src="//images.example.com/strips/deadline_season.png"
+         alt="Deadline Season"
+         title="Told you it would be fine, and I stand by that, for a given value of fine."
+         srcset="//images.example.com/strips/deadline_season_2x.png 2x">
+  </div>
+
+  <div id="bottom">
+    <p><img src="/s/selected-strips.png" alt="Selected Strips" usemap="#stripmap"></p>
+    <p><a href="/113/"><img src="/s/best-of-113.png" alt="The one about the printer"></a></p>
+    <div id="comicLinks">
+      <p>
+        Strips I enjoy:
+        <a href="https://one.example.net/">One Panel Only</a>,
+        <a href="https://two.example.net/">Two Panels At Most</a>,
+        <a href="https://three.example.net/">Three Panels On A Good Day</a>,
+        <a href="https://four.example.net/">Four Panels Minimum</a>,
+        <a href="https://five.example.net/">Five Minutes To Deadline</a>,
+        <a href="https://six.example.net/">Six Impossible Things</a>
+      </p>
+    </div>
+    <div id="footnote">
+      This site is best viewed with a browser nobody has shipped since 1998, on a
+      screen resolution of 1024x1. Please enable every ad blocker you own, disable
+      high-heat drying, and set your device to Boat Mode. For legal reasons, do not
+      read the strips in numerical order.
+    </div>
+    <div id="licenseText">
+      <p>
+        This work is licensed under a permissive license, which means you may
+        reproduce the strips provided you do not sell them, do not claim you drew
+        them, and do not use them to advertise a cryptocurrency.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

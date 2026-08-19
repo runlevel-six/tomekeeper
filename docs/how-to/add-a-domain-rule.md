@@ -49,7 +49,7 @@ article 1267: https://example.com/2026/08/a-post
   trafilatura  0      0      0       rejected: produced nothing
   readability  0      0      0       rejected: produced nothing
   feed_body    0      0      0       skipped: the feed carried no body for this article
-  page_images  0      0      0       rejected: no image on the page carries this article's slug, so none of them is its content
+  page_images  0      0      0       rejected: no image on the page is named after this article's slug or its title, so none of them is its content
 ```
 
 The answer usually tells you which problem you have:

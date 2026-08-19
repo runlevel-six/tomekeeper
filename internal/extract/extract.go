@@ -49,7 +49,12 @@ import (
 //     "service.Data" out of `<p>service.</p><h2>Data center</h2>`, which the length
 //     checks measured, the search index tokenized, and an excerpt showed to a
 //     reader. 16 of 341 bodies in a real archive carried at least one.
-const Version = "4"
+//
+// Version 5 (2026-08-19): the page images rung finds a strip named after the page's
+// title as well as after its URL, and a thin body loses to those images unless it
+// already holds one of them. Every webcomic whose article URLs are bare numbers was
+// stored as its own footer until this — see orThePageImagesIfTextless.
+const Version = "5"
 
 // Extractor names recorded on content rows.
 const (
@@ -360,9 +365,11 @@ func feedWhy(r Result, ok bool) string {
 
 func imagesWhy(in Input, r Result, ok bool) string {
 	if ok {
-		return fmt.Sprintf("%d image(s) whose addresses carry this article's slug", countImages(r.HTML))
+		return fmt.Sprintf("%d image(s) named after this article's slug or its title",
+			countImages(r.HTML))
 	}
-	return "no image on the page carries this article's slug, so none of them is its content"
+	return "no image on the page is named after this article's slug or its title, so none of " +
+		"them is its content"
 }
 
 // share is a percentage that does not divide by zero.

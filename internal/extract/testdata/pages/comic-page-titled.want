@@ -1,0 +1,15 @@
+url: https://comics.example.com/482
+extractor: page_images
+min_images: 1
+
+# The strip's name and its hover text, which on a comic is where the joke is.
+Deadline Season
+Told you it would be fine
+
+# The footer a text extractor prefers. Before the image rung learned to read
+# titles, this was the whole stored article — including its two thumbnails, which
+# is why "the body has an image" was the wrong question to ask about it.
+! Strips I enjoy
+! best viewed with
+! Boat Mode
+! cryptocurrency

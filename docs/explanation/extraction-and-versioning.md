@@ -144,7 +144,7 @@ and exactly wrong here, so even a hand-written domain rule pointing straight at
 the strip produced nothing. This rung does not consult the floor.
 
 Telling the comic from the furniture is the real problem, on pages carrying
-twenty images of navigation arrows, logos and banners. The signal is that a
+twenty images of navigation arrows, logos and banners. The first signal is that a
 content image's URL contains the article's own slug, while chrome lives under
 generic paths shared by every page on the site:
 
@@ -154,10 +154,37 @@ generic paths shared by every page on the site:
 | `/2016/**project-lifecycle**` | `/2016/project-lifecycle/4-….png` | `/images/logo.png` |
 | `/comics/**design_hell**` | `/comics/design_hell/1.png, 2.jpg` | `/default/header_2023/….png` |
 
-It is a precise signal rather than a clever one, and that is the point: a false
+The second signal is for the sites that shape defeats entirely: those whose
+articles are *numbered*. When the address is `/482`, no image on the page can
+contain the article's slug, and the strip is named after its title instead:
+
+| Article | Its title | Its image |
+|---|---|---|
+| `/482` | Deadline Season | `/strips/**deadline_season**.png` |
+
+That match is exact, where the slug match is a substring. A slug appears inside a
+file name a site derived from it — with a hash or a panel number appended — but a
+title is not part of an address, so a *part* of it appearing in a file name is a
+coincidence rather than a convention: a page called "Deadline Season" is no
+evidence at all about an image called `deadline.png`. When the title carries a
+separator, the part after the last one is tried as well, because sites prefix their
+own name onto every title (`Daily Strip: Deadline Season`) while naming the file
+after the strip alone. Only that trailing part, never the leading one — the leading
+one is the site's name, and it is what the site's *logo* is named after on every
+page there is.
+
+Both signals are precise rather than clever, and that is the point: a false
 positive stores a banner in place of an article, so the rung would rather find
-nothing and fall through than guess. Sites whose image URLs share nothing with
-their page URLs are not rescued and still need a domain rule.
+nothing and fall through than guess. Sites whose images are named after neither
+their address nor their title are not rescued and still need a domain rule.
+
+The hover text comes along, as a `<figcaption>` rather than a `title` attribute.
+On a comic that text is usually the joke, so it is content and not decoration:
+an archive read years later should not hide the punchline behind a mouse, and the
+sanitizer's allowlist matches a `title` attribute against a pattern that rejects
+quotation and question marks — which would keep the caption on one strip and drop
+it from the next. Both the alt text and the hover text also become the body's
+*text*, so a comic is findable by its joke rather than by nothing.
 
 **Last, and after the feed body, on purpose.** A page whose text extraction
 failed is usually paywalled or JavaScript-rendered rather than a comic, and for
@@ -179,11 +206,21 @@ the article, so it cannot legitimately be several times longer than the article'
 own body. It can only ever move toward the longer text, never the shorter, so it
 cannot cause the truncated-summary failure this whole ladder exists to prevent.
 
-**A thin, imageless body loses to the page's images.** Three conditions, all
-required, because replacing a body is destructive: the body carries no image at
-all, it is under 120 words, and the page has images bearing the article's slug. A
-body that already contains an image is left alone whatever its length —
-extraction found the picture, and there is nothing to add.
+**A thin body that missed the picture loses to the page's images.** Two conditions,
+both required, because replacing a body is destructive: the body is under 120 words,
+and the page carries images naming the article that the body does not already
+contain. A body holding the article's own picture is left alone whatever its length —
+extraction found it, and there is nothing to add.
+
+"The body already has the picture" and "the body has an image" are not the same
+test, and using the second was a real bug. A comic page's footer carries images too
+— a thumbnail of another strip, a banner — so an extraction that returned the
+footer and none of the comic satisfied a check for any image at all and was left in
+place. Every strip from a numbered comic site in a real archive was stored that way:
+83 words of "comics I enjoy" and two pictures, neither of them the comic. The images
+this rung finds are the ones it can name; whether the body holds one of *those* is
+the question worth asking, and `testdata/pages/comic-page-titled.html` is the
+fixture that asks it.
 
 ## Versioning
 
@@ -191,7 +228,7 @@ Every body records the extractor that produced it and the version of the
 extraction *behavior*, a constant in the code:
 
 ```go
-const Version = "3"
+const Version = "5"
 ```
 
 **Bump it whenever extraction output could change** — a new rung, a changed
@@ -206,6 +243,8 @@ never reaches the archive it was written for.
 | `1` | The ladder as originally specified. |
 | `2` | The ratio check no longer applies to bodies past 2,000 characters (2026-08-17). |
 | `3` | A much richer feed body wins over a thin page extraction; a page images rung for webcomics (2026-08-18). |
+| `4` | Inline raster images survive sanitization, and text gets a boundary where the markup has one (2026-08-18). |
+| `5` | The page images rung reads titles as well as slugs, keeps the hover text, and a thin body loses to those images unless it already holds one of them (2026-08-19). |
 
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not

@@ -77,6 +77,124 @@ func TestPageImagesKeepsEveryPanel(t *testing.T) {
 	}
 }
 
+// A site whose articles are numbered — /482, /3286 — cannot have an image URL
+// carrying the article's slug, so the slug signal can never fire there. What such a
+// site does instead is name the file after the strip.
+func TestPageImagesSelectsByTitle(t *testing.T) {
+	const page = `<html>
+	<head><title>Daily Strip: Deadline Season</title></head>
+	<body>
+	  <img src="/s/daily-strip.png" alt="Daily Strip">
+	  <img src="/s/nav-next.gif" alt="Next">
+	  <img src="//images.example.com/strips/deadline_season.png" alt="Deadline Season">
+	  <img src="/s/banner-store.png" alt="">
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://comics.example.com/482",
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	if r.Name != extract.NamePageImages {
+		t.Fatalf("extractor = %q, want %q", r.Name, extract.NamePageImages)
+	}
+
+	got := imageSources(r.HTML)
+	if len(got) != 1 {
+		t.Fatalf("kept %d images, want exactly the strip: %v", len(got), got)
+	}
+	if !strings.Contains(got[0], "deadline_season.png") {
+		t.Errorf("kept %q, want the strip", got[0])
+	}
+
+	// The title's first segment is the site's name, and the site's logo is named
+	// after it on every page there is. Matching that would put a logo in an
+	// article on every numbered page of every site that titles pages this way.
+	if strings.Contains(r.HTML, "daily-strip.png") {
+		t.Errorf("the site's logo was taken for the article's content:\n%s", r.HTML)
+	}
+}
+
+// The title match is exact, unlike the slug match, because a title is not part of
+// an address: a substring of it is a coincidence rather than a naming convention.
+func TestPageImagesTitleMatchIsExact(t *testing.T) {
+	const page = `<html>
+	<head><title>Deadline Season</title></head>
+	<body><img src="/images/deadline.png" alt="A deadline"></body></html>`
+
+	if _, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://comics.example.com/482",
+	}); err == nil {
+		t.Error("an image named after part of the title was accepted as the article's content")
+	}
+}
+
+// The hover text is where a comic keeps its joke, and a title attribute is not
+// where an archive should keep it: the sanitizer's allowlist matches that attribute
+// against a pattern rejecting quotation and question marks, so the punchline would
+// survive on one strip and vanish on the next.
+func TestPageImagesKeepsTheHoverTextAsACaption(t *testing.T) {
+	const page = `<html>
+	<head><title>Deadline Season</title></head>
+	<body><img src="/strips/deadline_season.png" alt="Deadline Season"
+	     title="&quot;Told you it would be fine?&quot; &quot;Yes.&quot;"></body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://comics.example.com/482",
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	for _, want := range []string{"<figcaption>", "Told you it would be fine?"} {
+		if !strings.Contains(r.HTML, want) {
+			t.Errorf("the stored body is missing %q:\n%s", want, r.HTML)
+		}
+	}
+	// Search reads the text, so the joke has to be in both renderings.
+	if !strings.Contains(r.Text, "Told you it would be fine?") {
+		t.Errorf("the hover text is not in the extracted text: %q", r.Text)
+	}
+}
+
+// The regression that archived every strip on a numbered site as its own footer.
+//
+// A comic page's footer carries images of its own — a thumbnail, a banner — so a
+// text extraction that returned the footer and none of the comic satisfied a check
+// for "the body has an image" and was left in place. The question worth asking is
+// whether the body holds one of the images that name the article.
+func TestAThinBodyHoldingOnlyChromeImagesLosesToTheStrip(t *testing.T) {
+	const page = `<html>
+	<head><title>Daily Strip: Deadline Season</title></head>
+	<body>
+	  <div id="comic"><img src="/strips/deadline_season.png" alt="Deadline Season"></div>
+	  <div id="bottom">
+	    <p><img src="/s/selected-strips.png" alt="Selected Strips"></p>
+	    <p>Strips I enjoy: One Panel Only, Two Panels At Most, Three Panels On A Good
+	    Day, Four Panels Minimum, Five Minutes To Deadline, Six Impossible Things.
+	    This site is best viewed with a browser nobody has shipped since 1998.</p>
+	  </div>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://comics.example.com/482",
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	if !strings.Contains(r.HTML, "deadline_season.png") {
+		t.Errorf("the strip is not in the stored body, so the page was archived as its footer:\n%s",
+			r.HTML)
+	}
+	if strings.Contains(r.Text, "Strips I enjoy") {
+		t.Errorf("the footer was stored as the article:\n%s", r.Text)
+	}
+}
+
 // The rung must not fire when there is nothing to match, or it would replace
 // real articles with whatever picture happened to be on the page.
 func TestPageImagesDoesNotFireWithoutASlugMatch(t *testing.T) {
