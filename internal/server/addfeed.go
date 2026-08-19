@@ -3,25 +3,44 @@ package server
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/runlevel-six/tomekeeper/internal/feed"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
-// addFeedOutcome is what the feeds page says after a test or an add.
+// addFeedOutcome is the state of the one-subscription form: testing an address,
+// adding it, and editing a subscription that already exists.
 //
-// One type for both, because they are two steps of one task and the page has to
-// show the state of that task: what was typed, what testing found, and what
-// subscribing did. Splitting them would mean a form that forgets what the reader
-// entered the moment anything goes wrong, which is the failure that makes people
-// stop using a form.
+// One type for all three, because they are steps of one task and the page has to
+// show the state of that task: what was typed, what testing found, and what saving
+// did. Splitting them would mean a form that forgets what the reader entered the
+// moment anything goes wrong, which is the failure that makes people stop using a
+// form.
 type addFeedOutcome struct {
 	// URL, Category and Title are what was submitted, echoed back so the form is
 	// still filled in.
 	URL      string
 	Category string
 	Title    string
+
+	// Enabled is Feed.Disabled inverted, and only the edit form draws it. Inverted
+	// because "check this feed" is the sentence somebody reads on a checkbox,
+	// whereas an unchecked box meaning "not disabled" is the one they misread.
+	Enabled bool
+
+	// EditingID is the subscription this form has open, and zero on the form that
+	// adds a new one. It survives a test — a hidden field carries it through —
+	// because otherwise checking a corrected address would lose which subscription
+	// was being corrected, and Save would create a second one.
+	EditingID store.FeedID
+
+	// FeedTitle is what the edited subscription is called, for the heading over the
+	// form and for the line confirming a save. It outlives EditingID by one render
+	// for exactly that reason: a saved edit closes the form and still has to say
+	// what it saved.
+	FeedTitle string
 
 	// Problem is a reason the step could not be completed, in the reader's terms.
 	Problem string
@@ -33,10 +52,31 @@ type addFeedOutcome struct {
 	Added    bool
 	Existing bool
 
+	// Saved reports an edit that was applied, and URLChanged, Reenabled and
+	// TurnedOff say what it did to polling — which is the half of an edit that
+	// leaves no trace in the row it changed.
+	Saved      bool
+	URLChanged bool
+	Reenabled  bool
+	TurnedOff  bool
+
 	// AlreadySubscribed is set when a test found a feed this reader already has.
 	// Not an error: it is the answer to "am I subscribed to this?", which is a
 	// reasonable thing to use a test for.
 	AlreadySubscribed bool
+}
+
+// submittedForm reads the fields the form posts, whichever button was pressed.
+func submittedForm(r *http.Request) *addFeedOutcome {
+	return &addFeedOutcome{
+		URL:      strings.TrimSpace(r.PostFormValue("url")),
+		Category: strings.TrimSpace(r.PostFormValue("category")),
+		Title:    strings.TrimSpace(r.PostFormValue("title")),
+		// Absent on the add form, which has no such control: a new subscription is
+		// polled, and a checkbox offering to create one that is not would be a
+		// choice nobody wants to make at that moment.
+		Enabled: r.PostFormValue("enabled") != "",
+	}
 }
 
 // handleTestFeed fetches a feed URL and reports what is there, saving nothing.
@@ -54,10 +94,17 @@ func (s *Server) handleTestFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome := &addFeedOutcome{
-		URL:      strings.TrimSpace(r.PostFormValue("url")),
-		Category: strings.TrimSpace(r.PostFormValue("category")),
-		Title:    strings.TrimSpace(r.PostFormValue("title")),
+	outcome := submittedForm(r)
+
+	// The form may have a subscription open rather than be adding one. Testing must
+	// come back as the edit form it was, so the id travels in a hidden field and is
+	// re-checked against the reader's own feeds here — it arrives from a request like
+	// anything else.
+	if raw := strings.TrimSpace(r.PostFormValue("edit")); raw != "" {
+		if f := s.feedByRawID(r, raw); f != nil {
+			outcome.EditingID = f.ID
+			outcome.FeedTitle = f.Title
+		}
 	}
 
 	if outcome.URL == "" {
@@ -91,9 +138,12 @@ func (s *Server) handleTestFeed(w http.ResponseWriter, r *http.Request) {
 		outcome.Title = probed.Title
 	}
 
-	// Already subscribed is an answer, not a failure.
+	// Already subscribed is an answer, not a failure. Except when the subscription it
+	// finds is the one being edited, where it is no answer at all — "you are already
+	// subscribed to this" about the feed whose address you are correcting is a
+	// sentence that stops somebody mid-edit for no reason.
 	if existing, err := s.store.FeedByURL(r.Context(), signedInUser(r), probed.FeedURL); err == nil {
-		outcome.AlreadySubscribed = true
+		outcome.AlreadySubscribed = existing.ID != outcome.EditingID
 		if outcome.Category == "" {
 			outcome.Category = existing.Category
 		}
@@ -119,11 +169,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome := &addFeedOutcome{
-		URL:      strings.TrimSpace(r.PostFormValue("url")),
-		Category: strings.TrimSpace(r.PostFormValue("category")),
-		Title:    strings.TrimSpace(r.PostFormValue("title")),
-	}
+	outcome := submittedForm(r)
 
 	normalized, err := feed.NormalizeFeedURL(outcome.URL)
 	if err != nil {
@@ -158,6 +204,131 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{Add: outcome})
+}
+
+// handleEditFeed changes one subscription: its address, its title, the folder it is
+// filed under, and whether it is polled at all.
+//
+// Every one of those was an UPDATE somebody had to write by hand until now, and the
+// documented cure for a feed that had moved was to subscribe again at the new
+// address and abandon the row — which throws away the poll history that says how
+// long it had been broken, and leaves a dead subscription in the list. Correcting
+// the row keeps both.
+//
+// Nothing here fetches, for the same reason adding does not: whether the new address
+// answers is a separate question, and Test is the button that asks it.
+func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r, "id")
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	userID := signedInUser(r)
+	feedID := store.FeedID(id)
+
+	// Read before writing, for two reasons: a feed that is not this reader's is a 404
+	// before anything is changed, and the confirmation has to be able to say what
+	// changed, which means knowing what the row held.
+	existing, err := s.store.GetFeed(r.Context(), userID, feedID)
+	if err != nil {
+		s.notFoundOrError(w, r, err, "looking up a feed to edit")
+		return
+	}
+
+	outcome := submittedForm(r)
+	outcome.EditingID = feedID
+	// The name the feed had when the form was opened, not whatever is half-typed in
+	// the title box — the heading over a form should not change as somebody types
+	// into it.
+	outcome.FeedTitle = existing.Title
+
+	normalized, err := feed.NormalizeFeedURL(outcome.URL)
+	if err != nil {
+		outcome.Problem = "That is not a web address. A feed URL usually ends in something like " +
+			"/feed, /rss or /atom.xml."
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{Add: outcome})
+		return
+	}
+	outcome.URL = normalized
+
+	updated, err := s.store.UpdateFeed(r.Context(), userID, feedID, store.FeedEdit{
+		FeedURL:  normalized,
+		Title:    outcome.Title,
+		Category: outcome.Category,
+		Disabled: !outcome.Enabled,
+	})
+	switch {
+	case errors.Is(err, store.ErrFeedURLTaken):
+		outcome.Problem = "You already subscribe to that address under a different feed, so nothing " +
+			"was changed. Two subscriptions to one feed would be indistinguishable in this list."
+		s.renderFeedsWith(w, r, http.StatusConflict, feedsExtras{Add: outcome})
+		return
+	case store.IsNotFound(err):
+		// Between the read above and this write, so somebody removed the feed in
+		// another tab. Rare, and still not a 500.
+		http.NotFound(w, r)
+		return
+	case err != nil:
+		s.log.Error("editing a feed failed", "feed_id", id, "url", normalized, "error", err)
+		outcome.Problem = "That subscription could not be saved. The log will say why."
+		s.renderFeedsWith(w, r, http.StatusInternalServerError, feedsExtras{Add: outcome})
+		return
+	}
+
+	s.log.Info("edited a feed", "feed_id", id, "url", updated.FeedURL,
+		"url_changed", updated.FeedURL != existing.FeedURL,
+		"category", updated.Category, "disabled", updated.Disabled)
+
+	// The form closes and goes back to being the add form: what a reader wants to
+	// look at after an edit is the row they just corrected, which is in the list
+	// below. The confirmation carries what the edit did to polling, because that part
+	// of it is invisible in the row.
+	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{Add: &addFeedOutcome{
+		Saved:      true,
+		FeedTitle:  updated.Title,
+		URLChanged: updated.FeedURL != existing.FeedURL,
+		Reenabled:  existing.Disabled && !updated.Disabled,
+		TurnedOff:  updated.Disabled,
+	}})
+}
+
+// feedByRawID resolves a feed id that arrived as text, or nil.
+//
+// Nil rather than an error: every caller is filling in a form, and the honest
+// response to a stale or malformed id is the form without it — an error page about
+// the id in a hidden field tells the reader nothing they can act on.
+func (s *Server) feedByRawID(r *http.Request, raw string) *store.Feed {
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return nil
+	}
+	f, err := s.store.GetFeed(r.Context(), signedInUser(r), store.FeedID(id))
+	if err != nil {
+		s.log.Info("no such feed to edit", "feed_id", id, "error", err)
+		return nil
+	}
+	return &f
+}
+
+// editForm loads one subscription into the form at the top of the feeds page.
+func (s *Server) editForm(r *http.Request, raw string) *addFeedOutcome {
+	f := s.feedByRawID(r, raw)
+	if f == nil {
+		return nil
+	}
+	return &addFeedOutcome{
+		EditingID: f.ID,
+		FeedTitle: f.Title,
+		URL:       f.FeedURL,
+		Title:     f.Title,
+		Category:  f.Category,
+		Enabled:   !f.Disabled,
+	}
 }
 
 // testFailureMessage turns a probe failure into something worth reading.

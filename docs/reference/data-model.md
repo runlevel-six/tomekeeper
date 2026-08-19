@@ -51,7 +51,7 @@ A user's subscriptions, and everything the poller needs to know about each.
 | `id` | `bigserial` | Primary key. |
 | `user_id` | `bigint` | References `users`. Cascades on delete. |
 | `feed_url` | `text` | The URL polled. Unique per user. Stored exactly as imported — **not** canonicalized, because a query parameter on a feed endpoint may select which feed is served. |
-| `site_url` | `text` | The human-readable site. Used as the base for resolving relative entry links. |
+| `site_url` | `text` | The human-readable site. Used as the base for resolving relative entry links. Written by an import and cleared when an edit moves the feed to another host, since the site it named is no longer this feed's. |
 | `title` | `text` | Never empty; falls back to the feed URL. |
 | `category` | `text` | From the OPML folder. Nested folders are joined with `/`. Nullable, and a null and an empty string mean the same thing — a feed the export listed outside any folder. This column *is* the category list: there is no `categories` table, so a category exists as long as some feed claims one, and re-importing a rearranged OPML rearranges them. |
 | `etag`, `last_modified` | `text` | Conditional-GET validators from the last successful poll. |
@@ -70,6 +70,14 @@ web interface: it sets this column to `now()` for the reader's enabled feeds and
 lets the scheduler pick them up. Nothing else about a feed changes, which is why
 pressing the button repeatedly is safe — and why it declines to move a feed polled
 in the last five minutes.
+
+`feed_url`, `title`, `category` and `disabled` are the four columns the **Edit**
+control on the feeds page writes. It is not an upsert: an import preserves what it is
+not given, so re-importing an OPML file cannot unfile every feed, whereas emptying the
+category in the form means exactly that. Changing `feed_url` also clears the
+validators and the failure state and brings `next_poll_at` forward — see
+[CLI](cli.md#post-feedsidedit--change-one-subscription) for why each of those has to
+happen.
 
 ### `articles`
 

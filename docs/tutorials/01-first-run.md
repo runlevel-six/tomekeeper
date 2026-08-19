@@ -341,10 +341,17 @@ maintainable:
   next poll forward — useful in a tutorial, where you do not want to wait fifteen
   minutes to see the adaptive interval do something.
 
-  It is also where you add a feed by hand. Try it with a site you read: paste the
-  *site's* address rather than hunting for its feed URL, press **Test**, and the
-  page reports the feed it found — following the site's own feed link if what you
-  gave it was a web page. File it in a category and press **Add feed**.
+  It is also where you add a feed by hand, in the form above the list. Try it with a
+  site you read: paste the *site's* address rather than hunting for its feed URL,
+  press **Test**, and the page reports the feed it found — following the site's own
+  feed link if what you gave it was a web page. File it in a category and press
+  **Add feed**.
+
+  **Edit** on a row opens that subscription in the same form, which is how you
+  correct an address that has moved, re-file a feed, or stop polling one without
+  losing what it has already archived. Once the list is longer than a screen, the
+  column headings sort it and the filter above it narrows it — including down to
+  just the feeds that are failing.
 - **Attention** lists anything that did not come through cleanly — usually a site
   that needs a [domain rule](../how-to/add-a-domain-rule.md), sometimes a page no
   extractor will ever read. Nothing there is lost; the stored page can be

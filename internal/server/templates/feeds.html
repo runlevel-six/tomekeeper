@@ -71,69 +71,46 @@
     {{end}}{{end}}
   {{end}}
 
-  {{if .Broken}}
-    <p class="warn-banner">
-      {{plural .Broken "feed"}} {{if eq .Broken 1}}is{{else}}are{{end}} failing.
-      A feed is never dropped silently — the error it last gave is below.
-    </p>
-  {{end}}
-
-  {{if .Feeds}}
-    <table class="feed-table">
-      <thead>
-        <tr>
-          <th scope="col">Feed</th>
-          <th scope="col">Category</th>
-          <th scope="col" class="num">Unread</th>
-          <th scope="col">Last success</th>
-          <th scope="col">Health</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Feeds}}
-        <tr{{if .Disabled}} class="is-disabled"{{else if .ConsecutiveFailures}} class="is-failing"{{end}}>
-          <th scope="row"><a href="/feeds/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.FeedURL}}{{end}}</a></th>
-          <td>{{if .Category}}<a href="{{.CategoryPath}}">{{.Category}}</a>{{end}}</td>
-          <td class="num">{{if .Unread}}{{.Unread}}{{end}}</td>
-          <td>{{with .LastSuccessAt}}<time datetime="{{.Format "2006-01-02T15:04:05Z07:00"}}">{{since .}}</time>{{else}}never{{end}}</td>
-          <td>
-            {{if .Disabled}}
-              <span class="badge bad">disabled</span>
-              <span class="reason">after {{plural .ConsecutiveFailures "failure"}}</span>
-            {{else if .ConsecutiveFailures}}
-              <span class="badge warn">{{plural .ConsecutiveFailures "failure"}}</span>
-              {{if .LastError}}<span class="reason">{{.LastError}}</span>{{end}}
-            {{else}}
-              <span class="badge ok">ok</span>
-            {{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  {{else}}
-    <p class="placeholder">
-      No subscriptions yet. Import the OPML file your previous reader exported.
-    </p>
-  {{end}}
-
   {{/*
-    Adding one subscription. Two submits on one form: Test fetches the feed and
-    reports what is there without saving, Add saves it. Both re-render this page
-    with the form still filled in, because a form that forgets what you typed the
-    moment something goes wrong is a form people stop using.
+    The one-subscription form, above the list rather than below it. Adding a feed and
+    correcting one are the two reasons somebody comes to this page with something to
+    do, and putting the controls for both under a hundred rows means scrolling past
+    the whole archive to reach them.
 
-    No JavaScript involved. The two buttons are two form actions, which is what
-    formaction is for.
+    One form does both. Editing is the same four questions as adding, so a second
+    form would be the same fields twice with two chances to drift — and with the form
+    up here, `?edit=` on a row's link lands the reader on it without a scroll.
+
+    Two submits: Test fetches the feed and reports what is there without saving, Save
+    writes it. Both re-render this page with the form still filled in, because a form
+    that forgets what you typed the moment something goes wrong is a form people stop
+    using. No JavaScript involved — the two buttons are two form actions, which is
+    what formaction is for.
   */}}
-  <section class="add-feed">
-    <h2>Add a feed</h2>
-    <p class="note">
-      The feed's address, or the site's — testing follows a page to the feed it
-      advertises.
-    </p>
+  <section class="add-feed{{if .Editing}} is-editing{{end}}">
+    {{if .Editing}}
+      <h2>Edit {{with .Add.FeedTitle}}{{.}}{{else}}this feed{{end}}</h2>
+      <p class="note">
+        A corrected address is polled straight away, and the validators from the old
+        one are discarded — an <code>ETag</code> the previous endpoint issued would
+        invite a “nothing new” answer for content that has never arrived.
+      </p>
+    {{else}}
+      <h2>Add a feed</h2>
+      <p class="note">
+        The feed's address, or the site's — testing follows a page to the feed it
+        advertises.
+      </p>
+    {{end}}
 
-    <form method="post" action="/feeds/add">
+    <form method="post" action="{{.FormAction}}">
+      {{/*
+        Which subscription is open, carried so that Test — which posts to its own
+        route and comes back here — returns as the edit form rather than as a blank
+        add form that would create a second subscription on Save.
+      */}}
+      {{with .Editing}}<input type="hidden" name="edit" value="{{.}}">{{end}}
+
       <div class="field">
         <label for="feed-url">Feed or site address</label>
         <input type="text" id="feed-url" name="url" inputmode="url" autocomplete="off"
@@ -147,7 +124,7 @@
           exists only because some feed claims one, so there is no fixed list to
           choose from — but nearly every new feed belongs in a folder that already
           exists, and retyping it exactly is how duplicates like "Tech" and "tech"
-          appear.
+          appear. Emptying it is how a feed leaves a folder.
         */}}
         <input type="text" id="feed-category" name="category" list="known-categories"
                autocomplete="off" placeholder="optional" value="{{with .Add}}{{.Category}}{{end}}">
@@ -162,11 +139,27 @@
                placeholder="taken from the feed" value="{{with .Add}}{{.Title}}{{end}}">
       </div>
 
+      {{if .Editing}}
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" name="enabled" value="true"{{if .Add.Enabled}} checked{{end}}>
+            Check this feed on a schedule
+          </label>
+          <p class="hint-inline">
+            Turning it off stops the polling and keeps everything already archived.
+            Turning it back on clears the failure count, so a feed that was disabled
+            after twenty failures gets a fresh budget rather than being disabled again
+            by the next one.
+          </p>
+        </div>
+      {{end}}
+
       <div class="actions-row">
         {{if .TestingAvailable}}
-          <button type="submit" formaction="/feeds/test">Test</button>
+          <button type="submit" formaction="{{.TestAction}}">Test</button>
         {{end}}
-        <button type="submit">Add feed</button>
+        <button type="submit">{{if .Editing}}Save changes{{else}}Add feed{{end}}</button>
+        {{if .Editing}}<a href="{{.View.CancelHref}}">Cancel</a>{{end}}
       </div>
     </form>
 
@@ -183,6 +176,19 @@
           Already subscribed — the title and category were updated, and nothing
           about its polling was disturbed.
         </p>
+      {{else if .Saved}}
+        <div class="import-result ok">
+          <p>Saved <strong>{{.FeedTitle}}</strong>.</p>
+          {{if or .URLChanged .Reenabled .TurnedOff}}
+            <p class="note">
+              {{if .URLChanged}}The address changed, so it is queued for a poll now and
+              the old endpoint's validators are gone.{{end}}
+              {{if .Reenabled}}It is being checked again, with its failure count cleared.{{end}}
+              {{if .TurnedOff}}It will not be checked until you turn it back on. Nothing
+              already archived from it is affected.{{end}}
+            </p>
+          {{end}}
+        </div>
       {{end}}
 
       {{with .Probed}}
@@ -210,6 +216,114 @@
       {{end}}
     {{end}}
   </section>
+
+  {{if .Broken}}
+    <p class="warn-banner">
+      {{plural .Broken "feed"}} {{if eq .Broken 1}}is{{else}}are{{end}} failing.
+      A feed is never dropped silently — the error it last gave is below.
+    </p>
+  {{end}}
+
+  {{if .Total}}
+    {{/*
+      Filtering the list, as a GET form so that what the reader is looking at is in
+      the URL and survives a reload, a bookmark, and the page this very form renders
+      after a save. The ordering rides along in hidden fields for the same reason:
+      filtering is not a request to be re-sorted.
+    */}}
+    <form class="feed-filter" method="get" action="/feeds">
+      <label for="feed-filter-q">Filter</label>
+      <input type="search" id="feed-filter-q" name="q" value="{{.View.Query}}"
+             autocomplete="off" spellcheck="false" placeholder="title, address or category">
+
+      <label for="feed-filter-health">Showing</label>
+      <select id="feed-filter-health" name="health">
+        <option value=""{{if .View.HealthIs ""}} selected{{end}}>every feed</option>
+        <option value="ok"{{if .View.HealthIs "ok"}} selected{{end}}>healthy only</option>
+        <option value="failing"{{if .View.HealthIs "failing"}} selected{{end}}>failing only</option>
+        <option value="disabled"{{if .View.HealthIs "disabled"}} selected{{end}}>disabled only</option>
+      </select>
+
+      {{with .View.SortKey}}<input type="hidden" name="sort" value="{{.}}">{{end}}
+      {{with .View.Direction}}<input type="hidden" name="dir" value="{{.}}">{{end}}
+
+      <button type="submit">Filter</button>
+      {{if .View.Filtered}}<a class="clear" href="{{.View.ClearHref}}">Clear</a>{{end}}
+    </form>
+  {{end}}
+
+  {{if .Feeds}}
+    {{if .View.Filtered}}
+      <p class="showing">Showing {{len .Feeds}} of {{plural .Total "feed"}}.</p>
+    {{end}}
+
+    <table class="feed-table">
+      <thead>
+        {{/*
+          Every heading is a link that sorts by its column, and clicking the column
+          already sorted reverses it. aria-sort appears on that one column only,
+          which is where it means something.
+        */}}
+        <tr>
+          <th scope="col"{{with $.View.AriaSort "title"}} aria-sort="{{.}}"{{end}}>
+            <a href="{{$.View.SortHref "title"}}">Feed</a>
+          </th>
+          <th scope="col"{{with $.View.AriaSort "category"}} aria-sort="{{.}}"{{end}}>
+            <a href="{{$.View.SortHref "category"}}">Category</a>
+          </th>
+          <th scope="col" class="num"{{with $.View.AriaSort "unread"}} aria-sort="{{.}}"{{end}}>
+            <a href="{{$.View.SortHref "unread"}}">Unread</a>
+          </th>
+          <th scope="col"{{with $.View.AriaSort "last"}} aria-sort="{{.}}"{{end}}>
+            <a href="{{$.View.SortHref "last"}}">Last success</a>
+          </th>
+          <th scope="col"{{with $.View.AriaSort "health"}} aria-sort="{{.}}"{{end}}>
+            <a href="{{$.View.SortHref "health"}}">Health</a>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Feeds}}
+        <tr{{if .Disabled}} class="is-disabled"{{else if .ConsecutiveFailures}} class="is-failing"{{end}}>
+          <th scope="row">
+            <a href="/feeds/{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{.FeedURL}}{{end}}</a>
+            {{/* Opens this row in the form at the top, with the list's ordering and
+                 filter kept so that saving comes back to the view it was opened from. */}}
+            <a class="row-edit" href="{{$.View.EditHref .ID}}">Edit</a>
+          </th>
+          <td>{{if .Category}}<a href="{{.CategoryPath}}">{{.Category}}</a>{{end}}</td>
+          <td class="num">{{if .Unread}}{{.Unread}}{{end}}</td>
+          <td>{{with .LastSuccessAt}}<time datetime="{{.Format "2006-01-02T15:04:05Z07:00"}}">{{since .}}</time>{{else}}never{{end}}</td>
+          <td>
+            {{if .Disabled}}
+              <span class="badge bad">disabled</span>
+              {{/* A feed can also be turned off by hand, which is not a failure and
+                   must not be reported as "after 0 failures". */}}
+              {{if .ConsecutiveFailures}}
+                <span class="reason">after {{plural .ConsecutiveFailures "failure"}}</span>
+              {{else}}
+                <span class="reason">turned off</span>
+              {{end}}
+            {{else if .ConsecutiveFailures}}
+              <span class="badge warn">{{plural .ConsecutiveFailures "failure"}}</span>
+              {{if .LastError}}<span class="reason">{{.LastError}}</span>{{end}}
+            {{else}}
+              <span class="badge ok">ok</span>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else if .Total}}
+    <p class="placeholder">
+      No feed matches that. <a href="{{.View.ClearHref}}">Show every feed</a>.
+    </p>
+  {{else}}
+    <p class="placeholder">
+      No subscriptions yet. Import the OPML file your previous reader exported.
+    </p>
+  {{end}}
 
   <section class="import">
     <h2>Import subscriptions</h2>

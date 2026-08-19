@@ -10,6 +10,17 @@ its unread count, when it last succeeded, and — for anything failing — the f
 count and the last error verbatim. A banner at the top says how many feeds are
 failing, because a slow puncture in the archive is the thing worth noticing.
 
+Two controls make that list usable once there are more than a screenful:
+
+- **Showing → failing only** hides everything healthy. `disabled only` is a separate
+  choice, because a feed that has stopped being polled is its own state rather than
+  the worst end of failing.
+- **Health** as a sort puts the worst first, and **Last success** sorted oldest-first
+  finds feeds that are not failing at all and have simply gone quiet.
+
+The banner keeps counting the whole archive while a filter is applied, so filtering
+cannot hide how many feeds are broken.
+
 That answers "which feeds are broken and why" without a database client. The SQL
 below is for the parts the page does not do: comparing a poll against the items it
 produced, and the surgery in the last three sections. Connect with
@@ -30,7 +41,7 @@ silently: the error survives even after the feed is disabled.
 
 | `last_error` | What it means | What to do |
 |---|---|---|
-| `HTTP 404` | The feed moved or was removed. | Find the new URL and re-import, or unsubscribe. |
+| `HTTP 404` | The feed moved or was removed. | Find the new URL and correct it with **Edit** on the feed's row — see [below](#when-the-feed-is-fine-but-the-url-was-wrong). |
 | `HTTP 403` | Blocked, often by a CDN that dislikes datacenter addresses. | Set `TOME_CONTACT_URL` so you are contactable, then ask the site. Do not build circumvention. |
 | `HTTP 429 (Retry-After: …)` | Rate limited — you are asking too often. | Raise `TOME_POLL_MIN_INTERVAL`. The backoff already handles it, but a floor that respects the site is better manners. |
 | `HTTP 5xx` | The site is broken, probably temporarily. | Nothing. Backoff will retry, and a success clears the counter. |
@@ -62,7 +73,20 @@ feed is not being neglected, it is being polled proportionately.
 ## Re-enable a disabled feed
 
 A feed is disabled after `TOME_FEED_FAILURE_THRESHOLD` consecutive failures
-(default 20). Fix the cause first, then:
+(default 20). Fix the cause first, then press **Edit** on its row in **Feeds** and
+check **Check this feed on a schedule**. Saving clears the failure count and the last
+error and queues the feed, and the worker picks it up within a minute.
+
+Clearing `consecutive_failures` is the part that matters, and the form does it for
+you: without it the next single failure re-crosses the threshold and the feed is
+disabled again immediately.
+
+The same form turns a feed *off* by hand — for a site that has gone bad rather than
+broken. That keeps the failure count and the error, so the row can still say what
+went wrong, and it leaves everything already archived from the feed exactly where it
+is.
+
+By hand, or for a whole run of feeds at once:
 
 ```sql
 UPDATE feeds
@@ -70,9 +94,6 @@ SET disabled = false, consecutive_failures = 0, last_error = NULL,
     next_poll_at = now()
 WHERE id = $1;
 ```
-
-The worker picks it up within a minute. Clearing `consecutive_failures` matters:
-without it, the next single failure re-crosses the threshold immediately.
 
 ## Watch a poll happen
 
@@ -93,7 +114,8 @@ last five minutes — so pressing it twice while watching a debug log looks like
 nothing happening, and the page says how many were held. And it does not revive
 disabled feeds; that is the section above.
 
-For one specific feed, or for a disabled one you have just fixed:
+A feed you have just re-enabled or given a new address is queued by that save
+already, so it needs nothing here. For one specific feed otherwise:
 
 ```sql
 UPDATE feeds SET next_poll_at = now() WHERE id = $1;
@@ -101,9 +123,35 @@ UPDATE feeds SET next_poll_at = now() WHERE id = $1;
 
 ## When the feed is fine but the URL was wrong
 
-Feed URLs are stored exactly as imported, and a subscription is keyed by
-`(user, feed URL)`. Correcting a URL is therefore a new subscription rather than
-an edit:
+Press **Edit** on the feed's row and correct the address. Saving keeps the
+subscription — its poll history, its category, and every article already archived
+under it — which is the reason to edit rather than to subscribe again at the new
+address and abandon the old row.
+
+Two things saving does for you, both of which have to happen and neither of which is
+visible in the row:
+
+- **The validators are discarded.** An `ETag` from the old endpoint is meaningless to
+  the new one, and sending it invites a `304` for content you have never actually
+  seen — a feed that looks healthy and produces nothing.
+- **The failure count and last error are cleared, and the feed is queued now.** They
+  described the old address. Left in place, a corrected feed would sit a few failures
+  from being disabled for a fault that no longer exists.
+
+Moving a feed onto an address you already subscribe to is refused rather than
+merged, because the two rows would be indistinguishable in the list. Unsubscribe from
+one of them first — which is still SQL, since nothing in the interface deletes a
+subscription:
+
+```sql
+DELETE FROM feeds WHERE id = $1;
+```
+
+That drops the feed and its `feed_items`, which are the record of *which* feed
+carried an article. The articles themselves and everything archived with them are
+untouched: they are the root entity here, not children of a subscription.
+
+The equivalent edit, for a script or a whole run of feeds at once:
 
 ```sql
 UPDATE feeds SET feed_url = 'https://example.com/feed.xml',
@@ -112,10 +160,6 @@ UPDATE feeds SET feed_url = 'https://example.com/feed.xml',
                  next_poll_at = now()
 WHERE id = $1;
 ```
-
-Clear the validators when the URL changes. An `ETag` from the old endpoint is
-meaningless to the new one, and sending it invites a 304 for content you have
-never actually seen.
 
 ## See also
 

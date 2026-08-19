@@ -595,9 +595,20 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 type feedsPage struct {
 	pageData
 
+	// Feeds are the rows to draw, which is every subscription the filter did not
+	// exclude, in the order View asks for.
 	Feeds  []feedRow
 	Tags   []store.Tag
 	Broken int
+
+	// Total is how many subscriptions there are, so a filtered list can say what it
+	// is a subset of. Counted before filtering, like Broken: "6 feeds are failing"
+	// is a fact about the archive, not about the search somebody typed.
+	Total int
+
+	// View is the ordering and filtering the reader asked for, and the source of
+	// every link on the page that has to preserve it.
+	View feedView
 
 	// Categories are the folder names already in use, offered as suggestions when
 	// filing a new subscription. A category exists only because some feed claims
@@ -610,6 +621,36 @@ type feedsPage struct {
 
 	feedsExtras
 }
+
+// Editing is the feed loaded into the form, zero when the form is a blank one
+// waiting for a new subscription.
+//
+// A method rather than a field so the template can ask once, without walking into
+// a nil Add on every page that had nothing to report.
+func (p feedsPage) Editing() store.FeedID {
+	if p.Add == nil {
+		return 0
+	}
+	return p.Add.EditingID
+}
+
+// FormAction is where the one-subscription form posts: the add route, or the edit
+// route for the feed it has open.
+//
+// The view rides along in the query string because these routes render the list
+// rather than redirecting to it — see renderFeedsWith — and a POST carries no query
+// string of its own, so without this a save would drop the reader back into an
+// unsorted, unfiltered list.
+func (p feedsPage) FormAction() string {
+	if id := p.Editing(); id != 0 {
+		return p.View.href("/feeds/" + strconv.FormatInt(int64(id), 10) + "/edit")
+	}
+	return p.View.href("/feeds/add")
+}
+
+// TestAction is the same for the test button, which saves nothing and comes back
+// to the same form.
+func (p feedsPage) TestAction() string { return p.View.href("/feeds/test") }
 
 // feedsExtras are the results of whatever the reader just did, if anything.
 //
@@ -637,7 +678,17 @@ type feedRow struct {
 }
 
 func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
-	s.renderFeedsWith(w, r, http.StatusOK, feedsExtras{})
+	extras := feedsExtras{}
+
+	// `?edit=<id>` loads one subscription into the form at the top of the page. A
+	// GET parameter rather than a route of its own, because the thing being asked
+	// for is this page with the form filled in — the list underneath, the reader's
+	// ordering and their filter all still apply.
+	if raw := r.URL.Query().Get("edit"); raw != "" {
+		extras.Add = s.editForm(r, raw)
+	}
+
+	s.renderFeedsWith(w, r, http.StatusOK, extras)
 }
 
 // renderFeedsWith draws the feed list, reporting on whatever the reader just did.
@@ -674,6 +725,10 @@ func (s *Server) renderFeedsWith(w http.ResponseWriter, r *http.Request, status 
 		Tags:             tags,
 		TestingAvailable: s.fetch != nil,
 		feedsExtras:      extras,
+		// Read from the request even on a POST: the forms put the reader's ordering
+		// and filter in their action URLs precisely so that the page rendered after
+		// a save is the page they were on.
+		View: feedViewFrom(r.URL.Query()),
 	}
 	page.Unread = counts.Total
 
@@ -689,16 +744,21 @@ func (s *Server) renderFeedsWith(w http.ResponseWriter, r *http.Request, status 
 		}
 	}
 
+	page.Total = len(feeds)
 	for _, f := range feeds {
 		if f.ConsecutiveFailures > 0 || f.Disabled {
 			page.Broken++
 		}
-		page.Feeds = append(page.Feeds, feedRow{
+		row := feedRow{
 			Feed:         f,
 			Unread:       counts.ByFeed[f.ID],
 			CategoryPath: categoryPath(f.Category),
-		})
+		}
+		if page.View.matches(row) {
+			page.Feeds = append(page.Feeds, row)
+		}
 	}
+	page.View.sortRows(page.Feeds)
 
 	s.render(w, status, "feeds", page)
 }

@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Feed is a row of the feeds table. Feeds are user-scoped: every method here
@@ -94,6 +96,101 @@ func (s *Store) UpsertFeed(ctx context.Context, userID UserID, p FeedParams) (Fe
 	}
 	return id, created, nil
 }
+
+// FeedEdit is the part of a subscription a reader may change by hand.
+//
+// Deliberately not FeedParams. That type is what an import supplies, and its
+// upsert preserves whatever it does not carry — which is right for re-importing an
+// OPML file and wrong for an edit, where emptying the category is a thing somebody
+// means. SiteURL is absent for the same reason: it is read out of the feed rather
+// than typed.
+type FeedEdit struct {
+	FeedURL  string
+	Title    string
+	Category string
+	Disabled bool
+}
+
+// ErrFeedURLTaken means an edit would move a feed onto an address the same reader
+// is already subscribed to.
+//
+// Typed rather than a message, because it is the one failure here that is the
+// reader's to fix and needs saying in their terms. The unique constraint is what
+// detects it: looking first and updating afterwards is a race even for one person
+// with two tabs open.
+var ErrFeedURLTaken = errors.New("already subscribed to that address")
+
+// UpdateFeed applies an edit to one of a reader's subscriptions and returns the
+// row as it now stands.
+//
+// The polling state is not simply left alone, because two of these edits change
+// what polling means:
+//
+//   - A new address invalidates the conditional-GET validators, and a new host
+//     invalidates the site URL with them. An ETag issued by the old endpoint means
+//     nothing to the new one, and sending it invites a 304 for content that has
+//     never been seen — which presents as a feed that looks healthy and produces
+//     nothing.
+//   - Re-enabling a feed has to clear the failure count, or the next single failure
+//     re-crosses the threshold and disables it again immediately.
+//
+// Both also mean poll it now: in either case the reader has just done the thing
+// that was meant to fix it and is waiting to find out whether it worked. Turning a
+// feed off is the case that keeps its history — the count and the last error are
+// still there to read when somebody comes back to the row.
+func (s *Store) UpdateFeed(ctx context.Context, userID UserID, feedID FeedID, e FeedEdit) (Feed, error) {
+	if e.FeedURL == "" {
+		return Feed{}, fmt.Errorf("feed URL must not be empty")
+	}
+	if e.Title == "" {
+		e.Title = e.FeedURL
+	}
+
+	// Every CASE below reads the row as it was: in an UPDATE, a bare column
+	// reference on the right-hand side is the old value, so `feed_url = $3` asks
+	// "is the address unchanged" without a second query to find out.
+	f, err := scanFeed(s.pool.QueryRow(ctx, `
+		UPDATE feeds SET
+			feed_url = $3,
+			title    = $4,
+			category = NULLIF($5, ''),
+			disabled = $6,
+			etag          = CASE WHEN feed_url = $3 THEN etag          ELSE NULL END,
+			last_modified = CASE WHEN feed_url = $3 THEN last_modified ELSE NULL END,
+			-- site_url is the base relative entry links are resolved against, and
+			-- nothing but an import ever writes it. A feed that moves to another host
+			-- has taken its site with it, so keeping the old one would resolve every
+			-- relative link against a site this feed no longer belongs to. NULL is the
+			-- honest answer — the poller falls back to the feed's own address — and the
+			-- comparison is scheme-and-host, so correcting a path keeps it.
+			site_url = CASE WHEN substring(feed_url from '^[^:]+://[^/]+')
+			                   IS NOT DISTINCT FROM substring($3 from '^[^:]+://[^/]+')
+			                THEN site_url ELSE NULL END,
+			consecutive_failures = CASE WHEN feed_url <> $3 OR (disabled AND NOT $6)
+			                            THEN 0 ELSE consecutive_failures END,
+			last_error           = CASE WHEN feed_url <> $3 OR (disabled AND NOT $6)
+			                            THEN NULL ELSE last_error END,
+			next_poll_at         = CASE WHEN feed_url <> $3 OR (disabled AND NOT $6)
+			                            THEN now() ELSE next_poll_at END
+		WHERE id = $1 AND user_id = $2
+		RETURNING `+feedColumns,
+		feedID, userID, e.FeedURL, e.Title, e.Category, e.Disabled))
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
+			return Feed{}, fmt.Errorf("moving feed %d to %s: %w", feedID, e.FeedURL, ErrFeedURLTaken)
+		}
+		// Scoped to the reader, so a feed belonging to somebody else updates no rows
+		// and is reported as not found — the same answer GetFeed gives, and for the
+		// same reason.
+		return Feed{}, fmt.Errorf("updating feed %d: %w", feedID, err)
+	}
+	return f, nil
+}
+
+// uniqueViolation is SQLSTATE 23505. Named because a bare string at the comparison
+// reads like a magic number, which is exactly what it is not.
+const uniqueViolation = "23505"
 
 // GetFeed returns one of the user's feeds.
 //

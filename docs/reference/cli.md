@@ -529,7 +529,7 @@ session.
 | `GET /categories?name=` | One category's articles. Present-but-empty selects the feeds with no category. |
 | `GET /articles/{id}` | The reader. Opening an article marks it read. |
 | `GET /search?q=` | Search results |
-| `GET /feeds` | Feed list, health, and tags |
+| `GET /feeds` | Feed list, health, and tags. `?sort=` and `?dir=` order it, `?q=` and `?health=` filter it, `?edit=<id>` opens one subscription in the form at the top. |
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly |
@@ -546,6 +546,7 @@ session.
 | `GET /export` | Download the archive as a file. The one route allowed to exceed the write timeout. |
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
 | `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
+| `POST /feeds/{id}/edit` | Change one subscription. `url=`, `title=`, `category=` and `enabled=`. An omitted `enabled` turns polling off. |
 | `POST /domain-rules` | Save one rule. |
 | `POST /domain-rules/delete` | Remove one rule. `domain=`. |
 | `POST /domain-rules/reprocess` | Queue re-extraction of one domain. `domain=`. |
@@ -613,6 +614,68 @@ still works: a broken feed shows up in the feed list's health column and in
 category and disturbs nothing about its polling — the same idempotency the OPML
 import has. A URL with no scheme is assumed to be `https`, because an address bar
 does not show one and that is where the URL was copied from.
+
+The form sits **above** the feed list rather than below it. With seventy
+subscriptions in the table, a form underneath is a form nobody scrolls to.
+
+### `POST /feeds/{id}/edit` — change one subscription
+
+The same form, with a feed loaded into it by **Edit** on its row (`?edit=<id>`). It
+takes the address, the title, the category, and whether the feed is polled at all;
+emptying the category takes the feed out of that folder.
+
+Three things it does to polling, none of which are visible in the row it changes:
+
+- **A changed address discards the conditional-GET validators** and queues the feed
+  for a poll now. An `ETag` the old endpoint issued means nothing to the new one, and
+  sending it invites a `304` for content that has never arrived — which presents as a
+  feed that looks healthy and produces nothing.
+- **A changed address clears the failure count and the last error.** They belonged to
+  the address that produced them, and leaving them would put a corrected feed three
+  failures from being disabled for a fault that no longer exists.
+- **A changed *host* clears `site_url` as well.** That column is the base relative
+  entry links are resolved against, and nothing but an import writes it — so a feed
+  that has moved to another host would otherwise resolve every relative link against
+  a site it no longer belongs to. Cleared, the poller falls back to the feed's own
+  address. Correcting a path on the same host keeps it.
+- **Turning polling back on clears the failure count too**, or the next single
+  failure re-crosses `TOME_FEED_FAILURE_THRESHOLD` and disables the feed again
+  immediately. Turning it *off* keeps the count and the error, so the row can still
+  say what went wrong.
+
+Moving a feed onto an address the same reader already subscribes to is refused with
+`409` and nothing is changed: two subscriptions to one feed would be
+indistinguishable in the list. Another reader's feed id is `404`, like everywhere
+else.
+
+### Sorting and filtering the feed list
+
+Every heading in the feed table is a link that sorts by that column; clicking the
+column already in force reverses it. The first click takes the useful end of each
+column — A first for the text columns and for **Last success**, where the point is to
+find what has gone quiet, but most-first for **Unread** and worst-first for
+**Health**. `aria-sort` marks the column in force, and the arrow drawn next to the
+heading comes from that attribute, so what a screen reader announces and what
+everybody else sees cannot disagree.
+
+`?q=` matches a substring of a feed's title, address or category; `?health=` selects
+`ok`, `failing` or `disabled`. Disabled feeds are deliberately not "failing" — a feed
+that has stopped being polled is a state of its own, and asking what is failing is
+asking what is going wrong now.
+
+Both happen in Go over the rows the page has already loaded, not in SQL. The page
+needs every row regardless — the failing-feed banner counts them, the category
+suggestions come from the same list — and two sortable columns are not columns:
+unread arrives from a separate aggregate query, and health is a rank over three
+fields. So a filter costs a substring test per row against data already in memory,
+and there is no query behind it to pay for. The banner still counts the whole
+archive rather than the filtered view: "two feeds are failing" is a fact about the
+subscriptions, and hiding it behind a search would be a way to stop being told about
+a slow puncture.
+
+The state lives in the query string, so a sorted, filtered list can be bookmarked —
+and so that the forms, which render the list rather than redirecting to it, can carry
+the reader's view through a save.
 
 ### `POST /articles/{id}/promote` — choose which stored copy to show
 

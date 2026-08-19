@@ -46,7 +46,10 @@ What is there:
   page advertises, tests it, and shows you what it carries before you subscribe.
   OPML import from the CLI or by upload. Feed health with the last error each feed
   gave, a queue of anything that did not come through cleanly, and a button to check
-  every feed now rather than waiting for the adaptive interval.
+  every feed now rather than waiting for the adaptive interval. The list sorts and
+  filters by any column, and **Edit** on a row corrects an address, re-files a feed,
+  or stops polling it — a moved feed keeps its history instead of becoming a second
+  subscription.
 - **Fixing a site that extracts badly.** Domain rules are a page rather than a
   shell command: write the selector, and reprocess that domain from the same screen.
   The failed-fetch queue links to the form for the host that failed.

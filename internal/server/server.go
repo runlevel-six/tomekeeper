@@ -175,6 +175,9 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// two decisions, and the first writes nothing.
 	mux.HandleFunc("POST /feeds/test", s.requireUser(s.handleTestFeed))
 	mux.HandleFunc("POST /feeds/add", s.requireUser(s.handleAddFeed))
+	// Changing one: its address, its title, its folder, and whether it is polled.
+	// The form is the same form, which is why this sits next to the two above.
+	mux.HandleFunc("POST /feeds/{id}/edit", s.requireUser(s.handleEditFeed))
 	mux.HandleFunc("POST /feeds/refresh", s.requireUser(s.handleRefreshFeeds))
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
 	// Both the category index and one category's stream: `?name=` chooses.
