@@ -180,7 +180,7 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 			// The rule changes nothing until the affected articles are
 			// reprocessed, and saying so here saves the "why is it still
 			// wrong" round trip.
-			// --since-version 0 rather than a bare reextract: reextract selects
+			// --target-version 0 rather than a bare reextract: reextract selects
 			// on extractor version, so with every body already at the current
 			// version a bare run finds nothing and the rule appears to do
 			// nothing. Comparing against a version no body has selects all of
@@ -189,7 +189,7 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 			// affect, and reprocessing a large archive to correct one site is
 			// hours of needless work.
 			fmt.Fprintf(stdout,
-				"run `tome reextract --since-version 0 --domain %s` to apply it to articles already stored\n",
+				"run `tome reextract --target-version 0 --domain %s` to apply it to articles already stored\n",
 				strings.ToLower(domain))
 		}
 		return exitOK

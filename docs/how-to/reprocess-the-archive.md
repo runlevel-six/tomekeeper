@@ -54,7 +54,7 @@ GROUP BY state;
 | Flag | Use |
 |---|---|
 | `--limit N` | Queue at most N articles. Good for trying a change on a sample first. |
-| `--since-version V` | Select articles whose body came from a version other than `V`. |
+| `--target-version V` | Select articles whose body came from a version other than `V`. |
 | `--domain` | Restrict to one host and its subdomains. |
 | `--dry-run` | Count without queueing. |
 
@@ -63,7 +63,7 @@ To reprocess **everything**, including articles already at the current version
 at the current version and would otherwise be skipped:
 
 ```sh
-tome reextract --since-version 0
+tome reextract --target-version 0
 ```
 
 Version `0` never matches any stored body, so every mutable article qualifies.
@@ -71,7 +71,7 @@ Version `0` never matches any stored body, so every mutable article qualifies.
 To reprocess **one site** — the usual case, after writing a domain rule for it:
 
 ```sh
-tome reextract --since-version 0 --domain example.com
+tome reextract --target-version 0 --domain example.com
 ```
 
 That covers subdomains too, so `example.com` reaches `blog.example.com`, matching
@@ -82,7 +82,7 @@ mentions the domain in a query parameter.
 To try a change on a hundred articles before committing to the whole archive:
 
 ```sh
-tome reextract --since-version 0 --limit 100
+tome reextract --target-version 0 --limit 100
 ```
 
 Then compare before and after:
@@ -94,6 +94,39 @@ WHERE is_current
 GROUP BY extractor_name
 ORDER BY count(*) DESC;
 ```
+
+## When a handful will not go away
+
+A reprocess of the whole archive usually leaves a few articles behind, and
+`--dry-run` keeps reporting the same small number afterwards. That is not a bug in
+the queue: an article that fails extraction writes no body, so it still has nothing
+from the current version and is selected again on the next run. It will keep being
+selected until it either extracts or is left alone deliberately.
+
+Find them:
+
+```sql
+SELECT id, url_canonical, fetch_status, fetch_error
+FROM articles a
+WHERE NOT EXISTS (
+        SELECT 1 FROM article_content c
+        WHERE c.article_id = a.id AND c.is_current)
+  AND a.raw_blob_path IS NOT NULL
+ORDER BY id;
+```
+
+Then ask why, one at a time:
+
+```sh
+tome explain <id>
+```
+
+That reports what every rung of the ladder produced from the page already stored
+and which threshold turned it down — no requests, and an answer even for a site
+that has since changed. Most of the time it is one of two things: a page with no
+article in it (a JavaScript shell or a consent wall, which no rule can fix), or a
+body the heuristics cannot find, which is what [a domain
+rule](add-a-domain-rule.md) is for.
 
 ## What reprocessing does not lose
 
@@ -134,4 +167,5 @@ itself relies on.
 - [Add a domain rule](add-a-domain-rule.md)
 - [Extraction and versioning](../explanation/extraction-and-versioning.md) — why
   the extractor version exists and when to bump it
-- [CLI](../reference/cli.md#tome-reextract)
+- [CLI](../reference/cli.md#tome-reextract), and
+  [`tome explain`](../reference/cli.md#tome-explain) for one article at a time

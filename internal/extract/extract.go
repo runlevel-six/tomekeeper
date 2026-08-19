@@ -34,7 +34,7 @@ import (
 //
 // **Bump this whenever extraction output changes** — a new rung, a changed
 // threshold, a different sanitization policy, an upgraded extractor library.
-// `tome reextract --since-version <n>` uses it to find everything produced by
+// `tome reextract --target-version <n>` uses it to find everything produced by
 // older behavior. Forgetting to bump it means an improvement silently never
 // reaches the archive it was written for.
 // Version 2 (2026-08-17): the ratio check is skipped for bodies past longBody.
@@ -164,43 +164,121 @@ type Input struct {
 // to drain, rather than being retried forever.
 var ErrNoContent = fmt.Errorf("no extractor produced acceptable content")
 
+// Step is what one rung of the ladder did, for explaining an extraction after the
+// fact.
+//
+// An extraction that fails reports one sentence — "no extractor produced acceptable
+// content" — which is true and useless. The maintenance loop this archive is built
+// around goes from the attention queue to a domain rule, and the missing step in
+// the middle is *why*: which rungs ran, what each produced, and which threshold
+// turned it down. Without that, a page that stops extracting is archaeology.
+type Step struct {
+	// Rung is the extractor name, or "page" for the measurement of the whole
+	// document that the ratio check compares against.
+	Rung string
+
+	// Ran is false for a rung that was skipped entirely — a domain rule with no
+	// selector, or anything needing a stored page when there is none.
+	Ran bool
+
+	// Chars, Words and Images describe what the rung produced. Zero when it
+	// produced nothing.
+	Chars  int
+	Words  int
+	Images int
+
+	// Accepted says whether the ladder took this result.
+	Accepted bool
+
+	// Why explains the decision in the terms the thresholds are written in.
+	Why string
+}
+
 // Extract runs the ladder and returns the first acceptable result.
 func (e *Extractor) Extract(in Input) (Result, error) {
+	result, _, err := e.run(in, false)
+	return result, err
+}
+
+// Explain runs the ladder and reports what every rung did.
+//
+// Same code path as Extract, deliberately: an explanation produced by a second
+// implementation of the ladder would be a description of a program that does not
+// exist, and it would drift the first time a rung changed.
+func (e *Extractor) Explain(in Input) (Result, []Step, error) {
+	return e.run(in, true)
+}
+
+// run is the ladder. explain costs an extra measurement per rung and is off for the
+// path that runs on every article.
+func (e *Extractor) run(in Input, explain bool) (Result, []Step, error) {
 	pageURL, err := url.Parse(in.URL)
 	if err != nil {
-		return Result{}, fmt.Errorf("parsing article URL %q: %w", in.URL, err)
+		return Result{}, nil, fmt.Errorf("parsing article URL %q: %w", in.URL, err)
 	}
 
 	// The denominator for the ratio check, computed once. A page whose visible
 	// text cannot be measured falls back to the length check alone.
 	visible := visibleTextLength(in.RawHTML)
 
+	var steps []Step
+	record := func(s Step) {
+		if explain {
+			steps = append(steps, s)
+		}
+	}
+
+	if len(in.RawHTML) == 0 {
+		record(Step{Rung: "page", Why: "no stored page, so only the feed body can produce anything"})
+	} else {
+		record(Step{
+			Rung: "page", Ran: true, Chars: visible,
+			Why: fmt.Sprintf("%d characters of visible text; a body under %d characters must be "+
+				"at least %.0f%% of it (%d characters)",
+				visible, longBody, minRatio*100, int(minRatio*float64(visible))),
+		})
+	}
+
 	if len(in.RawHTML) > 0 {
 		// Rung 1. A domain rule is a human saying "the body is here", so it
 		// overrides the ratio check: the whole reason a rule exists is that
 		// the heuristics were wrong about this site.
 		if in.Rule != nil && in.Rule.ContentSelector != "" {
-			if r, ok := e.viaDomainRule(in, pageURL); ok {
-				return r, nil
+			r, ok := e.viaDomainRule(in, pageURL)
+			record(describe(NameDomainRule, r, ok, ruleWhy(in, r, ok)))
+			if ok {
+				return r, steps, nil
 			}
+		} else {
+			record(Step{Rung: NameDomainRule, Why: "no rule for this domain"})
 		}
 
 		// Rung 2.
-		if r, ok := e.viaTrafilatura(in, pageURL, visible); ok {
-			return e.bestOf(in, pageURL, r), nil
+		r, ok := e.viaTrafilatura(in, pageURL, visible)
+		record(describe(NameTrafilatura, r, ok, acceptWhy(r, ok, visible)))
+		if ok {
+			return e.bestOf(in, pageURL, r), steps, nil
 		}
 
 		// Rung 3.
-		if r, ok := e.viaReadability(in, pageURL, visible); ok {
-			return e.bestOf(in, pageURL, r), nil
+		r, ok = e.viaReadability(in, pageURL, visible)
+		record(describe(NameReadability, r, ok, acceptWhy(r, ok, visible)))
+		if ok {
+			return e.bestOf(in, pageURL, r), steps, nil
 		}
 	}
 
 	// Rung 4. The feed body is not compared against the page's text — it is a
 	// different document, and comparing them would reject every truncated
 	// summary for being short relative to a page it does not come from.
-	if r, ok := e.viaFeedBody(in, pageURL); ok {
-		return r, nil
+	if in.FeedBody == "" {
+		record(Step{Rung: NameFeedBody, Why: "the feed carried no body for this article"})
+	} else {
+		r, ok := e.viaFeedBody(in, pageURL)
+		record(describe(NameFeedBody, r, ok, feedWhy(r, ok)))
+		if ok {
+			return r, steps, nil
+		}
 	}
 
 	// Rung 5. The page's own images, for articles that are a picture.
@@ -211,13 +289,92 @@ func (e *Extractor) Extract(in Input) (Result, error) {
 	// article's hero image. Ordering this rung first would trade real prose for
 	// a picture on every one of them.
 	if len(in.RawHTML) > 0 {
-		if r, ok := e.viaPageImages(in, pageURL); ok {
-			return r, nil
+		r, ok := e.viaPageImages(in, pageURL)
+		record(describe(NamePageImages, r, ok, imagesWhy(in, r, ok)))
+		if ok {
+			return r, steps, nil
 		}
 	}
 
-	return Result{}, ErrNoContent
+	return Result{}, steps, ErrNoContent
 }
+
+// describe turns a rung's outcome into a Step.
+func describe(name string, r Result, ok bool, why string) Step {
+	return Step{
+		Rung:     name,
+		Ran:      true,
+		Chars:    len(r.Text),
+		Words:    r.WordCount,
+		Images:   countImages(r.HTML),
+		Accepted: ok,
+		Why:      why,
+	}
+}
+
+// acceptWhy states the threshold that decided a heuristic rung, in its own terms.
+func acceptWhy(r Result, ok bool, visible int) string {
+	switch {
+	case ok && len(r.Text) >= longBody:
+		return fmt.Sprintf("%d characters, past the %d the ratio check stops applying at",
+			len(r.Text), longBody)
+	case ok:
+		return fmt.Sprintf("%d characters, over the %d floor and %.0f%% of the page's visible text",
+			len(r.Text), minChars, share(len(r.Text), visible))
+	case len(r.Text) == 0:
+		return "produced nothing"
+	case len(r.Text) < minChars:
+		return fmt.Sprintf("%d characters, under the %d-character floor", len(r.Text), minChars)
+	default:
+		return fmt.Sprintf("%d characters, only %.0f%% of the page's %d — under the %.0f%% "+
+			"a body this short has to reach",
+			len(r.Text), share(len(r.Text), visible), visible, minRatio*100)
+	}
+}
+
+// ruleWhy reports a rule's outcome, and prints its selector unquoted.
+//
+// %q would escape the quotes inside an attribute selector, so what an operator
+// reads back is not what they would paste into the rule — and the thing they are
+// most likely to do with this line is exactly that.
+func ruleWhy(in Input, r Result, ok bool) string {
+	if ok {
+		return fmt.Sprintf("the rule's selector (%s) matched, and a rule overrides the ratio check",
+			in.Rule.ContentSelector)
+	}
+	if len(r.Text) == 0 {
+		return fmt.Sprintf("the rule's selector (%s) matched nothing on this page",
+			in.Rule.ContentSelector)
+	}
+	return fmt.Sprintf("the rule matched %d characters, under the %d-character floor, and the "+
+		"selection carries no image", len(r.Text), minChars)
+}
+
+func feedWhy(r Result, ok bool) string {
+	if ok {
+		return fmt.Sprintf("the feed's own body, %d characters", len(r.Text))
+	}
+	return fmt.Sprintf("the feed's body is %d characters, under the %d-character floor",
+		len(r.Text), minChars)
+}
+
+func imagesWhy(in Input, r Result, ok bool) string {
+	if ok {
+		return fmt.Sprintf("%d image(s) whose addresses carry this article's slug", countImages(r.HTML))
+	}
+	return "no image on the page carries this article's slug, so none of them is its content"
+}
+
+// share is a percentage that does not divide by zero.
+func share(part, whole int) float64 {
+	if whole <= 0 {
+		return 100
+	}
+	return float64(part) / float64(whole) * 100
+}
+
+// countImages counts the images in a body, for explaining a rung's output.
+func countImages(body string) int { return strings.Count(body, "<img") }
 
 // CleanImported prepares a body that arrived already extracted from another
 // system.

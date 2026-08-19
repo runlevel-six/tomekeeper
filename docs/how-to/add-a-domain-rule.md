@@ -31,6 +31,47 @@ ORDER BY chars
 LIMIT 20;
 ```
 
+## Ask what the ladder already did
+
+Before guessing at a selector, ask. `tome explain` runs the ladder over the page
+already stored — no requests — and reports what every rung produced and which
+threshold turned it down:
+
+```console
+$ tome explain 1267
+article 1267: https://example.com/2026/08/a-post
+  stored page: pages/ab/cd/abcdef.html.gz (129 KB uncompressed)
+  fetch: failed — extraction produced no content
+
+  RUNG         CHARS  WORDS  IMAGES  OUTCOME
+  page         41904  0      0       measured: 41904 characters of visible text; a body under 2000 characters must be at least 25% of it (10476 characters)
+  domain_rule  0      0      0       skipped: no rule for this domain
+  trafilatura  0      0      0       rejected: produced nothing
+  readability  0      0      0       rejected: produced nothing
+  feed_body    0      0      0       skipped: the feed carried no body for this article
+  page_images  0      0      0       rejected: no image on the page carries this article's slug, so none of them is its content
+```
+
+The answer usually tells you which problem you have:
+
+| What it says | What it means |
+|---|---|
+| Every rung `produced nothing`, and `page` is tiny | The stored page has no article in it — a JavaScript shell, or a fetch that landed on a consent wall. No selector will help. |
+| Every rung `produced nothing`, and `page` is large | The text is there and the heuristics cannot find it. This is what a rule is for. |
+| A rung was accepted but the body is short | Extraction "succeeded" on the wrong element. A rule replaces it. |
+| `domain_rule` ran and was rejected | Your selector matched nothing, or matched too little. The line quotes the selector as saved, so it can be pasted straight back. |
+
+Once a rule is written, run it again: the `domain_rule` row shows what the
+selector actually picks up, and `--body` prints the opening of it.
+
+To read the stored page itself:
+
+```sh
+zcat /var/lib/tomekeeper/articles/2026/08/the-slug-a1b2c3/raw.html.gz | less
+```
+
+The path is in `articles.raw_blob_path`, and `tome explain` prints it too.
+
 ## Work out the selector
 
 Open the article in a browser, find the element that wraps the body, and note a
@@ -104,15 +145,6 @@ some screen width is hiding it from that layout, not from the article, and strip
 all hidden elements would delete content that a "read more" control was going to
 reveal.
 
-To check what the extractors currently do with the page you already have
-stored, without going back to the network:
-
-```sh
-zcat /var/lib/tomekeeper/articles/2026/08/the-slug-a1b2c3/raw.html.gz | less
-```
-
-The path is in `articles.raw_blob_path`.
-
 ## Write the rule
 
 ### In the browser
@@ -171,10 +203,10 @@ A rule changes nothing on its own. Articles already extracted keep the body
 they have until they are reprocessed:
 
 ```sh
-tome reextract --since-version 0 --domain example.com
+tome reextract --target-version 0 --domain example.com
 ```
 
-Both flags earn their place. `--since-version 0` matches every stored body,
+Both flags earn their place. `--target-version 0` matches every stored body,
 because the articles you are trying to fix are already at the current version and
 a bare run would skip them. `--domain` keeps the work to the one site the rule
 can affect — on a large archive the difference is minutes against hours.
@@ -206,7 +238,7 @@ against the stored page.
 
 ```sh
 tome domain-rule rm example.com
-tome reextract --since-version 0 --domain example.com
+tome reextract --target-version 0 --domain example.com
 ```
 
 Worth doing when a site is redesigned and the heuristics now handle it: fewer

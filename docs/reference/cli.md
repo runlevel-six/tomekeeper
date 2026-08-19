@@ -438,6 +438,58 @@ See the README in `internal/extract/testdata/pages/` for the file format, and
 [Reprocess the archive](../how-to/reprocess-the-archive.md) for applying an
 extraction change once it is made.
 
+### `tome explain`
+
+Reports what each rung of the extraction ladder produced for one article, and
+which threshold accepted or rejected it.
+
+```
+tome explain [--body] <article-id>
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--body` | off | Also print the opening of the winning body, for checking that the right element was selected rather than merely a long one. |
+
+Works entirely from the stored page: no requests, no network, and an answer for a
+site that has since gone away or changed. That is one of the reasons the raw fetch
+is kept.
+
+It resolves the domain rule and the feed body exactly as the worker does, so the
+report describes the extraction that actually happens rather than a hypothetical
+one. `Explain` and `Extract` are one implementation for the same reason.
+
+```console
+$ tome explain 1267
+article 1267: https://example.com/2026/08/a-post
+  stored page: pages/ab/cd/abcdef.html.gz (129 KB uncompressed)
+  fetch: failed — extraction produced no content
+
+  RUNG         CHARS  WORDS  IMAGES  OUTCOME
+  page         41904  0      0       measured: 41904 characters of visible text; a body under 2000 characters must be at least 25% of it (10476 characters)
+  domain_rule  0      0      0       skipped: no rule for this domain
+  trafilatura  0      0      0       rejected: produced nothing
+  readability  0      0      0       rejected: produced nothing
+  feed_body    0      0      0       skipped: the feed carried no body for this article
+  page_images  0      0      0       rejected: no image on the page carries this article's slug, so none of them is its content
+
+Result: no body. no extractor produced acceptable content
+…
+```
+
+The `page` row is the denominator: it is the visible text of the whole document,
+which the ratio check measures a short body against. A rung that never ran says
+`skipped` and why, because "readability was not tried" is an answer and its
+absence reads as an omission.
+
+Exit code is `0` whether or not the extraction succeeded — reporting a failure
+accurately is the job, so this composes in a loop over the attention queue. It
+exits nonzero only when the article does not exist, the stored page is missing
+from the archive, or the database cannot be reached.
+
+See [Add a domain rule](../how-to/add-a-domain-rule.md), which is where the
+answer usually leads.
+
 ### `tome version`
 
 Prints the build identity to stdout and exits `0`.
