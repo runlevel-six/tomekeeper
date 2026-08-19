@@ -217,10 +217,10 @@ test, and using the second was a real bug. A comic page's footer carries images 
 — a thumbnail of another strip, a banner — so an extraction that returned the
 footer and none of the comic satisfied a check for any image at all and was left in
 place. Every strip from a numbered comic site in a real archive was stored that way:
-83 words of "comics I enjoy" and two pictures, neither of them the comic. The images
-this rung finds are the ones it can name; whether the body holds one of *those* is
-the question worth asking, and `testdata/pages/comic-page-titled.html` is the
-fixture that asks it.
+83 words of a "strips I enjoy" list and two pictures, neither of them the comic. The
+images this rung finds are the ones it can name; whether the body holds one of
+*those* is the question worth asking, and `testdata/pages/comic-page-titled.html` is
+the fixture that asks it.
 
 ## Versioning
 

@@ -77,7 +77,7 @@ func TestPageImagesKeepsEveryPanel(t *testing.T) {
 	}
 }
 
-// A site whose articles are numbered — /482, /3286 — cannot have an image URL
+// A site whose articles are numbered — /482, /1347 — cannot have an image URL
 // carrying the article's slug, so the slug signal can never fire there. What such a
 // site does instead is name the file after the strip.
 func TestPageImagesSelectsByTitle(t *testing.T) {

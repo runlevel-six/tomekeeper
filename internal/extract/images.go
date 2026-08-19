@@ -52,7 +52,7 @@ const maxPageImages = 24
 // rescues a site whose article URLs are bare numbers and whose images therefore
 // share nothing with them:
 //
-//	/3286 ("Particle Physics Equipment") → /comics/particle_physics_equipment.png
+//	/482 ("Deadline Season") → /strips/deadline_season.png    (chrome: /s/site-logo.png)
 //
 // It is a precise signal rather than a clever one, which is the point: a false
 // positive stores a banner in place of an article, so this would rather find
@@ -111,8 +111,8 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 		found++
 
 		// Both the alt text and the hover text, because on a comic they are two
-		// different things and the second is often the joke. An xkcd strip puts the
-		// strip's name in alt and the punchline in title, so keeping only one of
+		// different things and the second is often the joke. The common shape puts
+		// the strip's name in alt and the punchline in title, so keeping only one of
 		// them archives half the comic — and only the half that is already the
 		// article's title.
 		alt := strings.TrimSpace(img.AttrOr("alt", ""))
@@ -133,9 +133,9 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 		// Two reasons, and the second is the one that decided it: an archive read
 		// years later should not hide a punchline behind a mouse, and the sanitizer's
 		// allowlist matches a title attribute against a pattern that rejects
-		// quotation marks and question marks — so `"Want to feel old?" "Yes."` would
-		// survive on one strip and vanish on the next. A figcaption is text, and text
-		// is kept whatever it says.
+		// quotation marks and question marks — so `"Was that the deadline?" "Yes."`
+		// would survive on one strip and vanish on the next. A figcaption is text,
+		// and text is kept whatever it says.
 		if hover != "" && hover != alt {
 			body.WriteString(`<figcaption>` + escapeAttr(hover) + `</figcaption>`)
 			caption = append(caption, hover)
@@ -187,9 +187,9 @@ func namesTheArticle(resolved, slug string, titles []string) bool {
 // titleSlugs are the file names this page's own title could have produced.
 //
 // Two of them: the whole title, and — when the title carries a separator — the part
-// after the last one. Sites prefix the site's name onto every title (`xkcd:
-// Particle Physics Equipment`) while naming the file after the article alone, and
-// the prefix is the half that is the same on every page.
+// after the last one. Sites prefix the site's name onto every title (`Daily Strip:
+// Deadline Season`) while naming the file after the article alone, and the prefix is
+// the half that is the same on every page.
 //
 // Only the last segment, deliberately, and never the first: the first is the site's
 // name, and accepting it would match the site's logo on every page it appears on.
@@ -220,8 +220,7 @@ func titleSlugs(title string) []string {
 func isTitleSeparator(r rune) bool { return strings.ContainsRune(":|·—–", r) }
 
 // imageSlug is an image's file name without its extension, normalized the way a
-// title is, so that `particle_physics_equipment.png` and "Particle Physics
-// Equipment" can be compared.
+// title is, so that `deadline_season.png` and "Deadline Season" can be compared.
 func imageSlug(resolved string) string {
 	name := resolved
 	if u, err := url.Parse(resolved); err == nil {
@@ -316,10 +315,11 @@ const imageTextCeiling = 120
 // test, which is what this used to get wrong. A comic page's footer carries images
 // too — a sidebar thumbnail, a banner — so an extraction that returned the footer
 // and none of the comic satisfied a check for any image at all and was left in
-// place. Every xkcd strip in a real archive was stored that way: 83 words of
-// "Comics I enjoy" and two pictures, neither of them the strip. The images this
-// rung finds are the ones it can name; whether the body holds one of *those* is the
-// question worth asking.
+// place. Every strip from a numbered comic site in a real archive was stored that
+// way: 83 words of "strips I enjoy" and two pictures, neither of them the strip. The
+// images this rung finds are the ones it can name; whether the body holds one of
+// *those* is the question worth asking, and testdata/pages/comic-page-titled.html is
+// the fixture that asks it.
 func (e *Extractor) orThePageImagesIfTextless(in Input, pageURL *url.URL, page Result) Result {
 	if page.WordCount > imageTextCeiling {
 		return page
