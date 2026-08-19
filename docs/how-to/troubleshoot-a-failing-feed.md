@@ -138,18 +138,35 @@ visible in the row:
   described the old address. Left in place, a corrected feed would sit a few failures
   from being disabled for a fault that no longer exists.
 
-Moving a feed onto an address you already subscribe to is refused rather than
-merged, because the two rows would be indistinguishable in the list. Unsubscribe from
-one of them first — which is still SQL, since nothing in the interface deletes a
-subscription:
+## When the same feed is subscribed to twice
+
+Moving a feed onto an address you already subscribe to is refused rather than merged,
+because the two rows would be indistinguishable in the list. The refusal names the
+other subscription and says whether *it* is the one that is working — which is the
+usual shape of this: an OPML export carried both the old address and the new one, and
+the row you are editing is the spare that has never fetched anything.
+
+Remove the spare with **Unsubscribe** on its edit form. That deletes the subscription
+and its `feed_items` — the record of which feed carried what — and no articles. They
+are the root entity here, not children of a subscription, so everything archived stays
+archived.
+
+One consequence the confirmation spells out with a count: an article that *only* that
+feed carried and that you never opened is no longer referenced by anything the
+interface lists. It is still on disk and still in an export, and subscribing to the
+feed again brings it back, bodies and images included. Anything you read, starred or
+saved is unaffected either way — `article_state` keeps it reachable on its own.
+
+Nothing sweeps those unreferenced articles up afterwards. Retention only releases the
+bodies of articles somebody has *read* and then left alone, so an article nobody ever
+opened is never expirable; it simply sits there. If you want the space back, that is a
+`psql` job today.
+
+For a whole run of subscriptions at once:
 
 ```sql
 DELETE FROM feeds WHERE id = $1;
 ```
-
-That drops the feed and its `feed_items`, which are the record of *which* feed
-carried an article. The articles themselves and everything archived with them are
-untouched: they are the root entity here, not children of a subscription.
 
 The equivalent edit, for a script or a whole run of feeds at once:
 

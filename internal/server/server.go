@@ -178,6 +178,10 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// Changing one: its address, its title, its folder, and whether it is polled.
 	// The form is the same form, which is why this sits next to the two above.
 	mux.HandleFunc("POST /feeds/{id}/edit", s.requireUser(s.handleEditFeed))
+	// And removing one. `?unsubscribe=<id>` on the page above asks first; this acts.
+	// The only route in the interface that deletes anything a reader owns, which is
+	// why it is two steps and why it says what it costs before the first one.
+	mux.HandleFunc("POST /feeds/{id}/unsubscribe", s.requireUser(s.handleUnsubscribeFeed))
 	mux.HandleFunc("POST /feeds/refresh", s.requireUser(s.handleRefreshFeeds))
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
 	// Both the category index and one category's stream: `?name=` chooses.

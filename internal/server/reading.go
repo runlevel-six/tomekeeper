@@ -74,6 +74,10 @@ type streamPage struct {
 	// article page knows which list it was opened from.
 	From string
 
+	// Categories is the control that narrows this list to one category, empty on the
+	// lists that do not take one and on an archive with nothing to choose between.
+	Categories []categoryPill
+
 	// Mark is the state of this list's mark-all-read control.
 	Mark markControl
 }
@@ -112,10 +116,30 @@ type markOutcome struct {
 }
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	// `?category=` narrows the unread list to one folder. Present-but-empty selects
+	// the feeds that carry no category — a real bucket — which is why this tests for
+	// the parameter rather than for a non-empty value, the same convention
+	// /categories has used since it was written.
+	if r.URL.Query().Has("category") {
+		s.serveStream(w, r, s.unreadCategorySpec(r.URL.Query().Get("category")))
+		return
+	}
+
 	s.serveStream(w, r, s.unreadSpec())
 }
 
 func (s *Server) handleAll(w http.ResponseWriter, r *http.Request) {
+	// Everything narrowed to one category is a list that already has an address, so
+	// this sends the reader to it rather than rendering the same articles at a second
+	// one — two URLs for one list is how a Next button ends up computed from a
+	// different definition than the list it belongs to. The control links there
+	// directly; this is for the parameter typed by hand, which would otherwise look
+	// ignored.
+	if r.URL.Query().Has("category") {
+		http.Redirect(w, r, categoryPath(r.URL.Query().Get("category")), http.StatusSeeOther)
+		return
+	}
+
 	s.serveStream(w, r, s.allSpec())
 }
 
@@ -208,6 +232,11 @@ func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec strea
 		s.renderFragment(w, http.StatusOK, "stream-rows", page)
 		return
 	}
+
+	// Below the htmx return above, deliberately: the control belongs to the document,
+	// and a reader scrolling through forty pages of articles should not pay for it
+	// forty times.
+	page.Categories = s.categoryPills(r.Context(), userID, spec)
 
 	page.Mark.From, page.Mark.Path = spec.Token, spec.Path
 	if spec.Markable {
@@ -652,6 +681,22 @@ func (p feedsPage) FormAction() string {
 // to the same form.
 func (p feedsPage) TestAction() string { return p.View.href("/feeds/test") }
 
+// AskingToUnsubscribe reports whether the page is holding a removal question, which
+// is when the subscription form stands down: one destructive question, on its own.
+func (p feedsPage) AskingToUnsubscribe() bool {
+	return p.Unsubscribe != nil && p.Unsubscribe.Confirming
+}
+
+// UnsubscribeAction is where the confirmation for a removal posts, with the view
+// attached for the same reason the form's is.
+func (p feedsPage) UnsubscribeAction() string {
+	if p.Unsubscribe == nil {
+		return ""
+	}
+	return p.View.href("/feeds/" +
+		strconv.FormatInt(int64(p.Unsubscribe.Feed.ID), 10) + "/unsubscribe")
+}
+
 // feedsExtras are the results of whatever the reader just did, if anything.
 //
 // One struct rather than a parameter each, because every one of them is optional,
@@ -666,6 +711,33 @@ type feedsExtras struct {
 
 	// Add is set after testing or adding a single subscription.
 	Add *addFeedOutcome
+
+	// Unsubscribe is the state of removing one subscription: the question, or what
+	// answering it did.
+	Unsubscribe *unsubscribeControl
+}
+
+// unsubscribeControl is the two steps of removing a subscription.
+//
+// Two steps for the same reason marking a list read is: it cannot be undone one
+// button at a time. Unlike that control, this one has to say what it would cost
+// before it is pressed — which is what Removal carries, and why the ask exists as a
+// state of the page rather than as a JavaScript dialog the content security policy
+// would refuse to run anyway.
+type unsubscribeControl struct {
+	// Feed is the subscription in question, read before the delete so the
+	// confirmation can name it and the result can still name it afterwards.
+	Feed store.Feed
+
+	// Removal is what going ahead would cost, and is meaningless once Done.
+	Removal store.FeedRemoval
+
+	// Confirming is set on the page that asks; Done on the page that reports.
+	Confirming bool
+	Done       bool
+
+	// Problem is a reason it did not happen.
+	Problem string
 }
 
 type feedRow struct {
@@ -686,6 +758,13 @@ func (s *Server) handleFeeds(w http.ResponseWriter, r *http.Request) {
 	// ordering and their filter all still apply.
 	if raw := r.URL.Query().Get("edit"); raw != "" {
 		extras.Add = s.editForm(r, raw)
+	}
+
+	// `?unsubscribe=<id>` asks before removing one. Same reasoning, and it takes the
+	// form's place on the page rather than appearing beside it: a destructive question
+	// under two save buttons is a question somebody answers by accident.
+	if raw := r.URL.Query().Get("unsubscribe"); raw != "" {
+		extras.Unsubscribe = s.unsubscribeAsk(r, raw)
 	}
 
 	s.renderFeedsWith(w, r, http.StatusOK, extras)
@@ -732,14 +811,18 @@ func (s *Server) renderFeedsWith(w http.ResponseWriter, r *http.Request, status 
 	}
 	page.Unread = counts.Total
 
-	// The categories in use, for the suggestion list on the add form. A failed
-	// lookup costs the suggestions, not the page.
-	if categories, err := s.store.ListCategories(r.Context(), userID); err != nil {
+	// The categories in use, for the suggestion list on the add form. Names only:
+	// this page never showed the counts, and they are the half of ListCategories that
+	// costs an archive-sized aggregate. A failed lookup costs the suggestions, not
+	// the page.
+	if categories, err := s.store.ListCategoryNames(r.Context(), userID); err != nil {
 		s.log.Warn("listing categories for the feed form failed", "error", err)
 	} else {
-		for _, c := range categories {
-			if c.Name != "" {
-				page.Categories = append(page.Categories, c.Name)
+		for _, name := range categories {
+			// The nameless category is not a suggestion: filing a feed under it is
+			// what leaving the box empty already does.
+			if name != "" {
+				page.Categories = append(page.Categories, name)
 			}
 		}
 	}

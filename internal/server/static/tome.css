@@ -521,6 +521,33 @@ kbd {
 .tag-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tag-list .count { font-size: 0.75rem; }
 
+/* Narrowing a list by category. Sits above the articles, wraps on a phone, and is
+   deliberately quiet: it is a way to change the subject, not part of the reading. The
+   selected one is filled rather than merely colored, so it survives being looked at
+   sideways on a bright screen. */
+.stream-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.25rem;
+}
+.stream-filter .pill {
+  display: inline-block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  padding: 0.15em 0.6em;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  text-decoration: none;
+}
+.stream-filter .pill:hover { border-color: var(--accent); color: var(--accent); }
+.stream-filter .pill.is-current {
+  color: var(--bg);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
 /* The save box: paste a URL, keep the page. Sits above the reading list it adds
    to, so the thing you just did and the thing it did it to are adjacent. */
 .save-box {
@@ -783,6 +810,31 @@ kbd {
   text-transform: none;
   color: var(--ink);
 }
+
+/* The one control that removes something a reader owns. Marked as such wherever it
+   appears, and never the primary action next to it. */
+.add-feed .danger-link { font-size: 0.85rem; color: var(--error); }
+
+/* Asking before it happens. Takes the form's place, so the left rule that means
+   "this is about one subscription" is the same rule the edit form carries — in the
+   color that means the answer is not reversible. */
+.unsubscribe {
+  margin: 0 0 2rem;
+  padding: 0 0 1.5rem 0.9rem;
+  border-left: 3px solid var(--error);
+  border-bottom: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+.unsubscribe h2 { margin-top: 0; }
+.unsubscribe .feed-address { margin: 0 0 0.75rem; font-size: 0.85rem; word-break: break-all; }
+.unsubscribe p { font-size: 0.95rem; }
+.unsubscribe .note { font-size: 0.85rem; color: var(--ink-soft); }
+.unsubscribe .actions-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.25rem; }
+.unsubscribe button.danger {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 40%, var(--rule));
+}
+.unsubscribe button.danger:hover { border-color: var(--error); }
 
 /* What a test found. The sample titles are the cheapest way to recognize a feed,
    so they are given room rather than being squeezed into the summary line. */

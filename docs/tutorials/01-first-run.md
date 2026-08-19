@@ -330,6 +330,11 @@ of reading, **Mark _n_ as read** at the top right of any list clears that list â
 that list only, and it asks first, with the count. From a category page it marks the
 category; from **Unread** it marks everything unread.
 
+The category links above the list narrow it to one folder. On **Unread** that gives
+you what is new in the comics and nothing else â€” including its own **Mark as read**,
+so a folder you have fallen behind on can be cleared without touching the rest. On
+**Everything** the same links take you to that folder's whole archive.
+
 Three pages worth visiting once, because they are what makes the rest
 maintainable:
 

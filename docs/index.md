@@ -102,6 +102,7 @@ rejected. Design rationale lives here and nowhere else.
 |---|---|
 | Know which keys do what | [CLI](reference/cli.md#keyboard) |
 | Read only the comics, or only the tech feeds | **Categories** in the web interface — see [CLI](reference/cli.md#web-interface) |
+| See what is new in one folder, and clear just that folder | The category links above **Unread** — see [CLI](reference/cli.md#narrowing-a-list-to-one-category) |
 | Save a page nothing subscribed to | Paste it into **Saved** in the web interface |
 | Use it on a phone, from the home screen | Install it from the browser's menu — see [CLI](reference/cli.md#installed-as-a-web-app) |
 | Change how it looks | **Settings** in the web interface, or [Themes](reference/themes.md) |
@@ -112,6 +113,7 @@ rejected. Design rationale lives here and nowhere else.
 |---|---|
 | Work out why a feed stopped producing articles | [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md) |
 | Correct a feed's address, re-file it, or stop polling it | **Edit** on its row on the Feeds page — see [CLI](reference/cli.md#post-feedsidedit--change-one-subscription) |
+| Get rid of a subscription, or one an import listed twice | **Edit → Unsubscribe** — see [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md#when-the-same-feed-is-subscribed-to-twice) |
 | Find one feed among hundreds, or list the broken ones first | Sort and filter the Feeds page — see [CLI](reference/cli.md#sorting-and-filtering-the-feed-list) |
 | Make it check the feeds right now | **Check all feeds now** on the Feeds page — see [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md#watch-a-poll-happen) |
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |

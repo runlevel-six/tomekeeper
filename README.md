@@ -21,10 +21,11 @@ service stopped and the database gone, and the article renders with its images.
 What is there:
 
 - **Reading.** Unread stream, article reader, full-text search across the whole
-  archive, browsing by category, starred and a manual reading list. Any list can be
-  marked read in one go — scoped to that list, and it tells you how many before it
-  does it. Keyboard-driven throughout; no build step, no CDN, no JavaScript required
-  for anything but the shortcuts.
+  archive, browsing by category, starred and a manual reading list. Unread and
+  Everything narrow to one category, so "what is new in the comics" is a list of its
+  own. Any list can be marked read in one go — scoped to that list, and it tells you
+  how many before it does it. Keyboard-driven throughout; no build step, no CDN, no
+  JavaScript required for anything but the shortcuts.
 - **Saving by hand.** Paste a URL and it is fetched, extracted and archived like
   anything a feed brought.
 - **Taking it away again.** A download on the settings page, or `tome export` —
@@ -48,8 +49,9 @@ What is there:
   gave, a queue of anything that did not come through cleanly, and a button to check
   every feed now rather than waiting for the adaptive interval. The list sorts and
   filters by any column, and **Edit** on a row corrects an address, re-files a feed,
-  or stops polling it — a moved feed keeps its history instead of becoming a second
-  subscription.
+  stops polling it, or unsubscribes — a moved feed keeps its history instead of
+  becoming a second subscription, and unsubscribing deletes the subscription without
+  deleting anything it archived.
 - **Fixing a site that extracts badly.** Domain rules are a page rather than a
   shell command: write the selector, and reprocess that domain from the same screen.
   The failed-fetch queue links to the form for the host that failed.

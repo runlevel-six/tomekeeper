@@ -195,6 +195,12 @@ func (v feedView) EditHref(id store.FeedID) string {
 	return v.href("/feeds", [2]string{"edit", strconv.FormatInt(int64(id), 10)})
 }
 
+// UnsubscribeHref asks about removing one subscription, keeping the view so that
+// answering either way comes back to the list the reader was looking at.
+func (v feedView) UnsubscribeHref(id store.FeedID) string {
+	return v.href("/feeds", [2]string{"unsubscribe", strconv.FormatInt(int64(id), 10)})
+}
+
 // ClearHref drops the filter and keeps the ordering. Two separate ideas: somebody
 // clearing a search has not asked to be re-sorted.
 func (v feedView) ClearHref() string {

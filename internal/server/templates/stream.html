@@ -55,6 +55,25 @@
     {{end}}
   {{end}}
 
+  {{/*
+    Narrowing the list to one category. Links rather than a select and a button, for
+    two reasons. One click instead of two, with no JavaScript to make a dropdown act
+    like navigation. And the nameless category — feeds an OPML file listed outside any
+    folder — is a real bucket that has to be selectable *and* distinguishable from "do
+    not filter", which one select value cannot express but two hrefs can.
+
+    Every reader this borrows from puts this in a sidebar. There is no sidebar here on
+    purpose, so it sits above the list it narrows.
+  */}}
+  {{with .Categories}}
+    <nav class="stream-filter" aria-label="Filter by category">
+      {{range .}}
+        <a class="pill{{if .Current}} is-current{{end}}" href="{{.Href}}"
+           {{if .Current}}aria-current="page"{{end}}>{{.Label}}</a>
+      {{end}}
+    </nav>
+  {{end}}
+
   {{if .Items}}
     {{template "stream-rows" .}}
   {{else}}

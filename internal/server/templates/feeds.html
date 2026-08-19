@@ -72,6 +72,78 @@
   {{end}}
 
   {{/*
+    Removing a subscription: the question, then what the answer did. It takes the
+    form's place rather than sitting beside it — a destructive question underneath two
+    save buttons is a question somebody answers by accident.
+  */}}
+  {{with .Unsubscribe}}
+    {{if .Done}}
+      {{if .Problem}}
+        <p class="import-result bad">{{.Problem}}</p>
+      {{else}}
+        <div class="import-result ok">
+          <p>Unsubscribed from <strong>{{.Feed.Title}}</strong>.</p>
+          <p class="note">
+            {{if .Removal.Articles}}
+              The {{plural .Removal.Articles "article"}} it carried {{if eq .Removal.Articles 1}}is{{else}}are{{end}} still archived.
+              {{if .Removal.Stranded}}
+                {{.Removal.Stranded}} of them had never been opened and came from no other
+                feed, so {{if eq .Removal.Stranded 1}}it has{{else}}they have{{end}} left your
+                lists — still on disk, and still in an export.
+              {{else}}
+                Every one of them is still in your lists.
+              {{end}}
+            {{else}}
+              It had never carried an article, so nothing else changed.
+            {{end}}
+          </p>
+        </div>
+      {{end}}
+    {{else}}
+      <section class="unsubscribe">
+        <h2>Unsubscribe from {{.Feed.Title}}?</h2>
+        <p class="feed-address"><code>{{.Feed.FeedURL}}</code></p>
+
+        {{if .Problem}}
+          <p class="import-result bad">{{.Problem}}</p>
+        {{else}}
+          <p>
+            {{if .Removal.Articles}}
+              It has carried {{plural .Removal.Articles "article"}}, and no article is
+              deleted by this: they are archived independently of the feeds that brought
+              them.
+              {{if .Removal.Stranded}}
+                But {{.Removal.Stranded}} of them came from this feed alone and
+                {{if eq .Removal.Stranded 1}}has{{else}}have{{end}} never been opened, so
+                {{if eq .Removal.Stranded 1}}it{{else}}they{{end}} will leave your lists —
+                still on disk and still in an export, but not shown anywhere. Subscribing to
+                this feed again brings {{if eq .Removal.Stranded 1}}it{{else}}them{{end}}
+                back, bodies and images included, because articles are stored by address
+                rather than per subscription. Open or star anything you want to keep in view
+                either way.
+              {{else}}
+                All of them stay in your lists, because other feeds carry them or you have
+                already read them.
+              {{end}}
+            {{else}}
+              It has never carried an article, so there is nothing to lose by removing it.
+            {{end}}
+          </p>
+        {{end}}
+
+        <p class="note">The subscription and its polling history go, and this cannot be undone.</p>
+
+        <form method="post" action="{{$.UnsubscribeAction}}">
+          <div class="actions-row">
+            <button type="submit" class="danger">Unsubscribe</button>
+            <a href="{{$.View.CancelHref}}">Cancel</a>
+          </div>
+        </form>
+      </section>
+    {{end}}
+  {{end}}
+
+  {{/*
     The one-subscription form, above the list rather than below it. Adding a feed and
     correcting one are the two reasons somebody comes to this page with something to
     do, and putting the controls for both under a hundred rows means scrolling past
@@ -87,6 +159,7 @@
     using. No JavaScript involved — the two buttons are two form actions, which is
     what formaction is for.
   */}}
+  {{if not .AskingToUnsubscribe}}
   <section class="add-feed{{if .Editing}} is-editing{{end}}">
     {{if .Editing}}
       <h2>Edit {{with .Add.FeedTitle}}{{.}}{{else}}this feed{{end}}</h2>
@@ -159,7 +232,16 @@
           <button type="submit" formaction="{{.TestAction}}">Test</button>
         {{end}}
         <button type="submit">{{if .Editing}}Save changes{{else}}Add feed{{end}}</button>
-        {{if .Editing}}<a href="{{.View.CancelHref}}">Cancel</a>{{end}}
+        {{if .Editing}}
+          <a href="{{.View.CancelHref}}">Cancel</a>
+          {{/*
+            A link rather than a button, like the bulk mark-read control and for the
+            same reason: it does nothing on its own, it asks. Outside the form as far
+            as the reader is concerned, and last, because it is the one control here
+            that removes something.
+          */}}
+          <a class="danger-link" href="{{.View.UnsubscribeHref .Editing}}">Unsubscribe…</a>
+        {{end}}
       </div>
     </form>
 
@@ -216,6 +298,7 @@
       {{end}}
     {{end}}
   </section>
+  {{end}}
 
   {{if .Broken}}
     <p class="warn-banner">

@@ -521,8 +521,8 @@ session.
 
 | Route | Page |
 |---|---|
-| `GET /` | Unread stream |
-| `GET /all` | Everything in the archive |
+| `GET /` | Unread stream. `?category=` narrows it to one folder; present-but-empty selects the feeds with no category. |
+| `GET /all` | Everything in the archive. `?category=` redirects to that category's own view, which is the same list. |
 | `GET /starred` | Starred articles |
 | `GET /saved` | Reading list — pages saved by hand |
 | `GET /categories` | The categories the feeds are filed under |
@@ -547,6 +547,7 @@ session.
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
 | `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
 | `POST /feeds/{id}/edit` | Change one subscription. `url=`, `title=`, `category=` and `enabled=`. An omitted `enabled` turns polling off. |
+| `POST /feeds/{id}/unsubscribe` | Remove one subscription. `GET /feeds?unsubscribe=<id>` asks first and says what it costs. |
 | `POST /domain-rules` | Save one rule. |
 | `POST /domain-rules/delete` | Remove one rule. `domain=`. |
 | `POST /domain-rules/reprocess` | Queue re-extraction of one domain. `domain=`. |
@@ -645,8 +646,45 @@ Three things it does to polling, none of which are visible in the row it changes
 
 Moving a feed onto an address the same reader already subscribes to is refused with
 `409` and nothing is changed: two subscriptions to one feed would be
-indistinguishable in the list. Another reader's feed id is `404`, like everywhere
+indistinguishable in the list. The message names the subscription holding that address
+and says whether it is the one polling successfully, because the usual cause is an OPML
+import that carried both a feed's old address and its new one — in which case the row
+being edited is the spare, and what the reader wants next is **Unsubscribe** on the
+form they are already looking at. Another reader's feed id is `404`, like everywhere
 else.
+
+### `POST /feeds/{id}/unsubscribe` — remove one subscription
+
+The only route in the interface that deletes something a reader owns. Two steps:
+`GET /feeds?unsubscribe=<id>` asks, and takes the subscription form's place while it
+does — a destructive question underneath two save buttons is one somebody answers by
+accident.
+
+**It deletes the subscription and its `feed_items`, and no articles.** That is the
+root-entity rule in one statement: a feed that turns bad must not take what it
+delivered with it. Stored bodies, images on disk, tags, highlights and read state all
+stay.
+
+What it does change is reachability, and the confirmation counts it beforehand. An
+article stays in the reader's lists if another of their feeds also carries it — feeds
+deduplicate onto shared articles — or if they have touched it at all, because reading,
+starring or saving writes an `article_state` row and that row is the second half of the
+[visibility predicate](../explanation/scoping-and-access-control.md). What is left is
+the articles this feed alone introduced and the reader never opened: still on disk,
+still in an export, but no longer listed anywhere. Subscribing to the feed again
+relinks them — articles are keyed by canonical URL, so the same rows come back with
+their bodies and images.
+
+Two things worth knowing about that residue:
+
+- **Saved and starred articles are never affected.** A manual save writes `saved_at`,
+  which is an `article_state` row, so those articles are reachable in their own right —
+  and most of them were never carried by a feed at all.
+- **Nothing collects the residue afterwards.** [Retention](retention.md) releases the
+  bodies of articles that somebody read and then left alone; an article nobody ever
+  opened has no read state and is therefore never expirable. So unreferenced articles
+  persist until something removes them deliberately, and today that means SQL. This is
+  a known gap rather than a design intent.
 
 ### Sorting and filtering the feed list
 
@@ -824,6 +862,7 @@ An article link carries the list it was opened from, as `?from=<token>`:
 | `feed:{id}` | One feed |
 | `tag:{id}` | One tag |
 | `category:{name}` | One category, `{name}` verbatim |
+| `unread-category:{name}` | The unread list narrowed to one category |
 | `search:{text}` | The search that found it |
 | `attention` | The attention queue |
 
@@ -841,6 +880,51 @@ Previous and next within the unread list admit articles read in the last 30
 minutes. Opening an article marks it read, so without that the list would
 rearrange itself the instant a reader arrived and "previous" would point off the
 top of a list holding nothing they had seen.
+
+Every token has the variable part last, which is why the narrowed unread list is
+`unread-category:{name}` and not `unread:category:{name}`. A category is a folder name
+from somebody else's reader and may contain a colon — "Cooking: BBQ" is a plausible
+folder — so the argument has to be taken whole rather than split.
+
+### Narrowing a list to one category
+
+**Unread** and **Everything** carry a row of category links above the list, and so do
+the category views themselves, so a reader can move sideways between folders. Where
+each link goes depends on which list is asking:
+
+- From **Unread**, `?category=Comics` gives the unread list narrowed to that folder —
+  the one combination that has no other home. It is a list in its own right, so it
+  pages, it has previous/next, and its **Mark as read** covers exactly those articles:
+  clearing one folder without touching the rest.
+- From **Everything**, the link points at `/categories?name=Comics`, which *is*
+  everything in that folder. Rendering the same articles at a second address would
+  leave a Next button computed from a different definition than the list it belongs
+  to, which is the failure the one-table-of-list-definitions rule in `streams.go`
+  exists to prevent.
+
+A category view is deliberately not unread-only, which is where this differs from
+Miniflux and FreshRSS — both default a folder to its unread items. A category here is
+the way back to a folder, and every stream is ordered
+`COALESCE(published_at, first_seen_at) DESC`, so anything new is already at the top
+without the list hiding what it holds.
+
+Links rather than a dropdown, for two reasons. One click instead of two, with no
+JavaScript needed to make a `<select>` navigate. And the nameless category — feeds an
+OPML file listed outside any folder — has to be selectable *and* distinguishable from
+"do not filter at all", which one form value cannot express and two hrefs can.
+
+The control is not offered on the lists where it would be meaningless: a feed is
+already inside one category, a tag deliberately crosses them, search has its own
+query, and the reading list holds pages that came from no feed and therefore have no
+category. It is also not drawn when there is only one bucket to choose from.
+
+The names come from `ListCategoryNames`, which reads `feeds` alone. The counts on the
+Categories index need an aggregate over `feed_items`, `articles` and `article_state` —
+measured at 2.7ms against a 1,900-article archive versus 0.15ms for the names, and
+only the first figure grows with the archive. This control is on the most-requested
+page in the interface, so it takes the cheap query and leaves the counts to the page
+that shows them. It is also skipped entirely on the htmx requests that load further
+pages, which want rows rather than a document.
 
 ### Keyboard
 

@@ -34,7 +34,14 @@ references collapse onto one row, and everything downstream follows:
   inventing a synthetic feed to hang them from, and that synthetic feed would
   then show up in the UI forever.
 - **An article can outlive every reference to it.** Unsubscribe from the feed
-  and the archived article stays, which is the whole point of an archive.
+  and the archived article stays, which is the whole point of an archive. The
+  control does exactly that: it deletes the subscription and its `feed_items`, and
+  no article. What it changes is *reachability* — an article that only that feed
+  carried, and that you never opened, is no longer referenced by anything the
+  interface lists, though it is still on disk and still in an export. Subscribing
+  again relinks it, because articles are keyed by canonical URL rather than owned
+  by a subscription, so the same rows come back with their bodies and images. The
+  confirmation counts those articles before you commit to it.
 
 ## What it costs
 

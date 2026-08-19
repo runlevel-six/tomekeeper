@@ -362,8 +362,18 @@ func TestEditFeedRefusesAnAddressAlreadySubscribed(t *testing.T) {
 		t.Fatalf("POST %s = %d, want 409\n%s", editPath(first), rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "already subscribe to that address") {
+	if !strings.Contains(body, "already uses that address") {
 		t.Errorf("the page does not explain the refusal:\n%s", body)
+	}
+	// Named, so the refusal cannot read as the form having lost track of which
+	// subscription it had open.
+	if !strings.Contains(body, "Two") {
+		t.Errorf("the refusal does not name the subscription holding the address:\n%s", body)
+	}
+	// Neither of these two has ever polled successfully, so the advice is the other
+	// branch of that message: the address may be wrong in both.
+	if !strings.Contains(body, "never fetched successfully either") {
+		t.Errorf("the refusal does not say which of the two is working:\n%s", body)
 	}
 	// And the form still has what was typed, with the feed still open in it.
 	if !strings.Contains(body, `action="`+editPath(first)+`"`) {

@@ -71,6 +71,12 @@ lets the scheduler pick them up. Nothing else about a feed changes, which is why
 pressing the button repeatedly is safe — and why it declines to move a feed polled
 in the last five minutes.
 
+Deleting a feed — **Unsubscribe** on its edit form — cascades to `feed_items` and stops
+there. No article, body, asset or state row is touched: `feed_items.article_id` is a
+plain reference, not an ownership edge. An article that no surviving `feed_items` row
+and no `article_state` row points at is unreachable through the interface but still
+present, and re-subscribing relinks it by canonical URL.
+
 `feed_url`, `title`, `category` and `disabled` are the four columns the **Edit**
 control on the feeds page writes. It is not an upsert: an import preserves what it is
 not given, so re-importing an OPML file cannot unfile every feed, whereas emptying the

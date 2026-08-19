@@ -264,8 +264,12 @@ func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, store.ErrFeedURLTaken):
-		outcome.Problem = "You already subscribe to that address under a different feed, so nothing " +
-			"was changed. Two subscriptions to one feed would be indistinguishable in this list."
+		// Naming the other subscription is the whole difference between a refusal
+		// somebody can act on and one that reads as the form having lost track of
+		// which feed it had open. The usual cause is a feed listed twice by an OPML
+		// import — the old address and the new one — where the row being edited is
+		// the one that never worked, and what the reader wants next is to remove it.
+		outcome.Problem = collisionMessage(s.otherFeedAt(r, normalized, feedID))
 		s.renderFeedsWith(w, r, http.StatusConflict, feedsExtras{Add: outcome})
 		return
 	case store.IsNotFound(err):
@@ -295,6 +299,48 @@ func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
 		Reenabled:  existing.Disabled && !updated.Disabled,
 		TurnedOff:  updated.Disabled,
 	}})
+}
+
+// otherFeedAt is the reader's other subscription to an address, if the lookup
+// succeeds. Nil means "there is one, but this cannot say which" — the constraint has
+// already proved it exists.
+func (s *Server) otherFeedAt(r *http.Request, feedURL string, editing store.FeedID) *store.Feed {
+	other, err := s.store.FeedByURL(r.Context(), signedInUser(r), feedURL)
+	if err != nil || other.ID == editing {
+		if err != nil && !store.IsNotFound(err) {
+			s.log.Warn("looking up the colliding subscription failed", "url", feedURL, "error", err)
+		}
+		return nil
+	}
+	return &other
+}
+
+// collisionMessage explains a refused address in terms of the subscription holding it.
+//
+// The sentence has to do two things: say which feed, and say what to do about it.
+// Without the first it reads as the form having lost track of which subscription was
+// open; without the second it is a dead end, because the way out — removing one of the
+// two — is a control the reader has to be told exists.
+func collisionMessage(other *store.Feed) string {
+	if other == nil {
+		return "Another of your subscriptions already uses that address, so nothing was " +
+			"changed. Two subscriptions to one feed would be indistinguishable in this list."
+	}
+
+	msg := "“" + other.Title + "” already uses that address, so nothing was changed — two " +
+		"subscriptions to one feed would be indistinguishable in this list. "
+	switch {
+	case other.LastSuccessAt != nil:
+		// The common case: an OPML import carried both the old address and the new
+		// one, and the working row is the other one.
+		msg += "That one is already being polled successfully, so this subscription is the " +
+			"spare — Unsubscribe below removes it and keeps everything it archived."
+	default:
+		msg += "That one has never fetched successfully either, so the address may be wrong " +
+			"in both. Test it before saving, or unsubscribe from whichever of the two you " +
+			"do not want."
+	}
+	return msg
 }
 
 // feedByRawID resolves a feed id that arrived as text, or nil.
