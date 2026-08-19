@@ -171,7 +171,7 @@ var ErrNoContent = fmt.Errorf("no extractor produced acceptable content")
 // content" — which is true and useless. The maintenance loop this archive is built
 // around goes from the attention queue to a domain rule, and the missing step in
 // the middle is *why*: which rungs ran, what each produced, and which threshold
-// turned it down. Without that, a page that stops extracting is archaeology.
+// turned it down. Without that, a page that stops extracting is a dig site.
 type Step struct {
 	// Rung is the extractor name, or "page" for the measurement of the whole
 	// document that the ratio check compares against.

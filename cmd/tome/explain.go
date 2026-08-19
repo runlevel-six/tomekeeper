@@ -213,7 +213,7 @@ func printExplanation(w io.Writer, article store.Article, in extract.Input, rawB
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "  RUNG\tCHARS\tWORDS\tIMAGES\tOUTCOME")
 	for _, step := range steps {
-		outcome := "-"
+		var outcome string
 		switch {
 		case !step.Ran:
 			outcome = "skipped"
