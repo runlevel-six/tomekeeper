@@ -212,6 +212,21 @@ kubectl -n tomekeeper exec -i statefulset/postgres -- \
 kubectl -n tomekeeper scale deploy/tomekeeper-server deploy/tomekeeper-worker --replicas=1
 ```
 
+No `--no-owner` here, deliberately: this restores into the database the dump came from,
+where the `tome` role exists and should keep owning its tables. Restoring one of these
+dumps into a fresh PostgreSQL somewhere else is the case that needs the flag — see
+[Back up and restore](back-up-and-restore.md#anywhere-else).
+
+If the dump predates the running image, re-run the migration Job afterwards using the
+upgrade sequence above; `serve` fails readiness on a schema mismatch rather than
+starting and breaking later. And read
+[what a restore rewinds](back-up-and-restore.md#what-a-restore-rewinds) before
+concluding the archive is back: subscriptions and the job queue both return to their
+state at the dump, which is rarely their state at the failure.
+
+One of these dumps was restored and served from on 2026-08-19, so the CronJob's output
+is known to be readable rather than assumed to be.
+
 The dumps are on the `tomekeeper-backups` volume, which nothing mounts except the
 CronJob. To get one out, run a throwaway pod against the claim:
 

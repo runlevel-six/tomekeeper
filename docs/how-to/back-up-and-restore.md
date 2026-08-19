@@ -72,6 +72,12 @@ tome migrate    # brings the schema forward if the dump predates this build
 tome serve
 ```
 
+`--no-owner` because a dump records the roles that owned each object and a fresh
+database elsewhere has none of them. The Kubernetes procedure omits it deliberately:
+it restores into the StatefulSet that the dump came from, where the `tome` role
+already exists and ownership should be preserved. Restoring one of those dumps
+anywhere else needs this flag, or the role created first.
+
 `tome migrate` after a restore is neither optional nor harmful. The dump carries
 whatever schema version it was taken at, and a newer build needs its migrations
 applied before it will serve — `serve` fails readiness on a mismatch rather than
@@ -106,12 +112,50 @@ comparing — every stored body came back byte for byte.
 Keep both if the archive matters. They fail differently: a dump is exact and brittle,
 an export is readable and lossy at the edges.
 
-## What is not done, and is worth knowing
+## What a restore rewinds
 
-**No restore drill runs anywhere.** The plan's testing strategy asks for one — restore
-a dump into an empty database in CI and assert the service starts and serves — on the
-grounds that a backup nobody has restored is not a backup. The nightly dump runs and
-has never been read back.
+Two things come back as they were at the moment of the dump, and neither is obvious
+from the file:
 
-Until that exists, the check above is manual, and doing it deliberately once is worth
-more than the schedule that produces the files.
+**Your subscriptions.** A feed unsubscribed after the dump was taken is subscribed
+again after the restore. Nothing archived is at risk — articles are the root entity and
+survive their feeds — but the feed list is as of the backup, not as of the failure, so
+re-check it rather than assuming it carried on from where you left off.
+
+**The job queue.** River's tables are in the dump like any others, so the worker
+inherits whatever was queued, retryable or in flight at dump time and starts working
+through it. That is usually what you want after losing a database. The leader row comes
+back too and is harmless: it carries an expiry and is taken over as soon as it lapses.
+
+## What has been restored from, and what has not
+
+**The database half was drilled on 2026-08-19, and it holds.** A dump the CronJob wrote
+unattended — 21.4 MB, 03:17 — was copied off the backups volume and restored into an
+empty PostgreSQL 16.14 with the invocation the
+[Kubernetes procedure](install-kubernetes.md#backups) documents. It exited zero and said
+nothing, which for `pg_restore` is the good outcome.
+
+What came back was then checked rather than assumed: 1,856 articles, 74 feeds, 385
+import records, the schema at migration 4, and `tome migrate` reporting nothing to do.
+The article set was compared against the live database at the dump's own high-water
+mark — the same count, and an identical MD5 over every canonical URL, so the same
+articles rather than the same number of them. `tome serve` against the restored copy
+answered `/readyz` with both checks healthy, paginated the reading lists, returned 247
+matches for a full-text search, and rendered an article's body.
+
+**The blob tree has never been restored from, and nothing copies it automatically.**
+That is the half this page opens by warning about, and it is still the half that would
+hurt: the database came back complete and an article rendered with its picture frames
+empty, because the pictures live on the other volume. The recipe above is written and
+untried.
+
+**No restore drill runs in CI**, which is what the plan's testing strategy actually
+asks for — restore into an empty database and assert the service serves, on every
+build. The drill above was done by hand, once, against one night's dump. It retires the
+question of whether these files are readable; it does not keep answering it.
+
+**The in-cluster sequence is still untried as written.** The drill restored the dump
+into a scratch database outside the cluster. Scaling the writers to zero, restoring
+through `kubectl exec` into the running StatefulSet, and scaling back up is the same
+`pg_restore` reached a different way, but the steps around it have not been rehearsed
+on a day when they mattered.
