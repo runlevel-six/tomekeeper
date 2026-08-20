@@ -20,7 +20,7 @@ internal.
 |---|---|---|
 | **Patch** (`0.1.0` → `0.1.1`) | Fixes only. **Never a database migration.** | Change the tag and apply. Nothing else to do. |
 | **Minor** (`0.1.0` → `0.2.0`) | Features, and any release that adds a migration. May change defaults or remove a flag, with the removal noted here. | Run the migration Job, then apply. |
-| **Major** | Reserved for 1.0, which is when multi-user and the Fever API land and this table stops having a caveat. | — |
+| **Major** | Reserved for 1.0. The Fever API landed in 0.2.0, so what is left is **multi-user** — after which this table stops having a caveat. | — |
 
 "A patch release never migrates" is the load-bearing half, and it is enforced by
 `scripts/check-release.sh` rather than remembered: it means a patch upgrade cannot
@@ -31,6 +31,13 @@ happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [v0.2.0] — 2026-08-20
+
+Mobile clients can read the archive. No migration, so upgrading is a tag change and
+an apply — but see the note under Changed about `TOME_SESSION_KEY`.
 
 ### Added
 
@@ -123,5 +130,6 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.2.0...HEAD
+[v0.2.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/runlevel-six/tomekeeper/releases/tag/v0.1.0
