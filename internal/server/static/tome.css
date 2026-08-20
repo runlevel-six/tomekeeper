@@ -1003,6 +1003,16 @@ kbd {
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 0.92rem;
 }
+/* Same type as the radios above it, laid out so a wrapped label lines up under
+   itself rather than under its own checkbox. */
+.settings .checkbox {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.4rem 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+}
 
 .swatches {
   list-style: none;

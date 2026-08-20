@@ -533,10 +533,11 @@ session.
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly |
-| `GET /settings` | Palette and preferences |
+| `GET /settings` | Palette, reading preferences, and the export download |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
 | `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |
+| `POST /mark-read/scrolled` | Marks named articles read after they were scrolled past. `ids=` is a comma-separated list. `409` when the preference is off. |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
 | `POST /articles/{id}/keep` | Keep permanently, or stop. Same form field. |
@@ -852,6 +853,32 @@ Two properties worth knowing:
   mark that re-stamped everything would quietly extend the life of what the reader
   had already finished.
 
+### `POST /mark-read/scrolled` — marking read on the way past
+
+The only place in this interface where reading state changes without anybody
+pressing anything, which is why it is off until a reader turns it on in
+[Settings](#web-interface) and why the rules around it are narrow.
+
+`ids=` is a comma-separated list of article ids the page reports having gone past.
+The response is the affected rows' controls as htmx out-of-band fragments — the same
+partial a click returns — so exactly the rows that changed are redrawn and nothing
+else is. Nothing marked means an empty response.
+
+| Condition | Result |
+|---|---|
+| The preference is off | `409`. The check is here rather than only in the page, so turning it off takes effect on tabs that are already open. |
+| An id is not a positive number, or the list is malformed | `400`, and nothing is marked. All or nothing: only a script posts here, and the symptom of a script bug should not be a partial mark. |
+| More than 200 ids | `400`. A page is 50 rows, so this is only reached by something other than the page — and refusing beats marking the first 200 and dropping the rest silently. |
+| An id the reader cannot see | Absent from the response, and nothing is written. The same nothing a nonexistent id gets. |
+| Starred or saved | Never marked. Both mean somebody said the article matters, and scrolling past it is not a decision to be finished with it. |
+| Kept | Marked. Keeping protects the stored body from retention, which says nothing about whether it has been read. |
+| Already read | Not written, so it keeps its original `read_at` — see the bulk mark above for why that matters. |
+
+Which lists ask for it is narrower than which may be marked in bulk: **the unread
+lists only**, meaning Unread and Unread narrowed to a category. Everything, a
+category, a feed and a tag are where a reader goes to *find* an article, and
+scrolling through them looking for one must not mark the archive read on the way.
+
 ### Navigation between lists and articles
 
 An article link carries the list it was opened from, as `?from=<token>`:
@@ -939,6 +966,7 @@ pages, which want rows rather than a document.
 | `r` | Reload this page |
 | `s` | Star or unstar |
 | `m` | Mark read or unread |
+| `j` past an entry | Also marks it read, when marking on scroll is on |
 | `/` | Search |
 | `g` then `u` `a` `s` `f` `c` | Go to unread, everything, starred, feeds, categories |
 

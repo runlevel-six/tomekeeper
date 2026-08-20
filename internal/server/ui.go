@@ -144,6 +144,31 @@ func (s *Server) renderFragment(w http.ResponseWriter, status int, name string, 
 	}
 }
 
+// renderFragmentList writes one partial once per item, as a single response.
+//
+// For a request that changed several rows at once: htmx applies each out-of-band
+// fragment to the element carrying its id, so one response leaves every changed
+// control correct. Buffered whole, so a template failure on the ninth row cannot
+// leave eight applied and a broken swap behind them.
+func (s *Server) renderFragmentList(w http.ResponseWriter, status int, name string, items []any) {
+	var buf bytes.Buffer
+	for _, item := range items {
+		if err := s.ui.fragments.ExecuteTemplate(&buf, name, item); err != nil {
+			s.log.Error("rendering a fragment failed", "fragment", name, "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+
+	if _, err := buf.WriteTo(w); err != nil {
+		s.log.Debug("writing fragments failed", "fragment", name, "error", err)
+	}
+}
+
 // templateFuncs are the handful of helpers the templates need.
 //
 // Kept deliberately small: logic in a template is logic that cannot be tested, so

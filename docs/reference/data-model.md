@@ -40,6 +40,7 @@ is a later milestone; the schema is user-scoped from the start regardless.
 | `password_hash` | `text` | An argon2id hash in PHC string form, written by `tome migrate` from `TOME_PASSWORD`. Empty means the web interface cannot be signed into, which is what a first run with no password set produces. The parameters live inside each hash, so raising the cost later is an upgrade rather than a lockout. |
 | `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API, which does not exist yet. It cannot be derived from `password_hash`, so it has to be written while the cleartext is in hand — that is why the column exists ahead of the API that reads it. |
 | `theme` | `text` | The reader's palette and light/dark preference, as one value such as `plum-dark` or `auto`. See [Themes](themes.md). |
+| `mark_read_on_scroll` | `boolean` | Whether the unread lists mark articles read as they are scrolled past. `false` unless the reader turned it on; automatic state changes are opted into, never inherited from an upgrade. |
 | `created_at` | `timestamptz` | |
 
 ### `feeds`

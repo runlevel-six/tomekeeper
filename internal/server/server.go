@@ -203,6 +203,11 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mark-read", s.requireUser(s.handleMarkReadConfirm))
 	mux.HandleFunc("POST /mark-read", s.requireUser(s.handleMarkRead))
 
+	// Rows the reader has scrolled past, for a reader who asked for that. No
+	// confirmation and no undo prompt, because each row is still its own inverse —
+	// which is exactly what the bulk mark above is not.
+	mux.HandleFunc("POST /mark-read/scrolled", s.requireUser(s.handleMarkScrolledRead))
+
 	mux.HandleFunc("POST /articles/{id}/read", s.requireUser(s.handleToggleRead))
 	mux.HandleFunc("POST /articles/{id}/star", s.requireUser(s.handleToggleStar))
 	mux.HandleFunc("POST /articles/{id}/keep", s.requireUser(s.handleToggleKept))

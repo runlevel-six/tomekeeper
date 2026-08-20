@@ -32,6 +32,15 @@ has finished with it. Any one of these keeps it, for everyone:
 | **Read recently** | Not until it is older than the configured window. |
 | **Read, but with no recorded time** | Never expires. Possible for anything marked read before read timestamps existed; the ambiguity resolves toward keeping. |
 
+**Marking read on scroll feeds this queue.** With that preference on, articles reach
+"read recently" by being scrolled past rather than by being opened, so the expiry
+window starts counting on more of the archive and starts counting sooner. Two things
+keep that from being a surprise: starred and saved articles are never marked that
+way, and an article already read keeps its original `read_at` rather than being
+re-stamped every time it goes by. If retention is switched on, this is the preference
+to think about first — it is the difference between "bodies I read expire" and
+"bodies I scrolled past expire".
+
 **Starring is permanent protection, even after you unstar.** Starring stamps
 `saved_at`, and unstarring deliberately leaves it — that is what keeps a starred
 article reachable after the feed that introduced it is gone. The consequence is

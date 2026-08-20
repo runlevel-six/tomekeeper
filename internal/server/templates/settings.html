@@ -50,6 +50,30 @@
       {{end}}
     </fieldset>
 
+    <fieldset>
+      <legend>Reading</legend>
+      <label class="checkbox">
+        <input type="checkbox" name="mark_on_scroll" {{if .MarkOnScroll}}checked{{end}}>
+        Mark articles read as I scroll past them
+      </label>
+      {{/*
+        What it does and what it will not do, in the place where somebody is
+        deciding whether to switch it on. The exclusions are the part worth stating:
+        a reader who has starred something has said it matters, and scrolling past it
+        is not a decision to be done with it.
+      */}}
+      <p class="note">
+        On the unread lists only. An article counts as read once it has been on
+        screen for a moment and then scrolled off the top — a fast flick down the
+        page marks nothing. Moving past a row with <kbd>j</kbd> counts too.
+      </p>
+      <p class="note">
+        Starred and saved articles are never marked this way, and nothing else is
+        touched: the archive keeps everything, and any row can be marked unread
+        again with its own button.
+      </p>
+    </fieldset>
+
     <button type="submit">Save</button>
   </form>
 

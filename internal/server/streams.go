@@ -96,6 +96,18 @@ type streamSpec struct {
 	// are per-article decisions, so a bulk control over them answers a question
 	// nobody asked.
 	Markable bool
+
+	// ScrollMarkable says whether this list marks articles read as they are
+	// scrolled past, for a reader who asked for that.
+	//
+	// Narrower than Markable, and the narrowness is the point. Marking a list read
+	// in bulk is a thing somebody chose to do to a list they are looking at; this
+	// happens to whatever goes by, so it belongs only where going past something is
+	// itself the act of finishing with it. That is the unread lists. Everything, a
+	// category, a feed or a tag is where a reader goes to *find* an article, and
+	// scrolling through the archive looking for one must not quietly mark the
+	// archive read on the way.
+	ScrollMarkable bool
 }
 
 // feedStream and friends build the token for a list that needs an argument.
@@ -293,11 +305,12 @@ func (s *Server) streamSpecFor(ctx context.Context, userID store.UserID, token s
 func (s *Server) unreadSpec() streamSpec {
 	return streamSpec{
 		Token: streamUnread, Nav: "unread", Heading: "Unread", Path: "/",
-		Empty:      "Nothing unread. The worker fills this in as feeds are polled.",
-		Query:      store.StreamQuery{UnreadOnly: true},
-		Ordered:    true,
-		Narrowable: true,
-		Markable:   true,
+		Empty:          "Nothing unread. The worker fills this in as feeds are polled.",
+		Query:          store.StreamQuery{UnreadOnly: true},
+		Ordered:        true,
+		Narrowable:     true,
+		Markable:       true,
+		ScrollMarkable: true,
 	}
 }
 
@@ -320,10 +333,11 @@ func (s *Server) unreadCategorySpec(name string) streamSpec {
 		Path:    "/?" + url.Values{"category": {name}}.Encode(),
 		Empty: "Nothing unread from the feeds in this category. Everything they have " +
 			"carried is still in the archive, under Categories.",
-		Query:      store.StreamQuery{UnreadOnly: true, Category: name, Categorized: true},
-		Ordered:    true,
-		Narrowable: true,
-		Markable:   true,
+		Query:          store.StreamQuery{UnreadOnly: true, Category: name, Categorized: true},
+		Ordered:        true,
+		Narrowable:     true,
+		Markable:       true,
+		ScrollMarkable: true,
 	}
 }
 

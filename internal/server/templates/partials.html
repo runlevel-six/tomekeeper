@@ -8,8 +8,15 @@
   there is nowhere to hover to find out on a touchscreen.
 */}}
 
+{{/*
+  OOB marks this fragment as an out-of-band swap, which is how a response that was
+  not aimed at these controls can still leave them correct — the batch of rows
+  marked read on scroll comes back as one response carrying several of these. The
+  same template either way, so the controls after an automatic mark are the controls
+  the row would have rendered had the page been reloaded.
+*/}}
 {{define "actions"}}
-<span class="actions" id="actions-{{.ArticleID}}">
+<span class="actions" id="actions-{{.ArticleID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
   <form method="post" action="/articles/{{.ArticleID}}/star"
         hx-post="/articles/{{.ArticleID}}/star"
         hx-target="#actions-{{.ArticleID}}" hx-swap="outerHTML">

@@ -1,7 +1,14 @@
 {{define "title"}}{{.Heading}} — Tomekeeper{{end}}
 
 {{define "content"}}
-<div class="stream" id="stream" data-keyboard="stream">
+{{/*
+  data-mark-on-scroll turns on the script that marks rows read as they go past. An
+  attribute on the list rather than a flag inside a script tag, for the same reason
+  the unread count is one: the content security policy has no 'unsafe-inline'. Both
+  halves of the decision — the reader's preference and this list's willingness — are
+  already resolved in the handler, so its presence is the whole answer.
+*/}}
+<div class="stream" id="stream" data-keyboard="stream"{{if .MarkOnScroll}} data-mark-on-scroll="1"{{end}}>
   <div class="page-head">
     <h1>{{.Heading}}</h1>
 

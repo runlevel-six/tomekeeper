@@ -63,7 +63,8 @@ What is there:
   not keep. Off by default.
 - **Looking at it for hours.** Six palettes plus the neutral one it starts with,
   each following your system light/dark preference or pinned to one, chosen from a
-  settings page.
+  settings page. Optionally, articles mark themselves read as you scroll past them
+  on the unread lists — off by default, and never for anything starred or saved.
 - **Running it.** Kubernetes manifests that stand up the service, its worker, its
   PostgreSQL, a migration Job and a nightly backup CronJob, plus Prometheus metrics
   on their own port — deliberately not the port the reader is on.

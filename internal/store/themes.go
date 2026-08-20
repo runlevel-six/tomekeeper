@@ -94,15 +94,9 @@ func SplitTheme(value string) (palette, mode string) {
 	return value, ""
 }
 
-// GetTheme returns the reader's stored palette.
-func (s *Store) GetTheme(ctx context.Context, userID UserID) (string, error) {
-	var theme string
-	if err := s.pool.QueryRow(ctx,
-		`SELECT COALESCE(theme, 'auto') FROM users WHERE id = $1`, userID).Scan(&theme); err != nil {
-		return "auto", fmt.Errorf("reading the theme for user %d: %w", userID, err)
-	}
-	return theme, nil
-}
+// The palette is read with the rest of the reader's settings rather than on its
+// own; see GetPreferences in preferences.go. One query for one row of
+// preferences, however many of them there come to be.
 
 // SetTheme stores the reader's palette.
 func (s *Store) SetTheme(ctx context.Context, userID UserID, theme string) error {

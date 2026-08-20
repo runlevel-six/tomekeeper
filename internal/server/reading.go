@@ -35,6 +35,11 @@ type pageData struct {
 	// Theme is the value for <html data-theme>. Rendered into every page rather
 	// than applied by a script, so the palette is right in the first paint.
 	Theme string
+
+	// MarkReadOnScroll is the reader's preference, not a decision about this page:
+	// which lists act on it is the list's own business. Off unless they turned it
+	// on.
+	MarkReadOnScroll bool
 }
 
 func (s *Server) pageData(r *http.Request, nav string) pageData {
@@ -43,11 +48,14 @@ func (s *Server) pageData(r *http.Request, nav string) pageData {
 	d := pageData{User: userID, Username: s.cfg.Username, Nav: nav, Path: selfPath(r)}
 
 	// A failed lookup costs the reader their palette for one page, which is a
-	// far better outcome than costing them the page.
-	if theme, err := s.store.GetTheme(r.Context(), userID); err != nil {
-		s.log.Warn("reading the theme failed", "error", err)
+	// far better outcome than costing them the page. Automatic marking falls back
+	// to off for the same reason it defaults to off: a preference that fails open
+	// would change state on a page that could not read the preference.
+	if prefs, err := s.store.GetPreferences(r.Context(), userID); err != nil {
+		s.log.Warn("reading preferences failed", "error", err)
 	} else {
-		d.Theme = theme
+		d.Theme = prefs.Theme
+		d.MarkReadOnScroll = prefs.MarkReadOnScroll
 	}
 
 	// A failed count is not worth failing a page over — the reader came here to
@@ -80,6 +88,12 @@ type streamPage struct {
 
 	// Mark is the state of this list's mark-all-read control.
 	Mark markControl
+
+	// MarkOnScroll turns on the script that marks rows read as they go past: the
+	// reader's preference and this list's own willingness, resolved here rather than
+	// in the template so that the two halves cannot be checked in one place and
+	// forgotten in another.
+	MarkOnScroll bool
 }
 
 // markControl is the "mark all as read" control on a stream page: whether to
@@ -237,6 +251,10 @@ func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec strea
 	// and a reader scrolling through forty pages of articles should not pay for it
 	// forty times.
 	page.Categories = s.categoryPills(r.Context(), userID, spec)
+
+	// Same reasoning, and the same place: the attribute sits on the list's
+	// container, which a fragment of rows does not redraw.
+	page.MarkOnScroll = spec.ScrollMarkable && page.MarkReadOnScroll
 
 	page.Mark.From, page.Mark.Path = spec.Token, spec.Path
 	if spec.Markable {
@@ -941,6 +959,10 @@ type actions struct {
 	Read      bool
 	Starred   bool
 	Kept      bool
+
+	// OOB asks for an out-of-band swap, for a response that carries controls it was
+	// not aimed at. See the comment on the partial.
+	OOB bool
 }
 
 func (s *Server) handleToggleRead(w http.ResponseWriter, r *http.Request) {

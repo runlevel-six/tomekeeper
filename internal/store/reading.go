@@ -292,6 +292,94 @@ func (s *Store) MarkReadIn(ctx context.Context, userID UserID, q StreamQuery) (i
 	return tag.RowsAffected(), nil
 }
 
+// MarkReadAutomatically marks named articles read without anybody having pressed
+// anything, and reports how many it actually marked.
+//
+// The name says automatically because that is what the extra conditions are for.
+// An explicit mark — the button on a row, or MarkReadIn over a list the reader
+// confirmed — does what it was told. This one is the reader having scrolled past
+// something, so it is deliberately more careful:
+//
+//   - Starred and saved articles are never touched. Both are somebody having said
+//     "this one matters", and scrolling past a thing you kept is not a decision to
+//     be done with it. This is the exclusion the request for the feature named.
+//   - Only rows that are actually unread are written, so read_at keeps the moment
+//     an article was first read. Retention measures from that column, so pushing
+//     it forward would quietly extend the life of an article the reader finished
+//     weeks ago.
+//
+// Ids come from a page the reader is looking at, but they are not trusted:
+// visibleArticles bounds this to their own archive, which is what stops a
+// hand-made request from confirming what somebody else has by marking it.
+//
+// Note the two meanings of `st` below, which is the same shape MarkReadIn has:
+// inside visibleArticles it is that subquery's own alias, and outside it is the
+// join that carries this reader's state row.
+func (s *Store) MarkReadAutomatically(ctx context.Context, userID UserID, ids []ArticleID) ([]MarkedRead, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	raw := make([]int64, len(ids))
+	for i, id := range ids {
+		raw[i] = int64(id)
+	}
+
+	// One row per article — the state join is on its primary key — so ON CONFLICT
+	// cannot be handed the same row twice, however many of the reader's feeds carry
+	// the story.
+	//
+	// RETURNING rather than a count, because the caller has to redraw the controls on
+	// exactly the rows that changed, and a number cannot say which those were. Two
+	// requests marking overlapping ids therefore each report only what they really
+	// wrote.
+	rows, err := s.pool.Query(ctx, `
+		INSERT INTO article_state (user_id, article_id, read, read_at)
+		SELECT $1, a.id, true, now()
+		FROM articles a
+		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
+		WHERE a.id = ANY($2)
+		  AND `+visibleArticles+`
+		  AND NOT COALESCE(st.read, false)
+		  AND NOT COALESCE(st.starred, false)
+		  AND st.saved_at IS NULL
+		ON CONFLICT (user_id, article_id) DO UPDATE
+		SET read = true,
+		    read_at = COALESCE(article_state.read_at, now())
+		RETURNING article_id, kept`,
+		userID, raw)
+	if err != nil {
+		return nil, fmt.Errorf("marking %d articles read automatically for user %d: %w",
+			len(ids), userID, err)
+	}
+	defer rows.Close()
+
+	var marked []MarkedRead
+	for rows.Next() {
+		var m MarkedRead
+		if err := rows.Scan(&m.ArticleID, &m.Kept); err != nil {
+			return nil, fmt.Errorf("scanning an automatically marked article: %w", err)
+		}
+		marked = append(marked, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("reading automatically marked articles: %w", err)
+	}
+	return marked, nil
+}
+
+// MarkedRead is one article MarkReadAutomatically wrote, with the rest of the
+// state a caller needs to redraw its controls.
+//
+// Starred is absent rather than false-by-omission: the query cannot mark a starred
+// article, so anything in this list is necessarily unstarred. Kept has to be
+// carried, because keeping is orthogonal — an article can be kept and unread — and
+// a control redrawn without it would report a kept article as not kept.
+type MarkedRead struct {
+	ArticleID ArticleID
+	Kept      bool
+}
+
 // Stream returns a page of the user's articles, newest first.
 func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]StreamItem, error) {
 	limit := q.Limit
