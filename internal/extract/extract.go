@@ -584,7 +584,13 @@ func (e *Extractor) viaFeedBody(in Input, pageURL *url.URL) (Result, bool) {
 	// article, and storing it as one would make the archive look complete
 	// when it is not.
 	if len(text) < minChars {
-		return Result{}, false
+		// The measured text comes back even though this rung is refusing it, so that
+		// the explanation can say how short it actually was. Returning a zeroed Result
+		// here made every rejection report "0 characters" — indistinguishable between a
+		// feed body of pure markup and one that missed the floor by a single character,
+		// and it sent somebody looking for a data-loss bug that did not exist. The false
+		// is what stops it being used; the number is only ever read for the report.
+		return Result{Text: text}, false
 	}
 
 	return e.finish(NameFeedBody, body, text, pageURL, metadata{}), true
