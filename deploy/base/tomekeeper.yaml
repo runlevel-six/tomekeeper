@@ -52,6 +52,44 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Wait for the schema this image needs, rather than starting against an
+        # older one.
+        #
+        # `tome serve` refuses to serve a schema it predates — correctly — which
+        # without this means a 503 readiness probe, an Ingress with no backend,
+        # and a site that is down until somebody runs the migration. Kubernetes
+        # cannot be told "apply the Job before these Deployments", because an
+        # apply has no ordering, so the ordering lives here instead: the pod that
+        # needs the schema is the thing that waits for it.
+        #
+        # What this buys is that a mis-ordered deploy becomes visible instead of
+        # damaging. The pod sits in Init with the reason in its log, and under the
+        # Recreate strategy the old pod is already gone — so this does not save
+        # the downtime, it saves the crash loop and the guessing. It also waits
+        # for Postgres itself, which is why there is no separate wait-for-postgres
+        # container here.
+        #
+        # It migrates nothing. That stays a deliberate step: see migrate.yaml.
+        - name: await-schema
+          image: ghcr.io/runlevel-six/tomekeeper:latest
+          args: ["await-schema"]
+          envFrom:
+            - configMapRef:
+                name: tomekeeper-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: tomekeeper, key: postgres-password }
+            - name: TOME_DATABASE_URL
+              value: postgres://tome:$(POSTGRES_PASSWORD)@postgres:5432/tome?sslmode=disable
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
       containers:
         - name: server
           image: ghcr.io/runlevel-six/tomekeeper:latest
@@ -151,6 +189,31 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # The same wait as the server's, and it matters more here: `tome worker`
+        # exits on an old schema rather than staying up unready, so without this
+        # the worker enters CrashLoopBackOff — where the backoff stretches to five
+        # minutes and keeps the queue stopped long after the migration lands. A
+        # pod waiting in Init recovers the moment the schema arrives.
+        - name: await-schema
+          image: ghcr.io/runlevel-six/tomekeeper:latest
+          args: ["await-schema"]
+          envFrom:
+            - configMapRef:
+                name: tomekeeper-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: tomekeeper, key: postgres-password }
+            - name: TOME_DATABASE_URL
+              value: postgres://tome:$(POSTGRES_PASSWORD)@postgres:5432/tome?sslmode=disable
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
       containers:
         - name: worker
           image: ghcr.io/runlevel-six/tomekeeper:latest

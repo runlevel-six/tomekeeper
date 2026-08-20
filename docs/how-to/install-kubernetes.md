@@ -13,6 +13,7 @@ You need a cluster with an ingress controller, a storage class that can provisio
 | `tomekeeper-server` | the reader, behind the Ingress |
 | `tomekeeper-worker` | polling, fetching, extraction |
 | `tomekeeper-migrate` | a Job: applies the schema and creates the user |
+| `await-schema` | an initContainer on both Deployments: waits for the migration rather than starting without it |
 | `tomekeeper-blobs` | the archive — stored pages, bodies, images |
 | `tomekeeper-backups` | nightly `pg_dump` output |
 
@@ -178,6 +179,35 @@ kubectl -n tomekeeper delete job tomekeeper-migrate --ignore-not-found
 kubectl apply -k deploy/overlays/local
 kubectl -n tomekeeper wait --for=condition=complete job/tomekeeper-migrate --timeout=5m
 ```
+
+Run those three in that order, every time, and read the middle one's output. What
+goes wrong otherwise, from an outage on 2026-08-20:
+
+- **`apply -k` creates the Job only if one is not already there.** It carries
+  `ttlSecondsAfterFinished: 600`, so it usually is not — but apply inside that
+  ten-minute window is a no-op, and nothing re-runs. Hence the delete first.
+- **An apply orders nothing.** Kubernetes has no dependency between resources in
+  one apply, so the Job and the Deployments go out together and race.
+- **Following `:latest` means an apply changes no spec, so it triggers no
+  rollout.** That is what leads to restarting the deployments by hand — and a
+  manual restart afterwards has no relationship to the Job at all. It is also how
+  the Job and the pods end up on *different* builds: the Job pulls `:latest` when
+  it runs, so a Job that ran while CI was still publishing migrates to the
+  previous head and reports success. Pin the overlay to `sha-<commit>` and this
+  whole failure mode goes away: the apply changes the spec, the rollout is real
+  and ordered after the Job, and both run the same bytes.
+
+Since the `await-schema` initContainer landed, a mis-ordered deploy degrades
+rather than breaks: the pods wait in `Init` with the reason in their logs instead
+of crash-looping. Check that first when a deploy appears stuck.
+
+```bash
+kubectl -n tomekeeper logs -l app.kubernetes.io/component=worker -c await-schema
+```
+
+Note the ordering trap in the improvement itself: the initContainer runs
+`tome await-schema`, so the manifests must not be applied to a cluster whose image
+predates that subcommand. Publish the image first, then apply.
 
 ## Metrics
 

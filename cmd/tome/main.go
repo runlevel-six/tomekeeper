@@ -71,6 +71,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "explain":
 		return explain(args[1:], stdout, stderr)
 
+	case "await-schema":
+		return awaitSchema(args[1:], stdout, stderr)
+
 	case "healthcheck":
 		return healthcheck(args[1:], stdout, stderr)
 
@@ -107,6 +110,7 @@ Subcommands:
   archive       Report on what the archive holds
   corpus        Capture a real page into the private extraction corpus
   explain       Say what the extraction ladder did to one article, and why
+  await-schema  Wait until the database carries this build's migrations
   healthcheck   Ask a running server whether it is alive (for container probes)
   version       Print build version and exit
   help          Print this message

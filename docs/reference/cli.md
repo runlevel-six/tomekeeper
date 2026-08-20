@@ -120,6 +120,68 @@ password set for "tome"
 the Fever API key changed with it; mobile clients will need reconnecting
 ```
 
+### `tome await-schema`
+
+Blocks until the database carries the migrations this build needs, then exits `0`.
+Migrates nothing.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--timeout` | `5m` | How long to wait before giving up and exiting `1`. |
+| `--interval` | `2s` | How long to wait between checks. Must be positive. |
+
+This exists to be an initContainer, and the deployment manifests use it as one on
+both Deployments. `serve` and `worker` both refuse to run against a schema older
+than the binary, which is correct and which makes a mis-ordered deploy expensive:
+the worker enters `CrashLoopBackOff` and the server fails readiness with `503`, so
+the Ingress loses its backend and the archive is down until somebody runs the
+migration Job.
+
+Kubernetes has no dependency ordering inside an apply — there is no way to say
+"this Job before those Deployments" — so the ordering is expressed at runtime by
+the pods that need it. With this in front of them, the same mistake produces pods
+sitting in `Init` with the reason in their logs.
+
+Every outcome except "current" is waited on rather than failed, the database being
+unreachable included: Postgres still starting is the most common thing this sees
+and it fixes itself. That is also why the migration Job's `wait-for-postgres`
+container has no equivalent here — this covers both.
+
+A schema *newer* than the binary needs is treated as current. That is a rollback in
+progress, and the older binary's queries work against a superset schema.
+
+```console
+$ tome await-schema
+schema version 6 is current for this build
+```
+
+Giving up names the remedy rather than the timeout:
+
+```console
+$ tome await-schema --timeout 30s
+{"level":"INFO","msg":"waiting for the database schema","reason":"the database is at schema
+ version 5 and this build needs 6; waiting for the migration to be applied","attempt":1}
+{"level":"ERROR","msg":"gave up waiting for the database schema","reason":"...","waited":"30s",
+ "remedy":"run the migration Job: `tome migrate`"}
+```
+
+The waiting line is logged when the reason changes, not once per attempt: at two
+seconds apart a five-minute wait would be 150 identical lines.
+
+### `tome healthcheck`
+
+Asks a running server whether it is alive, exiting `0` when `/healthz` answers
+`200` and `1` otherwise. `--addr` defaults to `TOME_HTTP_ADDR` then `:8080`;
+`--timeout` defaults to `3s`.
+
+For Docker and Compose, which can only exec a command — the image is distroless,
+so there is no `curl` or `wget` inside it to run. Kubernetes makes HTTP probes
+itself and does not need this.
+
+Liveness, not readiness, matching what an orchestrator should restart on:
+`/healthz` answers without consulting the database, so a Postgres restart does not
+get every container killed alongside it.
+
 ### `tome import-opml`
 
 Adds subscriptions from an OPML file exported by another feed reader.
@@ -1011,21 +1073,45 @@ is why the page draws the navigation it does:
 
 HTML responses carry
 `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self';
-img-src 'self' data:; connect-src 'self'; manifest-src 'self'; form-action 'self';
-base-uri 'none'; frame-ancestors 'none'`.
+img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self';
+form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
 
 Nothing is `unsafe-inline` and nothing is third-party. That is affordable precisely
-because the script is vendored and the images are localized — a page needing a CDN
-could not have a policy this tight.
+because the script and the fonts are vendored and the images are localized — a page
+needing a CDN could not have a policy this tight.
 
-`manifest-src` is there because `default-src 'none'` blocks the web app manifest
-outright, and the symptom is not an error anyone sees: "add to home screen" simply
-offers a generic icon and the wrong name.
+Two directives are here because `default-src 'none'` blocks something whose absence
+does not report itself:
 
-Archived images are served `Cache-Control: public, max-age=31536000, immutable`.
-They are content-addressed, so the bytes at a path genuinely never change; this is
-the one place in the application where an immutable cache is a fact rather than a
-hopeful guess.
+- `manifest-src`, without which "add to home screen" simply offers a generic icon
+  and the wrong name.
+- `font-src`, without which an `@font-face` pointing at this origin fails silently
+  and every page renders in the fallback stack — indistinguishable from a reader
+  who does not have the font installed.
+
+### Static asset caching
+
+| Path | `Cache-Control` |
+|---|---|
+| `/static/…` | `public, max-age=300` |
+| `/static/vendor/…` | `public, max-age=31536000, immutable` |
+| `/assets/…` | `public, max-age=31536000, immutable` |
+
+The split is the naming rule: everything under `vendor/` carries its version in its
+filename, so those bytes never change and an upgrade is a different URL. The
+stylesheet does not, so it keeps a short cache — a year-long one would strand a
+changed stylesheet in every browser after an upgrade.
+
+It matters most for the fonts, which are 320KB: on the stylesheet's policy a reader
+would revalidate them every five minutes forever, which would make shipping fonts
+slower than the system stacks they replace.
+
+Archived images under `/assets/…` are content-addressed, so there an immutable cache
+is a fact about the bytes rather than a promise about naming discipline.
+
+`.woff2` responses are typed `font/woff2` explicitly rather than by extension
+lookup. Go's `mime` package has no builtin entry for it and resolves the extension
+through `/etc/mime.types`, which the distroless runtime image does not have.
 
 ### `GET /healthz` — liveness
 
