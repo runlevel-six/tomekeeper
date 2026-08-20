@@ -249,7 +249,23 @@ func Load(lookup LookupFunc) (*Config, error) {
 		u, err := url.Parse(raw)
 		switch {
 		case err != nil:
-			problems = append(problems, fmt.Errorf("%sDATABASE_URL is not a valid URL: %w", Prefix, err))
+			// The parse error is deliberately not wrapped, and neither is the value.
+			// url.Parse embeds the whole URL in its error — password included — and
+			// even its reason quotes the fragment it choked on, which for the common
+			// failure *is* the password. This message goes to stderr in every pod that
+			// cannot start, so wrapping it would print a credential into the container
+			// log of a service that is otherwise careful never to (see LogValue).
+			//
+			// The named characters are the whole practical cause. A password containing
+			// `/` ends the authority section and the URL stops parsing there; this was
+			// found by following this project's own installation instructions, which
+			// generated the password with base64 and so produced one containing a slash
+			// about 40% of the time.
+			problems = append(problems, fmt.Errorf(
+				"%sDATABASE_URL is not a valid URL. If the password contains any of "+
+					"/ @ ? # it must be percent-encoded, or the URL stops parsing at that "+
+					"character. The value is not repeated here because it holds a password",
+				Prefix))
 		case u.Scheme != "postgres" && u.Scheme != "postgresql":
 			problems = append(problems, fmt.Errorf(
 				"%sDATABASE_URL has scheme %q, want \"postgres\" or \"postgresql\"", Prefix, u.Scheme))

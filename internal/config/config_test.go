@@ -230,3 +230,45 @@ func renderLogValue(cfg *config.Config) string {
 	slog.New(slog.NewTextHandler(&b, nil)).Info("test", "config", cfg)
 	return b.String()
 }
+
+// A database password containing a URL-special character is the first-run failure
+// this project shipped instructions for, and the error it produced leaked the
+// password.
+//
+// Both halves are asserted here. The message has to name the cause, because
+// "not a valid URL" about a value nobody typed by hand sends an operator looking at
+// the wrong thing entirely — and it must not echo the value, because this runs in
+// every pod that cannot start and stderr is a container log. The config summary is
+// careful about secrets; an error message that undid that would be the same secret
+// somewhere more visible.
+func TestAnUnparseableDatabaseURLNeitherEchoesNorMystifies(t *testing.T) {
+	// Exactly the shape `openssl rand -base64 24` used to hand out: a slash in the
+	// password, which ends the authority section.
+	const password = "NITVMRxV07fvDj3qYD/6oID9EiGuabFG"
+	dsn := "postgres://tome:" + password + "@postgres:5432/tome?sslmode=disable"
+
+	_, err := config.Load(env(map[string]string{"TOME_DATABASE_URL": dsn}))
+	if err == nil {
+		t.Fatal("Load() accepted a DSN whose password breaks the URL")
+	}
+	msg := err.Error()
+
+	// It says which characters, so the remedy is readable from the message.
+	for _, want := range []string{"TOME_DATABASE_URL is not a valid URL", "percent-encoded", "/"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("the error does not mention %q:\n%s", want, msg)
+		}
+	}
+
+	// And it does not carry the credential. Checked against the password and against
+	// the fragment url.Parse quotes back, which is a prefix of it.
+	if strings.Contains(msg, password) {
+		t.Errorf("the error message contains the database password:\n%s", msg)
+	}
+	if strings.Contains(msg, "NITVMRxV07fvDj3qYD") {
+		t.Errorf("the error message contains part of the database password:\n%s", msg)
+	}
+	if strings.Contains(msg, dsn) {
+		t.Errorf("the error message contains the whole DSN:\n%s", msg)
+	}
+}

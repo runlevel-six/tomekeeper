@@ -45,15 +45,25 @@ The namespace is not in the kustomization on purpose: if it were, `kubectl delet
 kubectl create namespace tomekeeper
 
 kubectl -n tomekeeper create secret generic tomekeeper \
-  --from-literal=postgres-password="$(openssl rand -base64 24)" \
+  --from-literal=postgres-password="$(openssl rand -hex 24)" \
   --from-literal=session-key="$(openssl rand -base64 32)" \
   --from-literal=password='choose-a-real-password-here'
 ```
 
+> **`-hex` on the database password, not `-base64`, and it matters.** That password is
+> interpolated into `TOME_DATABASE_URL` as `postgres://tome:PASSWORD@postgres:5432/…`,
+> so a `/` in it ends the authority section and the URL stops parsing: every pod exits
+> with `TOME_DATABASE_URL is not a valid URL: invalid port` and the namespace never
+> comes up. Base64's alphabet contains `/`, and 32 base64 characters contain at least
+> one about **40%** of the time — so this page used to hand you a coin flip. Hex has no
+> such characters. This was found on 2026-08-20 by deploying into an empty namespace
+> and losing that flip. The other two keys are read as-is and can be anything.
+
 Three keys, three different jobs:
 
 - **`postgres-password`** — the database password. You never type it; it is
-  interpolated into `TOME_DATABASE_URL` inside the pods.
+  interpolated into `TOME_DATABASE_URL` inside the pods, which is why it has to be
+  URL-safe.
 - **`session-key`** — seals session cookies. Changing it signs you out; losing it
   costs you nothing else.
 - **`password`** — what you sign in with, for the user named by `TOME_USERNAME`
