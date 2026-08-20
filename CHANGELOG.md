@@ -32,7 +32,31 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The Fever API**, so mobile RSS clients can read the archive. `POST /fever/`,
+  authenticated with `api_key` — MD5 of `username:password`, the credential the
+  protocol specifies and the reason `users.api_key` has existed since the schema was
+  written. Groups, feeds, items, the two id-list sync calls, and marking an item, a
+  feed or a group read. What a client gets in the `html` field is the **extracted
+  body**, not the summary the feed shipped, which is the entire point.
+  See [Fever API](docs/reference/fever-api.md) and
+  [Connect a mobile client](docs/how-to/connect-a-mobile-client.md).
+- **Signed asset URLs.** `GET /assets/…` now accepts either a session, as before, or a
+  `sig=` this service issued. A Fever client renders a body in its own view with no
+  cookie, and an `<img>` tag cannot carry a POSTed credential, so without this every
+  picture in every client is a broken image icon. The signing key is derived from
+  `TOME_SESSION_KEY` with its own HKDF label, so there is nothing new to configure —
+  but rotating that secret now invalidates outstanding image URLs along with every
+  session, and clients recover by re-fetching bodies. URLs last 30 days.
+
+No migration. `users.api_key` was already there.
+
+### Changed
+
+- `TOME_SESSION_KEY` now derives two independent keys rather than one. Generating one
+  at startup, which happens when the variable is unset, therefore also invalidates
+  synced image URLs on every restart — the startup warning says so.
 
 ## [v0.1.0] — 2026-08-20
 

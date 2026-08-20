@@ -8,10 +8,11 @@ commands and settings *are*, see [CLI](../reference/cli.md) and
 
 `tome` is a single Go binary with subcommands. Two of them are long-running:
 
-- `tome serve` — the HTTP surface: the web interface and the health endpoints.
-  A Fever API for mobile clients is planned and does not exist yet; the column it
-  will authenticate against is already written, because it is derived from the
-  password and could not be added afterwards without asking for the password again.
+- `tome serve` — the HTTP surface: the web interface, the Fever API that mobile
+  clients sync against, and the health endpoints. The Fever credential is a column
+  written when the password is set rather than derived on demand, because MD5 of the
+  cleartext cannot be recovered from an argon2id hash — which is why that column
+  predates the API that reads it.
 - `tome worker` — the job pool: feed polling, fetching, extraction, image
   localization, and retention.
 

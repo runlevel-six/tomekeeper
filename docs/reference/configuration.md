@@ -18,7 +18,7 @@ prevents the process from starting; it is never deferred to first use.
 | `TOME_SHUTDOWN_TIMEOUT` | duration | `15s` | no | Time allowed for in-flight requests to finish after a termination signal. Must be positive. Go duration syntax (`30s`, `1m`, `1m30s`). |
 | `TOME_USERNAME` | string | `tome` | no | The single v1 user, created by `tome migrate`. Changing it renames the existing user rather than creating a second one. |
 | `TOME_PASSWORD` | string | — | no | Password for the single user. Read **only by `tome migrate`**, which stores an argon2id hash and derives the Fever API key from it. `tome serve` never reads it. Unset leaves any existing password alone; unset on a first run means the web interface cannot be signed into. Setting it always rotates the Fever key, so mobile clients need reconnecting. |
-| `TOME_SESSION_KEY` | string | — | no | Secret that session cookies are sealed with. Unset means one is generated at startup, so sessions work but do not survive a restart — `tome serve` warns when this happens. Generate with `openssl rand -base64 32`. Any length is accepted and stretched with HKDF, which does not manufacture entropy: a short secret is a weak secret. |
+| `TOME_SESSION_KEY` | string | — | no | Secret that session cookies are sealed with, **and** that the signed image URLs in a Fever response are signed with — two independent keys derived from it with different HKDF labels. Unset means one is generated at startup, so sessions work but do not survive a restart, and image URLs already synced to a mobile client stop loading; `tome serve` warns when this happens. Generate with `openssl rand -base64 32`. Any length is accepted and stretched with HKDF, which does not manufacture entropy: a short secret is a weak secret. |
 | `TOME_COOKIE_SECURE` | bool | `true` | no | Sets the `Secure` attribute on the session cookie, so it is only sent over HTTPS. Leave it on. Turn it off **only** when serving plain HTTP on a trusted network — browsers treat `localhost` as secure already, so a local first run does not need it. |
 | `TOME_METRICS_ADDR` | host:port | `:9090` | no | Listen address for the Prometheus endpoint, served by both `serve` and `worker`. Empty disables it. **Deliberately not on the main HTTP port:** an Ingress routing `/` would publish it, and the outbound metrics name every host the archive fetches from. See [Metrics](metrics.md). |
 | `TOME_RETAIN_AFTER_READ` | duration | unset | no | How long a **read** article keeps its stored body and images before they are released. Unset or `0` keeps everything forever, which is the default. Starred, kept, and manually saved articles are never expired at any setting. Values under `1h` are rejected, because a typo here deletes an archive. See [Retention](retention.md). |
@@ -69,6 +69,11 @@ caller, however careless.
 
 `TOME_SESSION_KEY` is likewise absent from the log. The summary reports only
 whether one was configured, which is the operationally useful fact.
+
+Rotating it signs everybody out **and** invalidates the image URLs outstanding in any
+mobile client's cache. Those recover on their own — a client re-fetching a body gets
+freshly signed ones — but it is worth knowing before rotating the key to fix something
+else. See [the Fever API](fever-api.md#bodies-and-images).
 
 It is also deliberately scoped to one command. `tome serve` authenticates against
 the stored hash and has no use for the cleartext, so the secret belongs to the

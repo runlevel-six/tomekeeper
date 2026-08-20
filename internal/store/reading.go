@@ -107,6 +107,19 @@ type StreamQuery struct {
 	// stream itself lie about what is unread.
 	ReadWithin time.Duration
 
+	// SortedBefore, when set, admits only articles whose place in reading order is
+	// strictly earlier than this instant.
+	//
+	// Distinct from BeforeSort and BeforeID below, and the difference is why this is
+	// a third field rather than a reuse of those two. They are a keyset cursor —
+	// paging state, discarded by the bulk operations because "mark this list read"
+	// means the list rather than the page a reader can see. This is a filter on what
+	// the list *contains*, so it survives into the bulk operations, which is the
+	// whole reason it exists: the Fever protocol's mark-feed and mark-group calls
+	// carry a `before` timestamp so that items which arrived after the client last
+	// synced are not marked read sight unseen.
+	SortedBefore time.Time
+
 	// Limit caps the page. Zero means DefaultStreamLimit.
 	Limit int
 
@@ -207,6 +220,13 @@ func (q StreamQuery) filter(userID UserID) streamFilter {
 		add(`EXISTS (SELECT 1 FROM article_tags at2 JOIN tags t2 ON t2.id = at2.tag_id
 		             WHERE at2.article_id = a.id AND t2.id = ? AND t2.user_id = $1)`, q.TagID)
 	}
+	if !q.SortedBefore.IsZero() {
+		// The same expression the streams are ordered by, so "everything before the
+		// moment I last synced" means the same thing to a filter as it does to the
+		// list it filters. Comparing against first_seen_at alone would let an article
+		// with an older publication date escape a mark it was displayed above.
+		add(streamSortKey+` < ?`, q.SortedBefore)
+	}
 	if q.Categorized {
 		// COALESCE on the way in as well as the way out: the column is nullable and
 		// an OPML file with a top-level feed stores NULL, so comparing it directly
@@ -227,6 +247,11 @@ func (q StreamQuery) filter(userID UserID) streamFilter {
 // exists to keep a list stable while somebody reads it, and admitting
 // already-read articles into a count of unread ones would simply be a wrong
 // number, then a wrong number of rows written.
+//
+// SortedBefore deliberately survives. It is the one field here that narrows what the
+// list contains rather than which slice of it is being looked at, and a bulk mark
+// that discarded it would mark articles the caller explicitly excluded — which for
+// the Fever callers is every article that arrived since the client last synced.
 func (q StreamQuery) unreadOnly() StreamQuery {
 	q.UnreadOnly = true
 	q.ReadWithin = 0

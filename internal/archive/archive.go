@@ -202,21 +202,48 @@ func RelativizeAssets(body, articleDir string) string {
 		return body
 	}
 
+	return MapAssetRefs(body, func(value string) string {
+		return prefix + strings.TrimPrefix(value, "/")
+	})
+}
+
+// MapAssetRefs rewrites every root-relative asset reference in a body through
+// rewrite, and leaves everything else alone.
+//
+// One definition of *where* an asset reference can appear, shared by the two
+// callers that need to move them. RelativizeAssets above turns them into paths a
+// browser can follow from a file:// URL; the Fever API turns them into absolute
+// signed URLs a mobile client can fetch without a session. The transformations have
+// nothing in common, but the set of attributes does — and srcset in particular is
+// fiddly enough that a second copy of this traversal would be a second chance to
+// get it wrong, in a way whose only symptom is a missing picture.
+//
+// rewrite is called with the reference as stored, always beginning with
+// AssetURLPrefix. A body that cannot be parsed is returned unchanged, which is the
+// same failure this has always taken: an unrewritten reference shows a broken image,
+// while a half-rewritten body could show the wrong one.
+func MapAssetRefs(body string, rewrite func(string) string) string {
+	if body == "" {
+		return body
+	}
+
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
 	if err != nil {
 		return body
 	}
 
-	rewrite := func(value string) string {
+	// Guarded here rather than in every caller, so that a caller's rewrite function
+	// only ever sees the references it is entitled to change.
+	guarded := func(value string) string {
 		if !strings.HasPrefix(value, AssetURLPrefix) {
 			return value
 		}
-		return prefix + strings.TrimPrefix(value, "/")
+		return rewrite(value)
 	}
 
 	doc.Find("img[src], source[src], video[src], audio[src]").Each(func(_ int, node *goquery.Selection) {
 		if value, ok := node.Attr("src"); ok {
-			node.SetAttr("src", rewrite(value))
+			node.SetAttr("src", guarded(value))
 		}
 	})
 
@@ -231,7 +258,7 @@ func RelativizeAssets(body, articleDir string) string {
 			if len(fields) == 0 {
 				continue
 			}
-			fields[0] = rewrite(fields[0])
+			fields[0] = guarded(fields[0])
 			candidates[i] = strings.Join(fields, " ")
 		}
 		node.SetAttr("srcset", strings.Join(candidates, ", "))

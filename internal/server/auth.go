@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/runlevel-six/tomekeeper/internal/asseturl"
 	"github.com/runlevel-six/tomekeeper/internal/auth"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
@@ -51,6 +52,31 @@ func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, userID)))
+	}
+}
+
+// requireUserOrSignature admits a request carrying either a valid session or a
+// valid signature from this service.
+//
+// One route uses this: archived images. The web reader reaches them with a session
+// and always has; a Fever client renders an article body in its own view with no
+// cookie to offer, so the URLs in that body carry a signature instead. See
+// internal/asseturl for what the signature covers and why the key comes from the
+// session secret.
+//
+// The order matters and is deliberate: the signature is checked first, so an image
+// fetch never touches the session store, and a request whose signature has expired
+// falls through to the session path rather than being refused outright. A reader with
+// both simply gets served.
+func (s *Server) requireUserOrSignature(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.assetURLs != nil {
+			if s.assetURLs.Verify(r.URL.Path, r.URL.Query().Get(asseturl.SignatureParam)) {
+				next(w, r)
+				return
+			}
+		}
+		s.requireUser(next)(w, r)
 	}
 }
 

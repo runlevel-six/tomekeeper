@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/runlevel-six/tomekeeper/internal/asseturl"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
@@ -62,6 +63,14 @@ type Deps struct {
 	// that does the same thing.
 	Jobs *river.Client[pgx.Tx]
 
+	// AssetURLs signs the archived-image URLs that go out in a Fever response.
+	//
+	// Nil is supported and means those bodies carry unsigned paths, so their pictures
+	// do not resolve in a client — the text still syncs, which is the right side to
+	// fail on. The web interface never needs this: it fetches images with the
+	// reader's session.
+	AssetURLs *asseturl.Signer
+
 	// Fetch makes the one outbound request the web interface has a use for:
 	// testing a feed URL somebody is about to subscribe to.
 	//
@@ -75,17 +84,18 @@ type Deps struct {
 // Server wraps an http.Server with this application's routes, timeouts, and
 // shutdown behavior.
 type Server struct {
-	log      *slog.Logger
-	cfg      *config.Config
-	checks   []Check
-	http     *http.Server
-	store    *store.Store
-	sessions session.Store
-	search   store.SearchIndex
-	blobs    blob.Store
-	fetch    *httpclient.Client
-	jobs     *river.Client[pgx.Tx]
-	ui       *ui
+	log       *slog.Logger
+	cfg       *config.Config
+	checks    []Check
+	http      *http.Server
+	store     *store.Store
+	sessions  session.Store
+	search    store.SearchIndex
+	blobs     blob.Store
+	fetch     *httpclient.Client
+	jobs      *river.Client[pgx.Tx]
+	assetURLs *asseturl.Signer
+	ui        *ui
 }
 
 // New builds a server. It does not listen; call Run.
@@ -100,6 +110,7 @@ func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Serv
 		log: log, cfg: cfg, checks: checks,
 		store: deps.Store, sessions: deps.Sessions,
 		search: deps.Search, blobs: deps.Blobs, fetch: deps.Fetch, jobs: deps.Jobs,
+		assetURLs: deps.AssetURLs,
 	}
 	if s.search == nil && s.store != nil {
 		s.search = s.store.Search()
@@ -142,9 +153,21 @@ func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Serv
 //
 // Grouped in one place so that "which routes require a session" is answerable by
 // reading nine lines rather than by auditing every handler. Everything except the
-// sign-in pages and the stylesheet goes through requireUser.
+// sign-in pages, the stylesheet, and the two exceptions immediately below goes
+// through requireUser.
 func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /static/", s.handleStatic)
+
+	// The Fever API carries its own credential — an api_key in the POST body — so it
+	// is authenticated rather than unauthenticated, just not by a session. It is
+	// listed here, at the top and apart, because a route outside requireUser is
+	// exactly the thing an audit of this function is looking for.
+	//
+	// Both spellings are registered on purpose. Go's mux would answer a POST to
+	// "/fever" with a 301 to "/fever/", and a redirected POST is a request whose body
+	// some clients will not send again.
+	mux.HandleFunc("POST /fever/", s.handleFever)
+	mux.HandleFunc("POST /fever", s.handleFever)
 
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLogin)
@@ -215,9 +238,11 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	// archive's automatic rules deliberately leave room for.
 	mux.HandleFunc("POST /articles/{id}/promote", s.requireUser(s.handlePromoteBody))
 
-	// Archived images. Behind requireUser like everything else: the archive is
-	// one person's reading history, and its illustrations are part of it.
-	mux.HandleFunc("GET /assets/", s.requireUser(s.handleAsset))
+	// Archived images. A session, or a signature this service issued: the archive is
+	// one person's reading history and its illustrations are part of it, so the
+	// unsigned route stays closed. The signature exists because a Fever client renders
+	// article bodies with no cookie to offer — see internal/asseturl.
+	mux.HandleFunc("GET /assets/", s.requireUserOrSignature(s.handleAsset))
 }
 
 // Handler exposes the routed handler for tests that do not want a live socket.

@@ -585,8 +585,10 @@ returns `405`. Both set `Cache-Control: no-store` and return
 
 ## Web interface
 
-Served by `tome serve`. Every route except `/login` and `/static/` requires a
-session.
+Served by `tome serve`. Every route requires a session except `/login`, `/static/`,
+and two documented exceptions: `/fever/`, which carries its own credential, and
+`/assets/`, which additionally accepts a signature this service issued. Both are
+described under [Fever API](#fever-api) below.
 
 | Route | Page |
 |---|---|
@@ -625,7 +627,8 @@ session.
 | `POST /feeds/refresh` | Bring every enabled feed forward to due |
 | `POST /settings` | Save preferences. `palette=`, `mode=`, `mark_on_scroll=` and `poll_every=`. Posts every preference it holds, so an absent field is read as off or automatic. |
 | `GET /login`, `POST /login`, `POST /logout` | Session |
-| `GET /assets/…` | Archived images, from `TOME_BLOB_ROOT` |
+| `POST /fever/` | The Fever sync API for mobile clients. Its own credential; see below. |
+| `GET /assets/…` | Archived images, from `TOME_BLOB_ROOT`. A session, or a `sig=` this service issued. |
 | `GET /static/…` | Stylesheet, keyboard script, logo, vendored htmx |
 
 The state-changing `POST` routes take the state they should end in rather than
@@ -1075,6 +1078,44 @@ is why the page draws the navigation it does:
 - The **unread count leads the `<title>`**, as `(12) Unread — Tomekeeper`, and is
   mirrored onto the app icon with the Badging API where the platform has one. The
   count is per page load; nothing polls in the background.
+
+### Fever API
+
+`POST /fever/` is the sync protocol mobile clients speak, and `POST /fever` without the
+trailing slash is registered alongside it so that a client omitting it is not answered
+with a redirect it may not repeat the body for.
+
+It is outside `requireUser` because it authenticates differently, not because it is
+open: the credential is `api_key`, MD5 of `username:password`, held in
+`users.api_key` and written whenever the password is set. A request without a valid one
+gets `{"api_version": 3, "auth": 0}` and nothing else, with **HTTP 200** — this
+protocol reports its result in the body.
+
+Every argument, object, limit and deviation is in
+[the Fever API reference](fever-api.md);
+[How to connect a mobile client](../how-to/connect-a-mobile-client.md) is the setup.
+
+#### Signed asset URLs
+
+`GET /assets/…` accepts a session — as it always has — **or** a signature:
+
+```
+/assets/sha256/a1/b2/….avif?sig=<expiry>.<base64url HMAC-SHA256>
+```
+
+This exists for one caller. A Fever client renders an article body in its own view
+with no session cookie, and an `<img>` tag cannot carry a POSTed credential, so a
+body's image references have to authorize themselves. The signature covers the path
+and the expiry together, so it cannot be moved to another image or extended.
+
+The key is derived from `TOME_SESSION_KEY` by HKDF with the label
+`tomekeeper asset url v1` — a different label from the session cipher's, so the two
+keys are independent. Rotating that secret invalidates outstanding image URLs along
+with every session. URLs last 30 days.
+
+One query parameter rather than two, deliberately: these URLs are written into an HTML
+attribute, where an `&` between parameters serializes as `&amp;`, and whether the image
+then loads would depend on the client's HTML parser rather than on this service.
 
 ### Response headers
 

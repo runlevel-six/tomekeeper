@@ -74,9 +74,14 @@ What is there:
   PostgreSQL, a migration Job and a nightly backup CronJob, plus Prometheus metrics
   on their own port — deliberately not the port the reader is on.
 
-**Not built yet:** mobile-client sync (the Fever API), importing from read-later
-tools other than Wallabag, headless rendering for JavaScript-only sites, and more
-than one user account. Those are planned, roughly in that order.
+- **Reading it on a phone, in an app you already have.** It speaks the Fever sync
+  protocol, so most third-party RSS clients can read the archive — and what they get
+  in the body is the *extracted article*, not the two-sentence summary the feed
+  shipped. Read and starred state syncs both ways; archived images travel with it.
+
+**Not built yet:** importing from read-later tools other than Wallabag, headless
+rendering for JavaScript-only sites, and more than one user account. Those are
+planned, roughly in that order.
 
 ## Quick start
 

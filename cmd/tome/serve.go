@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
+	"github.com/runlevel-six/tomekeeper/internal/asseturl"
 	"github.com/runlevel-six/tomekeeper/internal/auth"
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
@@ -47,7 +48,7 @@ func serve(args []string, stderr io.Writer) int {
 	}
 	defer pool.Close()
 
-	sessions, err := newSessionStore(cfg, log)
+	sessions, assetURLs, err := newCredentials(cfg, log)
 	if err != nil {
 		log.Error("cannot set up sessions", "error", err)
 		return exitFailure
@@ -56,7 +57,7 @@ func serve(args []string, stderr io.Writer) int {
 	// Readiness consults the database; liveness deliberately does not. A
 	// Postgres restart should take this instance out of the load balancer, not
 	// get every replica killed and restarted. See docs/reference/cli.md.
-	deps := server.Deps{Store: store.New(pool), Sessions: sessions}
+	deps := server.Deps{Store: store.New(pool), Sessions: sessions, AssetURLs: assetURLs}
 
 	// Insert-only, and the distinction is the whole point: the web interface queues
 	// re-extraction when somebody presses reprocess on a domain rule, and processes
@@ -168,22 +169,29 @@ func startMetrics(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, l
 	return func() { <-done }
 }
 
-// newSessionStore builds the session store, generating a key if none is set.
+// newCredentials builds the two things derived from TOME_SESSION_KEY: the session
+// store, and the signer for the image URLs that leave in a Fever response.
 //
-// A generated key is a deliberate convenience, not an oversight: a first run
-// should work with nothing but a database URL, and Tutorial 1 depends on that. The
-// cost is that every restart invalidates sessions, so it says so loudly and names
-// the setting that fixes it. Anything long-lived wants a configured key.
-func newSessionStore(cfg *config.Config, log *slog.Logger) (*session.Cookie, error) {
+// Built together because they come from one secret and one decision about it. A
+// generated key is a deliberate convenience, not an oversight: a first run should
+// work with nothing but a database URL, and Tutorial 1 depends on that. The cost is
+// that every restart invalidates sessions — and now also the outstanding image URLs
+// in any Fever client's cache — so it says so loudly and names the setting that fixes
+// it. Anything long-lived wants a configured key.
+//
+// Two keys, not one: the session cipher and the URL signer each derive their own from
+// this secret with a different HKDF label, so neither can be used to forge the other.
+func newCredentials(cfg *config.Config, log *slog.Logger) (*session.Cookie, *asseturl.Signer, error) {
 	secret := []byte(cfg.SessionKey)
 	if len(secret) == 0 {
 		generated, err := session.GenerateKey()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		secret = generated
 		log.Warn("no session key configured, so one was generated for this process; "+
-			"signing in again will be required after every restart",
+			"signing in again will be required after every restart, and archived images "+
+			"already synced to a mobile client will stop loading",
 			"set", config.Prefix+"SESSION_KEY")
 	}
 
@@ -195,7 +203,16 @@ func newSessionStore(cfg *config.Config, log *slog.Logger) (*session.Cookie, err
 			"set", config.Prefix+"COOKIE_SECURE=true")
 	}
 
-	return session.NewCookie(secret, session.DefaultTTL, cfg.CookieSecure)
+	sessions, err := session.NewCookie(secret, session.DefaultTTL, cfg.CookieSecure)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	signer, err := asseturl.NewSigner(secret, asseturl.DefaultTTL)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sessions, signer, nil
 }
 
 // migrate applies the schema and seeds the single v1 user.

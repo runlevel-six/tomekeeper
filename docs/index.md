@@ -110,6 +110,8 @@ rejected. Design rationale lives here and nowhere else.
 | See what is new in one folder, and clear just that folder | The category links above **Unread** — see [CLI](reference/cli.md#narrowing-a-list-to-one-category) |
 | Save a page nothing subscribed to | Paste it into **Saved** in the web interface |
 | Use it on a phone, from the home screen | Install it from the browser's menu — see [CLI](reference/cli.md#installed-as-a-web-app) |
+| Read it in an RSS app on my phone | [Connect a mobile client](how-to/connect-a-mobile-client.md) |
+| Know exactly what the sync protocol does | [Fever API](reference/fever-api.md) |
 | Change how it looks | **Settings** in the web interface, or [Themes](reference/themes.md) |
 
 **Keeping it healthy**
