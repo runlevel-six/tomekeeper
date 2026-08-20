@@ -79,6 +79,37 @@ nothing matches it, and the reader silently gets the default while believing the
 chose something. `TestEveryOfferedPaletteHasAStylesheet` exists to catch exactly
 that.
 
+## Typography
+
+Not a preference — one pair of faces, shipped with the binary.
+
+| | |
+|---|---|
+| Prose | Literata, variable weight 200–900, roman and italic |
+| Interface | Inter, variable weight 100–900, roman |
+| Code | the system monospace stack |
+
+Both are subset to Latin and Latin-Extended, with a `unicode-range` per face: an
+English page fetches two files totalling about 100KB, italic arrives when an
+article first uses emphasis, and the Extended pair only when a character outside
+Latin-1 appears. An article in Cyrillic, Greek or Vietnamese renders in the
+fallback serif, which is a deliberate limit rather than an oversight.
+
+The system stacks remain behind them — `ui-serif, Georgia` and
+`ui-sans-serif, system-ui` — so a browser that refuses woff2 gets what this had
+before rather than Times New Roman.
+
+Reading size is fluid: `clamp(1.0625rem, 1rem + 0.35vw, 1.3rem)`, which is 17px on
+a phone rising to 21px past about 1370px of viewport, in a column capped at 44rem.
+That is set by characters per line rather than by how much of the monitor the text
+covers — comfort falls off past about 75 characters, and the previous fixed 17px in
+a 46rem column ran to 88. Growing the type rather than narrowing the column is what
+keeps a large monitor and a phone both right: the column stays within 32px of where
+it was and the text is a fifth larger.
+
+Files, checksums and the upgrade recipe are in
+`internal/server/static/vendor/README.md`.
+
 ## See also
 
 - [Configuration](configuration.md)

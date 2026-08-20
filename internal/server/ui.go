@@ -108,9 +108,15 @@ func (s *Server) render(w http.ResponseWriter, status int, page string, data any
 	// manifest-src is here because default-src is 'none', which blocks the
 	// web app manifest outright — and the symptom is not an error anyone sees:
 	// "add to home screen" simply offers a generic icon and the wrong name.
+	//
+	// font-src is here for the two vendored faces, and its absence was a trap worth
+	// naming: with default-src 'none' an @font-face pointing at this origin fails
+	// *silently* and the page renders in the fallback stack, which looks exactly
+	// like a font that was never installed. 'self' and nothing else — a font host
+	// would put the reading experience back on somebody else's uptime.
 	w.Header().Set("Content-Security-Policy",
 		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "+
-			"connect-src 'self'; manifest-src 'self'; form-action 'self'; "+
+			"font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'self'; "+
 			"base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
@@ -309,8 +315,40 @@ func asInt(v any) int {
 // kilobytes served to one reader.
 const staticMaxAge = 5 * time.Minute
 
+// vendorMaxAge is how long a browser may cache a vendored asset.
+//
+// A year, and immutable, which is the opposite decision from the one above and
+// rests entirely on the naming rule in vendor/README.md: every file under
+// vendor/ carries its version in its name, so those bytes never change and an
+// upgrade is a different URL.
+//
+// This is not a micro-optimization. The fonts are 320KB of woff2, and under the
+// five-minute policy a reader revalidated them every few minutes forever — which
+// would have made shipping fonts *slower* than the system stacks it replaced,
+// for no benefit anyone could see.
+const vendorMaxAge = 365 * 24 * time.Hour
+
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(staticMaxAge.Seconds())))
+	cache := fmt.Sprintf("public, max-age=%d", int(staticMaxAge.Seconds()))
+	if strings.HasPrefix(r.URL.Path, "/static/vendor/") {
+		cache = fmt.Sprintf("public, max-age=%d, immutable", int(vendorMaxAge.Seconds()))
+	}
+	w.Header().Set("Cache-Control", cache)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// Set by hand, and this is not belt-and-braces. Go's mime package has no
+	// builtin entry for woff2 — it resolves the extension by reading
+	// /etc/mime.types, which exists on a developer's machine and does not exist in
+	// a distroless image. So the file server would type the fonts by sniffing
+	// their bytes, land on application/octet-stream, and serve that under the
+	// nosniff header above. Everything would keep working in development and the
+	// deployed archive would quietly render in the fallback serif.
+	//
+	// The file server only fills in a Content-Type it does not already have, so
+	// setting it here is enough.
+	if strings.HasSuffix(r.URL.Path, ".woff2") {
+		w.Header().Set("Content-Type", "font/woff2")
+	}
+
 	s.ui.static.ServeHTTP(w, r)
 }

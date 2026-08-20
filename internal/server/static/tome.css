@@ -7,6 +7,107 @@
  * needs.
  */
 
+/* ---------------------------------------------------------------------------
+ * Type.
+ *
+ * Two families, shipped rather than hoped for. The stack used to start at
+ * ui-serif, which means the reading experience was whatever serif the operating
+ * system happened to nominate — Georgia on a Mac, and on Windows and much of Linux
+ * something markedly worse. A reading tool cannot leave that to chance.
+ *
+ * Literata for prose: designed for Google Play Books, so screen-first, with a
+ * large x-height and low stroke contrast that hold up at 17px. Inter for the
+ * interface: this chrome is built out of 11–14px letter-spaced uppercase labels,
+ * which is exactly where Inter's tall x-height and open apertures earn their
+ * keep and where a book sans would go soft.
+ *
+ * Both are variable-weight, subset to Latin, and served from this binary — see
+ * vendor/README.md for the files and vendor/fonts/*-OFL.txt for their licenses.
+ * The unicode-range on each face is what keeps that cheap: an English page
+ * fetches two files, and the Latin-Extended pair arrives only when an article
+ * actually contains a character from it.
+ *
+ * The system stacks stay behind them as fallbacks, so a browser that refuses
+ * woff2, a blocked request, or a font-src the policy forgot degrades to what this
+ * had before rather than to Times New Roman.
+ * ------------------------------------------------------------------------- */
+
+/* Literata, roman and italic. Italic is a real design here rather than a slant
+   the browser invents, which matters because article bodies are full of it. */
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(vendor/fonts/literata-5.3.0-latin-wght-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(vendor/fonts/literata-5.3.0-latin-wght-italic.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(vendor/fonts/literata-5.3.0-latin-ext-wght-normal.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(vendor/fonts/literata-5.3.0-latin-ext-wght-italic.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Inter, roman only. Nothing in the interface is set in italic, and a synthesized
+   slant on the one day something is beats another 48KB in every reader's cache. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(vendor/fonts/inter-5.3.0-latin-wght-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(vendor/fonts/inter-5.3.0-latin-ext-wght-normal.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Its own block, kept here with the faces it names rather than beside the palette:
+   everything about type is in this section and nowhere else. One definition each,
+   so a family cannot drift between the twenty-odd places the interface font is
+   asked for. */
+:root {
+  --font-body: "Literata", ui-serif, Georgia, "Times New Roman", serif;
+  --font-ui: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 :root {
   --bg: #fbfaf7;
   --surface: #ffffff;
@@ -36,7 +137,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.6 ui-serif, Georgia, "Times New Roman", serif;
+  font: 16px/1.6 var(--font-body);
 }
 
 main { padding: 2rem 1.25rem 4rem; }
@@ -44,7 +145,7 @@ main { padding: 2rem 1.25rem 4rem; }
 a { color: var(--accent); }
 
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   background: var(--surface);
   border: 1px solid var(--rule);
@@ -61,7 +162,7 @@ code {
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--rule);
   background: var(--surface);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.9rem;
 }
 
@@ -137,7 +238,7 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 .signin label {
   display: block;
   margin: 0.9rem 0 0.3rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -185,7 +286,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 
 .badge {
   display: inline-block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   letter-spacing: 0.03em;
   padding: 0.1em 0.45em;
@@ -205,7 +306,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
    question it leads to is the loud one, since by then the reader has asked for it
    and needs to see the number. */
 .mark-read {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: var(--ink-soft);
   text-decoration: none;
@@ -250,7 +351,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
   flex-wrap: wrap;
   gap: 0.75rem;
   margin: 0 0 0.5rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: var(--ink-soft);
 }
@@ -267,7 +368,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 .actions { display: inline-flex; gap: 0.5rem; }
 .actions form { display: inline; }
 .toggle {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   padding: 0.2rem 0.55rem;
   display: inline-flex;
@@ -285,7 +386,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.85rem;
 }
 .reader-nav .back { text-decoration: none; font-weight: 600; }
@@ -342,7 +443,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 .category-list a:hover .name { color: var(--accent); text-decoration: underline; }
 .category-list .detail {
   margin-left: auto;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: var(--ink-soft);
 }
@@ -350,12 +451,12 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 .hint {
   max-width: 46rem;
   margin: 1.5rem auto 0;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.8rem;
   color: var(--ink-soft);
 }
 kbd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.78em;
   border: 1px solid var(--rule);
   border-bottom-width: 2px;
@@ -363,17 +464,46 @@ kbd {
   padding: 0.05em 0.35em;
 }
 
-/* The reader. */
+/* The reader.
+ *
+ * Reading comfort is governed by characters per line, not by how much of the
+ * monitor the text covers — the eye loses its place on the return sweep somewhere
+ * past 75, and no typeface fixes that. At 46rem and 17px this column ran to about
+ * 88, which is why the archived standalone pages (38rem at 1.05rem, ~72) read
+ * better than the interface that produced them.
+ *
+ * The correction is size rather than width, which is the only way to satisfy a
+ * large monitor and a phone at once. The type scales with the viewport and the
+ * column barely moves: on a wide screen the text is 21px in a 704px column — 29px
+ * narrower than before and a fifth larger — so it reads as bigger type rather than
+ * as a narrower ribbon. On a phone the viewport is the constraint anyway and
+ * nothing about it changes.
+ */
+.reader { max-width: 44rem; }
 .reader header { border-bottom: 1px solid var(--rule); padding-bottom: 1rem; margin-bottom: 1.75rem; }
-.reader h1 { margin-bottom: 0.6rem; }
-.reader .origin { margin: 0.6rem 0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.85rem; }
-.reader .body { font-size: 1.06rem; }
+.reader h1 {
+  margin-bottom: 0.6rem;
+  /* Grown with the body, or the hierarchy closes up: a 25px heading over 21px of
+     prose reads as emphasis rather than as a title. */
+  font-size: clamp(1.6rem, 1.4rem + 0.8vw, 2.2rem);
+  line-height: 1.2;
+}
+.reader .origin { margin: 0.6rem 0; font-family: var(--font-ui); font-size: 0.85rem; }
+/* 17px on a phone up to 21px past about 1370px wide, which is where the column
+   stops growing. The floor is what this used to be at every width. */
+.reader .body {
+  font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.3rem);
+  line-height: 1.65;
+}
 .reader .body p { margin: 0 0 1.15em; }
 .reader .body h2, .reader .body h3 { margin: 1.8em 0 0.5em; }
 .reader .body img { max-width: 100%; height: auto; display: block; margin: 1.5em auto; }
 .reader .image-notice { font-size: 0.85rem; color: var(--ink-soft); border-left: 3px solid var(--rule); padding-left: 0.8rem; }
 .reader .body figure { margin: 1.5em 0; }
-.reader .body figcaption { font-size: 0.85rem; color: var(--ink-soft); text-align: center; }
+/* Everything inside the body is sized in em from here on, so it keeps its
+   proportion to the prose as that grows. In rem, a caption stays 13px while the
+   text around it reaches 21px and starts to look like a mistake. */
+.reader .body figcaption { font-size: 0.82em; color: var(--ink-soft); text-align: center; }
 .reader .body blockquote {
   margin: 1.5em 0;
   padding-left: 1em;
@@ -386,7 +516,7 @@ kbd {
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.85em;
 }
 .reader .body table { display: block; overflow-x: auto; max-width: 100%; }
 
@@ -399,7 +529,7 @@ kbd {
 
 .tag {
   display: inline-block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   padding: 0.1em 0.5em;
   margin-right: 0.3rem;
@@ -425,7 +555,7 @@ kbd {
 .result.is-read h2 a { color: var(--ink-soft); }
 .snippet { margin: 0.3rem 0 0; color: var(--ink-soft); font-size: 0.95rem; }
 .snippet mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--ink); }
-.count { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.85rem; color: var(--ink-soft); }
+.count { font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-soft); }
 
 /* Tables: feeds and the attention queue. Both scroll rather than squeezing. */
 .feed-table, .attention-table {
@@ -443,13 +573,16 @@ kbd {
   border-bottom: 1px solid var(--rule);
 }
 .feed-table thead th, .attention-table thead th {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.74rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-soft);
 }
-.feed-table .num, .attention-table .num { text-align: right; }
+/* Tabular figures, as the domain-rule table already asks for. Both shipped
+   families default to proportional ones, so a column of unread counts does not
+   line up between rows without this — the one place the difference is obvious. */
+.feed-table .num, .attention-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .feed-table tr.is-disabled th a { color: var(--ink-soft); text-decoration: line-through; }
 
 /* Sortable headings. The whole heading is the link, and the arrow marks the column
@@ -468,7 +601,7 @@ kbd {
    hover does not exist on a touchscreen. */
 .feed-table .row-edit {
   margin-left: 0.5rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   font-weight: normal;
   color: var(--ink-soft);
@@ -486,7 +619,7 @@ kbd {
   margin-bottom: 0.9rem;
 }
 .feed-filter label {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.74rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -533,7 +666,7 @@ kbd {
 }
 .stream-filter .pill {
   display: inline-block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.78rem;
   padding: 0.15em 0.6em;
   color: var(--ink-soft);
@@ -585,7 +718,7 @@ kbd {
 .export .note { color: var(--ink-soft); font-size: 0.9rem; }
 .export .download {
   display: inline-block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   text-decoration: none;
   border: 1px solid var(--rule);
@@ -631,7 +764,7 @@ kbd {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
-.body-what { margin: 0 0 0.3rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.9rem; }
+.body-what { margin: 0 0 0.3rem; font-family: var(--font-ui); font-size: 0.9rem; }
 .body-what .badge { margin-left: 0.4rem; }
 .body-list .excerpt { margin: 0.4rem 0 0.6rem; font-size: 0.9rem; color: var(--ink-soft); }
 .body-list button { font-size: 0.85rem; }
@@ -650,7 +783,7 @@ kbd {
   vertical-align: top;
 }
 .rule-table thead th {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.72rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -696,7 +829,7 @@ kbd {
   background: var(--surface);
   color: var(--ink);
 }
-.rule-form textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.rule-form textarea { font-family: var(--font-mono); font-size: 0.85rem; }
 .rule-form input[type="text"]:focus-visible,
 .rule-form textarea:focus-visible { border-color: var(--accent); outline: none; }
 /* The explanation under a field, which is where the hard-won knowledge about
@@ -710,7 +843,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   letter-spacing: normal;
   text-transform: none;
@@ -747,7 +880,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.85rem;
   letter-spacing: normal;
   text-transform: none;
@@ -817,7 +950,7 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.9rem;
   letter-spacing: normal;
   text-transform: none;
@@ -954,7 +1087,7 @@ kbd {
     background: var(--surface);
     border-top: 1px solid var(--rule);
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-ui);
   }
   .tabbar a {
     position: relative;
@@ -1003,7 +1136,7 @@ kbd {
 }
 .settings legend {
   padding: 0 0.6rem 0 0;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.74rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1014,7 +1147,7 @@ kbd {
    fields, so the two places this control appears look like the same control. */
 .settings label[for="poll-every"] {
   display: block;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.92rem;
   margin-bottom: 0.3rem;
 }
@@ -1032,7 +1165,7 @@ kbd {
 .settings .radio {
   display: block;
   margin: 0.4rem 0;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.92rem;
 }
 /* Same type as the radios above it, laid out so a wrapped label lines up under
@@ -1042,7 +1175,7 @@ kbd {
   align-items: baseline;
   gap: 0.5rem;
   margin: 0.4rem 0;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.92rem;
 }
 
@@ -1070,7 +1203,7 @@ kbd {
 .swatch input { grid-area: radio; margin: 0; }
 .swatch-name {
   grid-area: name;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 0.92rem;
   font-weight: 600;
 }

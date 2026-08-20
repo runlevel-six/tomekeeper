@@ -194,6 +194,22 @@ check_status /static/tome.css 200
 check_status /static/vendor/htmx-2.0.9.min.js 200
 pass "embedded static assets are served"
 
+# The vendored fonts, and specifically their Content-Type, which is the one thing
+# here that cannot be proved anywhere else. Go's mime package has no builtin entry
+# for woff2: it reads /etc/mime.types, which every developer machine has and this
+# image does not. Without the header the server sets by hand, the file server would
+# sniff the bytes, answer application/octet-stream, and serve that under nosniff —
+# passing every test on a laptop and rendering the deployed archive in the fallback
+# serif. This is the assertion that would catch it.
+font=/static/vendor/fonts/literata-5.3.0-latin-wght-normal.woff2
+check_status "$font" 200
+font_headers=$(curl -sI "${base}${font}" | tr -d '\r')
+grep -qi '^content-type: font/woff2' <<<"$font_headers" ||
+  fail "the font was not served as font/woff2: $font_headers"
+grep -qi '^cache-control:.*immutable' <<<"$font_headers" ||
+  fail "the font is not cached immutably, so 320KB is revalidated forever: $font_headers"
+pass "embedded fonts are served as woff2 and cached immutably"
+
 # An unauthenticated request for a reading view must not serve the archive.
 redirect=$(curl -s -o /dev/null -w '%{http_code}' "${base}/")
 [ "$redirect" = "303" ] || fail "GET / while signed out returned $redirect, want 303"

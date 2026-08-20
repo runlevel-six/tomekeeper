@@ -49,6 +49,25 @@ Still done with the standard library, deliberately:
 | An assertion library (`testify`) | `if got != want { t.Errorf(...) }`. No dependency, and the failure output says what was compared. |
 | A test-container library | `internal/dbtest`, which skips when `TOME_TEST_DATABASE_URL` is unset. CI supplies a service container; nothing needs to orchestrate Docker from inside a test. |
 
+## Vendored browser assets
+
+Not Go modules, and carrying a different risk: these are bytes committed to the
+tree and embedded in the binary, so they cannot break at build time or drift
+underneath a running archive. What they can do is bloat every page load, which is
+why the list is short and why each file is subset.
+
+None of them is loaded from a CDN. A page that references someone else's host
+fails offline, leaks the reader to a third party, and bets the archive on a company
+still serving that exact path in ten years — the same bet the
+files-are-the-archive principle exists to avoid. `internal/server/static/vendor/README.md`
+holds the versions, checksums, and upgrade recipes.
+
+| Asset | Why |
+|---|---|
+| htmx 2.0.9 | Swapping one control's markup after a POST, without writing a fetch-and-replace layer by hand. Every form it enhances also works submitted plainly, so this is progressive rather than load-bearing. |
+| Literata (variable, Latin subsets) | Prose. The alternative is a `ui-serif` stack, which makes the reading experience whatever serif the reader's OS nominates — and on Windows and much of Linux that is markedly worse than Georgia. A tool whose entire purpose is reading cannot leave its typeface to chance. OFL-1.1. |
+| Inter (variable, Latin subsets) | The interface. Built out of 11–14px letter-spaced uppercase labels, which is where a UI sans earns its keep and where a book face goes soft. OFL-1.1. |
+
 ## Expected dependencies
 
 Named here in advance so that adding one is a decision that was already made
