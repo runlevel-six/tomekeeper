@@ -10,10 +10,45 @@ that existing features "will not be removed or modified" — so the wire format
 described here is final, and this page records what is implemented, what is not, and
 where this implementation deliberately differs.
 
-Clients known to speak it include Reeder, Unread, Fiery Feeds, Fluent Reader, Read
-You, and NetNewsWire's Fever account type. See
-[How to connect a mobile client](../how-to/connect-a-mobile-client.md) for setting
-one up.
+Clients that speak it, per FreshRSS's own compatibility list: Reeder Classic, Unread,
+Fiery Feeds, ReadKit, Fluent Reader, Fluent Reader Lite, Read You, and Newsflash.
+**Two are confirmed working against this implementation** (2026-08-20): **Reeder** on
+iOS — subscriptions and folders, articles carrying the extracted body, archived images
+loading in the client's own view, and marking everything read — and **Fluent Reader
+Lite**. Reeder warns that Fever is deprecated, which is true and is not a sign of
+anything wrong here; see [Deprecation](#deprecation).
+
+Two rather than one on purpose. Clients disagree about whether they append `/fever/`
+to the URL they are given, whether they send `before` on a bulk mark, and how they
+page, so a single client cannot show a bug it happens to avoid.
+
+That the images loaded is the part worth recording, because it exercises the whole of
+[Bodies and images](#bodies-and-images) at once: an absolute URL, the scheme derived
+from configuration rather than from the request, a signature that survived being
+written into an HTML attribute, and an asset fetch authorized by that signature with
+no session behind it.
+
+NetNewsWire is **not** in that list, despite a plausible-sounding "Fever account
+type" that does not exist: it syncs via Feedbin, Feedly, Inoreader, BazQux, NewsBlur,
+The Old Reader and FreshRSS, and its FreshRSS support speaks the Google Reader API
+rather than this one.
+
+See [How to connect a mobile client](../how-to/connect-a-mobile-client.md) for
+setting one up.
+
+## Deprecation
+
+Facts, because a client will raise this and it looks alarming:
+
+| | |
+|---|---|
+| Fever, the hosted service | Shut down around 2016. |
+| The API specification | Frozen since. Its own text promises existing features will not be removed or modified, so there is no newer version to track. |
+| What clients say | Several label a Fever account deprecated or legacy. Reeder does, and syncs correctly regardless. |
+| What that means here | The wire format cannot move under this implementation. Nothing new will implement it either, so the set of clients narrows over time rather than growing. |
+
+Why this protocol was chosen anyway, and what would eventually replace it, is in
+[non-goals](../explanation/non-goals.md#no-google-reader-api-for-now).
 
 ## Endpoint
 

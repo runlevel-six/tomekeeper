@@ -62,6 +62,31 @@ readers.
 Existing mobile readers are supported instead, through the Fever API — the reason
 that milestone exists.
 
+## No Google Reader API, for now
+
+The Fever API is a deprecated protocol. Fever itself was a hosted reader that shut
+down around 2016, its API has been frozen since, and clients say so out loud — Reeder
+labels a Fever account deprecated while syncing against it perfectly well.
+
+Choosing it anyway was deliberate, and rests on what the alternative costs. The
+Google Reader API is the better protocol by every measure that matters: more clients
+speak it, it has feed management, tagging and search, and it is what a reader reaches
+for first. It is also roughly ten times the work — a much larger surface, with
+stream-id semantics and continuation tokens that have to be right or a client's
+pagination silently diverges from the archive.
+
+Against that, the Fever API is one endpoint. It cost a protocol implementation rather
+than a project, and it delivers the thing that was actually wanted: reading this
+archive on a phone, in an app that already exists, with the *extracted* body rather
+than the summary a feed shipped.
+
+The honest risk is client attrition. Nothing new will implement Fever, and each
+client that drops it narrows the set. That is a reason to add the Google Reader API
+eventually, not a reason to have waited — and the work already done is not wasted
+either way, since the parts worth having are shared: how an item maps onto an
+article, how a group maps onto a category, and how a body's images reach a client
+that has no session.
+
 ## No federation, sharing, or social features
 
 No public profiles, no shared collections, no comments, no following, no
