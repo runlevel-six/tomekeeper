@@ -13,10 +13,11 @@ where this implementation deliberately differs.
 Clients that speak it, per FreshRSS's own compatibility list: Reeder Classic, Unread,
 Fiery Feeds, ReadKit, Fluent Reader, Fluent Reader Lite, Read You, and Newsflash.
 **Two are confirmed working against this implementation** (2026-08-20): **Reeder** on
-iOS — subscriptions and folders, articles carrying the extracted body, archived images
-loading in the client's own view, and marking everything read — and **Fluent Reader
-Lite**. Reeder warns that Fever is deprecated, which is true and is not a sign of
-anything wrong here; see [Deprecation](#deprecation).
+iOS and **Fluent Reader Lite**. Between them: subscriptions and folders, articles
+carrying the extracted body, archived images loading in the client's own view, marking
+everything read, and starring round-tripping in both directions. Reeder warns that
+Fever is deprecated, which is true and is not a sign of anything wrong here; see
+[Deprecation](#deprecation).
 
 Two rather than one on purpose. Clients disagree about whether they append `/fever/`
 to the URL they are given, whether they send `before` on a bulk mark, and how they
@@ -288,7 +289,9 @@ that an article stays reachable after the feed that introduced it is gone.
 
 That makes `saved_at` one-directional and therefore unusable as the mapping: a client
 unsaving an item could never see it take effect. So `is_saved` is the starred flag,
-and `as=saved` stars. The archive's own **Saved** reading list is a different thing,
+and `as=saved` stars. Confirmed round-tripping in both directions from a real client
+(2026-08-20), which is the assertion that would have failed had this been mapped the
+other way. The archive's own **Saved** reading list is a different thing,
 and its pages appear as ordinary items.
 
 ### Bodies and images
