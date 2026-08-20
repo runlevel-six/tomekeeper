@@ -16,6 +16,16 @@ commands and settings *are*, see [CLI](../reference/cli.md) and
 - `tome worker` — the job pool: feed polling, fetching, extraction, image
   localization, and retention.
 
+Beside them, and not built from this image at all, sits an optional third workload: a
+stock headless browser. The worker talks to it over the DevTools protocol for the
+domains an operator has flagged as needing JavaScript, and it ships **scaled to zero**,
+because most archives never flag one. Two things follow from it being separate. Its
+memory — about a gigabyte per page — is limited where it cannot take the worker down
+with it; and rendering happens at *fetch* time rather than as a rung of the extraction
+ladder, so what gets stored is the DOM the browser built and extraction stays offline,
+re-runnable, and identical for every article. See
+[Enable headless rendering](../how-to/enable-headless-rendering.md).
+
 They are deployed as two workloads built from one image. The alternative — one
 process doing both — is simpler to start and wrong to run: extraction is CPU-
 and memory-hungry and bursty, while the reader UI needs to stay responsive.

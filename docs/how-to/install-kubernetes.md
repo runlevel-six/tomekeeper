@@ -16,6 +16,7 @@ You need a cluster with an ingress controller, a storage class that can provisio
 | `await-schema` | an initContainer on both Deployments: waits for the migration rather than starting without it |
 | `tomekeeper-blobs` | the archive — stored pages, bodies, images |
 | `tomekeeper-backups` | nightly `pg_dump` output |
+| `tomekeeper-render` | a headless browser, **scaled to zero** — only for domains flagged as needing JavaScript. Costs nothing until you scale it up; see [Enable headless rendering](enable-headless-rendering.md). |
 
 ## 1. Make the overlay yours
 

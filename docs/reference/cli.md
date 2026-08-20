@@ -58,11 +58,23 @@ Seven job types run:
 | `fetch_article` | enqueued per new article | Fetches the page subject to robots.txt and rate limiting, stores the gzipped original in the blob store, enqueues extraction. |
 | `extract_article` | enqueued after a fetch, or by `tome reextract` | Runs the extraction ladder over the stored page. Touches no network. |
 | `schedule_assets` | every 60s, and once at startup | Enqueues localization for up to 100 articles still at `assets_status = 'pending'` **that have a current body**. Articles with no body are settled to `none` at failure time rather than being left here unreachable. |
+| `render_article` | enqueued by `fetch_article` when the host's domain rule sets `requires_js` | Loads the page in a headless browser, blocking images, media and fonts, and stores the **rendered DOM** as the article's raw page. Runs on its own `render` queue. |
 | `localize_assets` | enqueued after extraction | Downloads the article's images with the article as `Referer`, downscales and transcodes them, rewrites the body to point into the archive, and writes `index.html` and `meta.json`. |
 
 Every job is unique per subject while one is pending or running, so a slow poll
 cannot be overtaken by the next scheduler run, and three feeds carrying the same
 story do not each fetch the page.
+
+Renders run on a **separate queue** (`render`) with its own width,
+`TOME_RENDER_CONCURRENCY`, defaulting to 1. The default queue carries everything else at
+`TOME_WORKER_CONCURRENCY`. The split is not tidiness: a page whose JavaScript never
+finishes holds a slot for the render timeout, and enough of those in the shared pool
+would stop feeds being polled because of one site's script.
+
+Rendering is off unless `TOME_RENDER_BROWSER_URL` is set *and* a domain rule flags a
+host — either alone does nothing. With no browser reachable, flagged articles stay
+`pending` and are retried rather than being marked failed, so scaling a browser up later
+picks them up. See [Enable headless rendering](../how-to/enable-headless-rendering.md).
 
 Per-domain rate limits are read from `domain_rules` once at startup. A rule
 added later takes effect on the next restart.

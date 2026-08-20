@@ -32,7 +32,46 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Headless rendering**, for the sites that send an empty shell and build the article
+  in JavaScript. A stock `chromedp/headless-shell` Deployment ships **scaled to zero**;
+  the worker renders a page only when a domain rule flags the host `requires_js` *and* a
+  browser is reachable, so either alone does nothing. `requires_js` has been a column an
+  operator could set and nothing could read since the schema was written; it now works.
+  See [Enable headless rendering](docs/how-to/enable-headless-rendering.md).
+  - **Rendering happens at fetch time, not as a rung of the extraction ladder.** What
+    gets stored is the DOM the browser built, so extraction stays offline and
+    `tome reextract` improves rendered articles without re-fetching anything — which a
+    rendering rung would have made impossible.
+  - Renders run on their own River queue at `TOME_RENDER_CONCURRENCY` (default 1), so a
+    page whose script never finishes cannot consume the pool that polls feeds.
+  - Images, media and fonts are refused **by resource type**, the archive's own
+    User-Agent is sent, and robots.txt is checked before the browser starts. The
+    unavoidable residue — the page's own JavaScript runs — is documented rather than
+    glossed over.
+- `TOME_RENDER_BROWSER_URL` and `TOME_RENDER_CONCURRENCY`.
+
+### Changed
+
+- `tome explain` reports whether a page came through a browser, and labels the feed
+  body's size as markup — the ladder measures its *text*, and two unlabelled counts on
+  adjacent lines read as a contradiction.
+
+### Fixed
+
+- **A rejected feed body reported "0 characters" whatever its length.** The rung zeroed
+  its result before the explanation was built, so a body that missed the 200-character
+  floor by one looked identical to one with no text at all. It now reports what it
+  measured — 134 characters, on the article that exposed it. Extraction output is
+  unchanged, so no `extract.Version` bump.
+- `tome explain` announced any lookup failure as "no article N", including a schema
+  older than the binary. A missing column now says so.
+
+### Migrations
+
+- **00007** adds `articles.browser_rendered`. Recorded at fetch time rather than
+  inferred from the domain rules in force when somebody asks, because rules change.
 
 ## [v0.2.0] — 2026-08-20
 

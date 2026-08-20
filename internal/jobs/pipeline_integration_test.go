@@ -30,6 +30,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/feed"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/jobs"
+	"github.com/runlevel-six/tomekeeper/internal/render"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
@@ -65,6 +66,17 @@ func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpcli
 ) {
 	t.Helper()
 
+	// No renderer, which is the deployment nearly everybody has and the one these tests
+	// were written against. runPipelineWith is for the handoff cases that need one.
+	runPipelineWith(t, s, blobs, client, nil, fn)
+}
+
+// runPipelineWith is runPipeline with a renderer.
+func runPipelineWith(t *testing.T, s *store.Store, blobs blob.Store, client *httpclient.Client,
+	renderer *render.Renderer, fn func(context.Context, *river.Client[pgx.Tx]),
+) {
+	t.Helper()
+
 	pool := s.Pool()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -94,6 +106,7 @@ func runPipeline(t *testing.T, s *store.Store, blobs blob.Store, client *httpcli
 		Extractor:   extract.New(),
 		Log:         log,
 		Concurrency: 2,
+		Renderer:    renderer,
 	})
 	if err != nil {
 		t.Fatalf("NewWorkerClient() = %v", err)

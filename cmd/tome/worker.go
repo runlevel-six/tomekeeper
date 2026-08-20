@@ -11,6 +11,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/feed"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 	"github.com/runlevel-six/tomekeeper/internal/jobs"
+	"github.com/runlevel-six/tomekeeper/internal/render"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 	"github.com/runlevel-six/tomekeeper/internal/version"
 )
@@ -70,6 +71,27 @@ func worker(args []string, stderr io.Writer) int {
 		return exitFailure
 	}
 
+	// The same User-Agent the polite client sends, so a site being rendered is told
+	// exactly what a site being fetched is told. Built from the same call rather than a
+	// second string, because two honest user agents that disagree are one dishonest one.
+	renderer, err := render.New(render.Options{
+		WebSocketURL: cfg.RenderBrowserURL,
+		UserAgent:    httpclient.UserAgent(version.Short(), cfg.ContactURL),
+	})
+	if err != nil {
+		log.Error("cannot set up the headless renderer", "error", err)
+		return exitFailure
+	}
+	if renderer == nil {
+		// Said once at startup, because "the article that needs a browser is still
+		// pending" is otherwise a mystery with no line in the log to explain it.
+		log.Info("no headless browser configured, so domains flagged as needing one will not be fetched",
+			"set", config.Prefix+"RENDER_BROWSER_URL")
+	} else {
+		log.Info("headless rendering is available",
+			"browser", cfg.RenderBrowserURL, "concurrency", cfg.RenderConcurrency)
+	}
+
 	riverClient, err := jobs.NewWorkerClient(jobs.Deps{
 		Pool:             pool,
 		Store:            s,
@@ -81,6 +103,9 @@ func worker(args []string, stderr io.Writer) int {
 		Concurrency:      cfg.WorkerConcurrency,
 		RetainAfterRead:  cfg.RetainAfterRead,
 		ImageConcurrency: cfg.ImageConcurrency,
+
+		Renderer:          renderer,
+		RenderConcurrency: cfg.RenderConcurrency,
 	})
 	if err != nil {
 		log.Error("cannot start the worker", "error", err)

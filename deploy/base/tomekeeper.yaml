@@ -233,6 +233,15 @@ spec:
             # harder as it approaches rather than after.
             - name: GOMEMLIMIT
               value: "1750MiB"
+            # Where the headless browser is, for the domains flagged as needing one.
+            #
+            # Set even though the render Deployment is scaled to zero: the worker
+            # treats an unreachable browser as "not now" and leaves those articles
+            # pending, so pointing at a Service that currently has no endpoints is
+            # exactly the intended resting state. Scaling the Deployment up is then
+            # the only action needed, with no worker restart and no config change.
+            - name: TOME_RENDER_BROWSER_URL
+              value: ws://tomekeeper-render:9222
           ports:
             - name: metrics
               containerPort: 9090

@@ -17,6 +17,7 @@ import (
 	"github.com/runlevel-six/tomekeeper/internal/extract"
 	"github.com/runlevel-six/tomekeeper/internal/feed"
 	"github.com/runlevel-six/tomekeeper/internal/httpclient"
+	"github.com/runlevel-six/tomekeeper/internal/render"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
@@ -55,7 +56,35 @@ type Deps struct {
 	// RetainAfterRead mirrors the config setting. Zero means keep everything,
 	// which is the default.
 	RetainAfterRead time.Duration
+
+	// Renderer drives a headless browser for the domains flagged as needing one. Nil
+	// is the ordinary case and means those articles stay pending until a browser
+	// exists.
+	Renderer *render.Renderer
+
+	// RenderConcurrency is how many pages may be rendered at once. Zero means one.
+	RenderConcurrency int
 }
+
+// renderSlots bounds the render queue.
+//
+// Capped rather than trusted, because each concurrent render is a browser tab holding a
+// document and its scripts — the same shape of cost as image transcoding, where the
+// setting exists precisely because the obvious number is too high. Two is generous for
+// an archive whose flagged domains are counted on one hand.
+func renderSlots(configured int) int {
+	switch {
+	case configured <= 0:
+		return 1
+	case configured > maxRenderSlots:
+		return maxRenderSlots
+	default:
+		return configured
+	}
+}
+
+// maxRenderSlots is the ceiling on concurrent renders.
+const maxRenderSlots = 4
 
 // NewWorkerClient builds a River client that works jobs.
 //
@@ -67,6 +96,16 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	river.AddWorker(workers, &PollFeedWorker{poller: d.Poller})
 	river.AddWorker(workers, &FetchArticleWorker{
 		store: d.Store, client: d.Client, blobs: d.Blobs, log: d.Log,
+		renderer: d.Renderer,
+	})
+
+	// Registered whether or not a browser is configured, for the same reason retention's
+	// worker is: an unregistered job kind is an error at run time, and a render enqueued
+	// by a worker that was restarted without its browser would sit in the queue as
+	// "unknown kind" rather than as work waiting for a browser. With a nil Renderer the
+	// worker reports the article as pending and asks to be retried.
+	river.AddWorker(workers, &RenderArticleWorker{
+		store: d.Store, renderer: d.Renderer, client: d.Client, blobs: d.Blobs, log: d.Log,
 	})
 	river.AddWorker(workers, &ExtractArticleWorker{
 		store: d.Store, blobs: d.Blobs, extractor: d.Extractor, log: d.Log,
@@ -106,6 +145,11 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 		Workers: workers,
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: d.Concurrency},
+			// Narrow, and separate from everything else: a render costs a browser tab and
+			// can hang for its whole timeout, so its slots are bounded on their own rather
+			// than drawn from the pool that polls feeds. One by default — see
+			// TOME_RENDER_CONCURRENCY.
+			RenderQueue: {MaxWorkers: renderSlots(d.RenderConcurrency)},
 		},
 		PeriodicJobs: []*river.PeriodicJob{
 			river.NewPeriodicJob(

@@ -1,0 +1,98 @@
+# The headless browser, for the domains flagged as needing JavaScript.
+#
+# Scaled to zero, deliberately, and that is the interesting part of this file. Most
+# archives never flag a domain: the extraction ladder handles the great majority of
+# sites, a badly-structured one wants a CSS selector rather than a browser, and an
+# image-only page has no text for any renderer to find. So this exists, costs nothing
+# until it is scaled up, and the worker treats its absence as a normal condition
+# rather than an error — see `tome worker`'s startup log, which says out loud when no
+# browser is configured.
+#
+# To turn rendering on:
+#
+#   kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=1
+#   tome domain-rule set --requires-js example.com
+#
+# Both steps are needed, and either one alone is inert. See
+# docs/how-to/enable-headless-rendering.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tomekeeper-render
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: render
+spec:
+  # Zero. Not a mistake, and not a placeholder — see the comment above.
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tomekeeper
+      app.kubernetes.io/component: render
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tomekeeper
+        app.kubernetes.io/component: render
+    spec:
+      # A browser is the one thing here that renders other people's JavaScript, so it
+      # gets the tightest context this image will tolerate. It cannot be
+      # readOnlyRootFilesystem: Chrome writes its user data directory, and its own
+      # sandbox is already disabled inside the container.
+      securityContext:
+        runAsNonRoot: false
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: headless
+          # Pinned by digest-less tag deliberately: this is not our image and not our
+          # release cycle, and a browser that is months stale is a browser that fails
+          # on sites which have moved on. Upgrade it on its own schedule.
+          image: chromedp/headless-shell:latest
+          # No args. The image's entrypoint runs the browser on 127.0.0.1:9223 with a
+          # socat exposing 9222, and anything passed here is *appended* to that command
+          # line — so a second --remote-debugging-port makes the browser take socat's
+          # port and nothing answers at all. Found the hard way.
+          ports:
+            - name: cdp
+              containerPort: 9222
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            # One page at a time is the worker's default (TOME_RENDER_CONCURRENCY), and
+            # a document with its scripts fits inside this comfortably. Raising the
+            # concurrency means raising this too — the same coupling image transcoding
+            # has, and the same reason: the cost is per page, not per byte.
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          # Liveness only. There is no readiness probe on purpose: nothing routes
+          # traffic here through a Service the way an Ingress would, and the worker
+          # already treats an unreachable browser as "not now" rather than as a
+          # failure, so a pod that is up but not yet answering costs a retry.
+          livenessProbe:
+            tcpSocket:
+              port: cdp
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tomekeeper-render
+  labels:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: render
+spec:
+  # The name the worker is pointed at. A Service rather than a pod IP because the
+  # browser is restarted on its own schedule, and because the websocket address the
+  # browser advertises carries a GUID that changes every time it starts — the client
+  # asks /json/version for the current one, so a stable host name is all this has to
+  # provide.
+  selector:
+    app.kubernetes.io/name: tomekeeper
+    app.kubernetes.io/component: render
+  ports:
+    - name: cdp
+      port: 9222
+      targetPort: cdp

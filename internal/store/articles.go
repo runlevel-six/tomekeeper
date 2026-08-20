@@ -28,6 +28,13 @@ type Article struct {
 	AssetsStatus string
 	RawBlobSHA   string
 	RawBlobPath  string
+
+	// BrowserRendered says the stored page came out of a headless browser.
+	//
+	// Read rather than merely written: `tome explain` reports it, because an article
+	// whose body looks wrong is a different investigation depending on whether a
+	// browser was involved.
+	BrowserRendered bool
 }
 
 // ArticleParams is the set of fields a reference can contribute about an

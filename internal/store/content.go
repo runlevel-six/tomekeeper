@@ -25,20 +25,37 @@ const (
 	OriginFeedBody = "feed_body"
 )
 
+// FetchedPage is what one successful fetch produced.
+//
+// A struct rather than three positional arguments because the third one is a boolean,
+// and `RecordFetchSuccess(ctx, id, sha, path, true)` at a call site says nothing about
+// what is true.
+type FetchedPage struct {
+	// SHA is the SHA-256 of the stored bytes, and Path is where they went.
+	SHA  string
+	Path string
+
+	// BrowserRendered records that these bytes came out of a headless browser rather
+	// than off the wire — see migration 00007 for why this is stored rather than
+	// inferred from the domain rules in force when somebody asks.
+	BrowserRendered bool
+}
+
 // RecordFetchSuccess marks an article fetched and records where the raw page
 // was stored.
 //
 // Articles are a global pool, so this takes no UserID: the fetched page is the
 // same page whoever's subscription led to it.
-func (s *Store) RecordFetchSuccess(ctx context.Context, id ArticleID, sha, path string) error {
+func (s *Store) RecordFetchSuccess(ctx context.Context, id ArticleID, p FetchedPage) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE articles SET
-			raw_blob_sha   = $2,
-			raw_blob_path  = $3,
-			raw_fetched_at = now(),
-			fetch_status   = 'ok',
-			fetch_error    = NULL
-		WHERE id = $1`, id, sha, path)
+			raw_blob_sha     = $2,
+			raw_blob_path    = $3,
+			raw_fetched_at   = now(),
+			fetch_status     = 'ok',
+			fetch_error      = NULL,
+			browser_rendered = $4
+		WHERE id = $1`, id, p.SHA, p.Path, p.BrowserRendered)
 	if err != nil {
 		return fmt.Errorf("recording fetch of article %d: %w", id, err)
 	}
@@ -101,11 +118,12 @@ func (s *Store) GetArticle(ctx context.Context, id ArticleID) (Article, error) {
 		       COALESCE(title, ''), COALESCE(author, ''),
 		       COALESCE(site_name, ''), COALESCE(language, ''),
 		       published_at, first_seen_at, fetch_status, COALESCE(fetch_error, ''),
-		       assets_status, COALESCE(raw_blob_sha, ''), COALESCE(raw_blob_path, '')
+		       assets_status, COALESCE(raw_blob_sha, ''), COALESCE(raw_blob_path, ''),
+		       browser_rendered
 		FROM articles WHERE id = $1`, id,
 	).Scan(&a.ID, &a.URLCanonical, &a.URLOriginal, &a.Title, &a.Author,
 		&a.SiteName, &a.Language, &a.PublishedAt, &a.FirstSeenAt, &a.FetchStatus,
-		&a.FetchError, &a.AssetsStatus, &a.RawBlobSHA, &a.RawBlobPath)
+		&a.FetchError, &a.AssetsStatus, &a.RawBlobSHA, &a.RawBlobPath, &a.BrowserRendered)
 	if err != nil {
 		return Article{}, fmt.Errorf("looking up article %d: %w", id, err)
 	}

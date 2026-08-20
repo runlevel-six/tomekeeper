@@ -141,7 +141,7 @@ func TestReextractCandidatesExcludeImmutable(t *testing.T) {
 	current := newArticle(t, s, "https://example.com/already-current")
 
 	for _, id := range []store.ArticleID{mutable, imported, current} {
-		if err := s.RecordFetchSuccess(ctx, id, "deadbeef", "articles/2026/08/x/raw.html.gz"); err != nil {
+		if err := s.RecordFetchSuccess(ctx, id, store.FetchedPage{SHA: "deadbeef", Path: "articles/2026/08/x/raw.html.gz"}); err != nil {
 			t.Fatalf("RecordFetchSuccess() = %v", err)
 		}
 	}
@@ -188,7 +188,7 @@ func TestReextractCandidatesPaginate(t *testing.T) {
 	ids := make([]store.ArticleID, 0, total)
 	for i := range total {
 		id := newArticle(t, s, "https://example.com/article-"+string(rune('a'+i)))
-		if err := s.RecordFetchSuccess(ctx, id, "sha", "path"); err != nil {
+		if err := s.RecordFetchSuccess(ctx, id, store.FetchedPage{SHA: "sha", Path: "path"}); err != nil {
 			t.Fatalf("RecordFetchSuccess() = %v", err)
 		}
 		insertBody(t, s, id, store.ContentParams{ExtractorName: "readability", ExtractorVersion: "1"})
@@ -280,7 +280,7 @@ func TestFetchStatusTransitions(t *testing.T) {
 		t.Errorf("a new article is %q, want %q", article.FetchStatus, store.FetchPending)
 	}
 
-	if err := s.RecordFetchSuccess(ctx, id, "abc123", "articles/2026/08/a-1234/raw.html.gz"); err != nil {
+	if err := s.RecordFetchSuccess(ctx, id, store.FetchedPage{SHA: "abc123", Path: "articles/2026/08/a-1234/raw.html.gz"}); err != nil {
 		t.Fatalf("RecordFetchSuccess() = %v", err)
 	}
 
@@ -374,7 +374,7 @@ func TestPendingFetch(t *testing.T) {
 	pending := newArticle(t, s, "https://example.com/pending")
 	fetched := newArticle(t, s, "https://example.com/fetched")
 
-	if err := s.RecordFetchSuccess(ctx, fetched, "sha", "path"); err != nil {
+	if err := s.RecordFetchSuccess(ctx, fetched, store.FetchedPage{SHA: "sha", Path: "path"}); err != nil {
 		t.Fatalf("RecordFetchSuccess() = %v", err)
 	}
 
@@ -541,7 +541,7 @@ func TestReextractCandidatesByDomain(t *testing.T) {
 	ids := make(map[string]store.ArticleID, len(urls))
 	for name, url := range urls {
 		id := newArticle(t, s, url)
-		if err := s.RecordFetchSuccess(ctx, id, "sha-"+name, "path/"+name); err != nil {
+		if err := s.RecordFetchSuccess(ctx, id, store.FetchedPage{SHA: "sha-" + name, Path: "path/" + name}); err != nil {
 			t.Fatalf("RecordFetchSuccess(%s) = %v", name, err)
 		}
 		insertBody(t, s, id, store.ContentParams{ExtractorName: "readability", ExtractorVersion: "1"})

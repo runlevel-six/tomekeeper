@@ -76,6 +76,14 @@ func explain(args []string, stdout, stderr io.Writer) int {
 
 	article, err := s.GetArticle(ctx, store.ArticleID(id))
 	if err != nil {
+		// "No article" only when that is what happened. Every other failure — a schema
+		// older than this binary being the one that actually turns up — reports itself,
+		// because a missing column announced as a missing article sends somebody looking
+		// in the wrong place entirely. Found doing exactly that.
+		if !store.IsNotFound(err) {
+			fmt.Fprintf(stderr, "tome explain: %v\n", err)
+			return exitFailure
+		}
 		fmt.Fprintf(stderr, "tome explain: no article %d\n", id)
 		return exitFailure
 	}
@@ -197,6 +205,13 @@ func printExplanation(w io.Writer, article store.Article, in extract.Input, rawB
 	if article.FetchError != "" {
 		fmt.Fprintf(w, " — %s", article.FetchError)
 	}
+	if article.BrowserRendered {
+		// Worth saying, because it changes what the numbers below mean: the "page" a
+		// rendered article was extracted from is the DOM after its scripts ran, not the
+		// HTML the server sent, and somebody comparing this against `curl` output would
+		// otherwise be comparing two different documents.
+		fmt.Fprint(w, " (through a headless browser)")
+	}
 	fmt.Fprintln(w)
 	if in.Rule != nil && in.Rule.ContentSelector != "" {
 		fmt.Fprintf(w, "  domain rule: %s", in.Rule.ContentSelector)
@@ -206,7 +221,12 @@ func printExplanation(w io.Writer, article store.Article, in extract.Input, rawB
 		fmt.Fprintln(w)
 	}
 	if in.FeedBody != "" {
-		fmt.Fprintf(w, "  feed body: %d characters available\n", len(in.FeedBody))
+		// "of markup", because the ladder's own line for this rung counts *text* against
+		// a 200-character floor. A feed body of 1,427 characters of markup wrapping one
+		// image is a handful of characters of text, and two unlabelled counts on adjacent
+		// lines read as a contradiction — which is exactly how this command sent somebody
+		// hunting for a data-loss bug that did not exist.
+		fmt.Fprintf(w, "  feed body: %d characters of markup\n", len(in.FeedBody))
 	}
 
 	fmt.Fprintln(w)

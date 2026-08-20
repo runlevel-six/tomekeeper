@@ -13,6 +13,9 @@ resources:
   - tomekeeper.yaml
   - ingress.yaml
   - backup.yaml
+  # The headless browser. Scaled to zero, so applying this costs nothing until
+  # somebody flags a domain and scales it up.
+  - render.yaml
 
 labels:
   - includeSelectors: false

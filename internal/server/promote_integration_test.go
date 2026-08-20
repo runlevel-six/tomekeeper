@@ -231,8 +231,8 @@ func TestPromotingAMutableBodyRestoresReextraction(t *testing.T) {
 
 	// Re-extraction works from the stored original page, so the article needs one
 	// before it can be a candidate at all — a body alone is not enough.
-	if err := tr.store.RecordFetchSuccess(ctx, tr.aliceOnly,
-		"sha-promote", "articles/2026/08/promote/raw.html.gz"); err != nil {
+	if err := tr.store.RecordFetchSuccess(ctx, tr.aliceOnly, store.FetchedPage{
+		SHA: "sha-promote", Path: "articles/2026/08/promote/raw.html.gz"}); err != nil {
 		t.Fatalf("RecordFetchSuccess() = %v", err)
 	}
 

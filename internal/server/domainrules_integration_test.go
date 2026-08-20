@@ -403,7 +403,7 @@ func seedReextractable(t *testing.T, tr twoReadersHTTP, rawURL string) store.Art
 	if err != nil {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
-	if err := tr.store.RecordFetchSuccess(ctx, id, "sha-reprocess", "articles/2026/08/reprocess/raw.html.gz"); err != nil {
+	if err := tr.store.RecordFetchSuccess(ctx, id, store.FetchedPage{SHA: "sha-reprocess", Path: "articles/2026/08/reprocess/raw.html.gz"}); err != nil {
 		t.Fatalf("RecordFetchSuccess() = %v", err)
 	}
 	if _, err := tr.store.InsertContent(ctx, store.ContentParams{

@@ -35,6 +35,7 @@ is the authority; if it disagrees with this table, the table is wrong.
 | `golang.org/x/net/html` | The HTML tokenizer the extraction ladder walks. Already in the tree beneath the extractors and `goquery`; the standard library has no HTML parser. |
 | `github.com/prometheus/client_golang` | The metrics endpoint and its custom collector. Writing the exposition format by hand is a morning's work and then a decade of tracking a specification that changes without you; this is the reference implementation, and the collector interface is what lets the archive's gauges be queried on scrape rather than maintained continuously. |
 | `golang.org/x/crypto/argon2` | Password hashing (argon2id). The standard library has no memory-hard KDF, and this is the reference implementation for the algorithm current guidance recommends. Only the KDF is taken from it: the PHC string encoding, parameter parsing, and constant-time comparison are written here, so the encoding is inspectable and no dependency owns the on-disk format of a credential. |
+| `github.com/chromedp/chromedp` | Driving a headless browser over the DevTools protocol, for the domains that build their article in JavaScript. With `chromedp/cdproto` for the protocol types. This speaks to a browser it does not start or ship: Chrome stays in its own deployment, because bundling it would end the single static binary — 34MB of distroless-static against a 300MB+ base. Writing CDP by hand means a websocket protocol, a request/response correlator, and a target lifecycle, all to reach the same place. |
 | `golang.org/x/sync/singleflight` | Collapsing concurrent fetches of the same image URL across articles. The database lookup that dedupes fetches is a check-then-act, so without this the origin serves one request per worker slot for a picture shared between articles. Already in the tree as a transitive dependency, and a hand-rolled map of in-flight keys is the kind of thing that looks right and leaks a goroutine on the error path. |
 
 Still done with the standard library, deliberately:
@@ -76,7 +77,6 @@ with its justification, when the work that needs it lands.
 
 | Dependency | For | Why it will be needed |
 |---|---|---|
-| `chromedp` | headless rendering | Driving a headless browser for the small set of domains that render their content in JavaScript. |
 
 ## Build and CI dependencies
 

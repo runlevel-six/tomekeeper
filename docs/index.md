@@ -124,6 +124,7 @@ rejected. Design rationale lives here and nowhere else.
 | Find one feed among hundreds, or list the broken ones first | Sort and filter the Feeds page — see [CLI](reference/cli.md#sorting-and-filtering-the-feed-list) |
 | Make it check the feeds right now | **Check all feeds now** on the Feeds page — see [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md#watch-a-poll-happen) |
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
+| Archive a site that builds its pages in JavaScript | [Enable headless rendering](how-to/enable-headless-rendering.md) |
 | Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
 | Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
 | Stop the archive growing forever | [Retention](reference/retention.md) |

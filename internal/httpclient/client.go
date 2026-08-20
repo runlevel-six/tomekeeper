@@ -202,6 +202,44 @@ func (c *Client) Get(ctx context.Context, rawURL string, header http.Header) (*h
 	return c.Do(ctx, Request{URL: rawURL, Header: header})
 }
 
+// Permit clears one request through the politeness rules without making it.
+//
+// This exists for exactly one caller: the headless renderer, which fetches a page
+// through a browser rather than through this client. That page still has to obey
+// robots.txt and still has to wait its turn behind this host's rate limit, and the
+// alternative — a second implementation of both rules living next to the browser —
+// is how the two come to disagree about a site that asked not to be crawled.
+//
+// It blocks until the host's rate limit allows a request, then returns nil if the
+// path is permitted. A disallowed path returns ErrDisallowedByRobots, exactly as Do
+// would, so the caller's handling of a site that said no is identical either way.
+//
+// The global in-flight cap is deliberately not taken here. It bounds requests this
+// process is making, and the requests a render causes are made by the browser; the
+// render queue's own narrow concurrency is what bounds those.
+func (c *Client) Permit(ctx context.Context, rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parsing URL %q: %w", rawURL, err)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("URL %q has no host", rawURL)
+	}
+
+	allowed, err := c.robotsAllows(ctx, parsed)
+	if err != nil {
+		// Permissive on an unreadable robots.txt, the same deviation Do makes and for
+		// the same reason: a host briefly failing to serve the file has not asked for
+		// anything.
+		allowed = true
+	}
+	if !allowed {
+		return fmt.Errorf("%s: %w", rawURL, ErrDisallowedByRobots)
+	}
+
+	return c.waitForHost(ctx, parsed.Host)
+}
+
 // Do issues a request, applying every politeness rule.
 //
 // The caller owns the response body and must close it.

@@ -127,6 +127,24 @@ type Config struct {
 	// BlobRoot is the filesystem root of the archive. Raw fetched pages are
 	// stored under it, along with the extracted articles and their images.
 	BlobRoot string
+
+	// RenderBrowserURL is the CDP endpoint of a headless browser, used only for the
+	// domains an operator has flagged as needing JavaScript.
+	//
+	// Empty is the ordinary case and means no rendering: nothing is flagged on most
+	// installations, and a browser nobody needs is 150MB of image and a pod to watch.
+	// A Kubernetes Service name is enough — the client resolves the browser's own
+	// websocket address, which carries a GUID that changes on every restart and could
+	// never be configured.
+	RenderBrowserURL string
+
+	// RenderConcurrency is how many pages may be rendered at once.
+	//
+	// Its own setting rather than sharing WorkerConcurrency, for the reason
+	// ImageConcurrency has one: a render holds a browser tab, a document and its
+	// scripts, so the cost is per call and the useful number is small. One by default,
+	// capped low.
+	RenderConcurrency int
 }
 
 // Defaults for every optional setting. Kept in one block so the reference
@@ -156,8 +174,9 @@ const (
 	// shape of a limit that was raised rather than removed. One does not
 	// meaningfully slow the archive: transcoding is not on any reader's critical
 	// path, and a backlog of a few hundred images drains in minutes.
-	defaultImageConcurrency = 1
-	defaultBlobRoot         = "/var/lib/tomekeeper"
+	defaultImageConcurrency  = 1
+	defaultRenderConcurrency = 1
+	defaultBlobRoot          = "/var/lib/tomekeeper"
 )
 
 // LookupFunc matches os.LookupEnv. Taking it as a parameter keeps Load a pure
@@ -188,6 +207,11 @@ func Load(lookup LookupFunc) (*Config, error) {
 		MetricsAddr: get("METRICS_ADDR", defaultMetricsAddr),
 		ContactURL:  get("CONTACT_URL", ""),
 		BlobRoot:    get("BLOB_ROOT", defaultBlobRoot),
+
+		// No validation beyond being a URL if present: a browser that is not there is a
+		// runtime condition the render job reports rather than a reason to refuse to
+		// start, because the archive works without one.
+		RenderBrowserURL: get("RENDER_BROWSER_URL", ""),
 	}
 	var problems []error
 
@@ -373,6 +397,7 @@ func Load(lookup LookupFunc) (*Config, error) {
 	cfg.WorkerConcurrency = positiveInt("WORKER_CONCURRENCY", defaultWorkerConcurrency)
 	cfg.FetchConcurrency = positiveInt("FETCH_CONCURRENCY", defaultFetchConcurrency)
 	cfg.ImageConcurrency = positiveInt("IMAGE_CONCURRENCY", defaultImageConcurrency)
+	cfg.RenderConcurrency = positiveInt("RENDER_CONCURRENCY", defaultRenderConcurrency)
 
 	// TOME_FETCH_RPS — the per-host politeness budget. Fractional rates are
 	// the useful ones: 0.5 is one request every two seconds.
@@ -460,6 +485,11 @@ func (c *Config) LogValue() slog.Value {
 		slog.Float64("fetch_rps", c.FetchRPS),
 		slog.Int("fetch_concurrency", c.FetchConcurrency),
 		slog.Int("image_concurrency", c.ImageConcurrency),
+		// The endpoint, not a secret: it is a hostname on the cluster network, and
+		// knowing whether rendering is configured at all is the first question when an
+		// article that needs it stays pending.
+		slog.String("render_browser_url", c.RenderBrowserURL),
+		slog.Int("render_concurrency", c.RenderConcurrency),
 		slog.String("blob_root", c.BlobRoot),
 		slog.Duration("retain_after_read", c.RetainAfterRead),
 	)

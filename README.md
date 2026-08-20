@@ -79,9 +79,13 @@ What is there:
   in the body is the *extracted article*, not the two-sentence summary the feed
   shipped. Read and starred state syncs both ways; archived images travel with it.
 
-**Not built yet:** importing from read-later tools other than Wallabag, headless
-rendering for JavaScript-only sites, and more than one user account. Those are
-planned, roughly in that order.
+- **The handful of sites that need a browser.** Some pages send an empty shell and
+  build the article in JavaScript. Flag the domain and a headless browser fetches it
+  instead — off by default, scaled to zero, and it refuses to load images, fonts and
+  media while it does so.
+
+**Not built yet:** importing from read-later tools other than Wallabag, and more than
+one user account.
 
 ## Quick start
 
