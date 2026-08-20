@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.1.0` is the tag
-`v0.1.0`, and `tome version` inside it says `v0.1.0`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.3.0` is the tag
+`v0.3.0`, and `tome version` inside it says `v0.3.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -31,6 +31,13 @@ happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [v0.3.0] — 2026-08-20
+
+Sites that build their pages in JavaScript can be archived. **This release adds a
+migration**, so upgrading is the migration Job and then an apply — not a tag change.
 
 ### Added
 
@@ -169,6 +176,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/runlevel-six/tomekeeper/releases/tag/v0.1.0
