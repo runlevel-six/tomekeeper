@@ -41,6 +41,7 @@ is a later milestone; the schema is user-scoped from the start regardless.
 | `api_key` | `text` | Unique, nullable. MD5 of `username:password` for the Fever API, which does not exist yet. It cannot be derived from `password_hash`, so it has to be written while the cleartext is in hand — that is why the column exists ahead of the API that reads it. |
 | `theme` | `text` | The reader's palette and light/dark preference, as one value such as `plum-dark` or `auto`. See [Themes](themes.md). |
 | `mark_read_on_scroll` | `boolean` | Whether the unread lists mark articles read as they are scrolled past. `false` unless the reader turned it on; automatic state changes are opted into, never inherited from an upgrade. |
+| `default_poll_interval` | `interval` | How often the reader wants their feeds checked. Nullable, and null is the default and a real value: it means the poller decides per feed. A feed with a `poll_interval_override` does not consult this. |
 | `created_at` | `timestamptz` | |
 
 ### `feeds`
@@ -56,7 +57,8 @@ A user's subscriptions, and everything the poller needs to know about each.
 | `title` | `text` | Never empty; falls back to the feed URL. |
 | `category` | `text` | From the OPML folder. Nested folders are joined with `/`. Nullable, and a null and an empty string mean the same thing — a feed the export listed outside any folder. This column *is* the category list: there is no `categories` table, so a category exists as long as some feed claims one, and re-importing a rearranged OPML rearranges them. |
 | `etag`, `last_modified` | `text` | Conditional-GET validators from the last successful poll. |
-| `poll_interval` | `interval` | Current adaptive interval. |
+| `poll_interval` | `interval` | The interval in force: learned from the feed's behavior, or the reader's cadence once one is set. Rewritten by every poll, which is why a reader's choice is stored separately — a preference kept here would not survive being polled. |
+| `poll_interval_override` | `interval` | How often the reader wants *this* feed checked, overriding `users.default_poll_interval`. Nullable; null means neither is set on the feed and the general preference — or the adaptive interval — applies. |
 | `next_poll_at` | `timestamptz` | When this feed becomes due. Defaults to `now()`, so a new subscription is polled promptly. |
 | `last_polled_at`, `last_success_at` | `timestamptz` | A feed with a recent poll but a stale success is failing. |
 | `consecutive_failures` | `int` | Reset to 0 by any success, including a 304. |
@@ -78,13 +80,22 @@ plain reference, not an ownership edge. An article that no surviving `feed_items
 and no `article_state` row points at is unreachable through the interface but still
 present, and re-subscribing relinks it by canonical URL.
 
-`feed_url`, `title`, `category` and `disabled` are the four columns the **Edit**
-control on the feeds page writes. It is not an upsert: an import preserves what it is
-not given, so re-importing an OPML file cannot unfile every feed, whereas emptying the
-category in the form means exactly that. Changing `feed_url` also clears the
-validators and the failure state and brings `next_poll_at` forward — see
+`feed_url`, `title`, `category`, `disabled` and `poll_interval_override` are the five
+columns the **Edit** control on the feeds page writes. It is not an upsert: an import
+preserves what it is not given, so re-importing an OPML file cannot unfile every feed,
+whereas emptying the category in the form means exactly that. Changing `feed_url` also
+clears the validators and the failure state and brings `next_poll_at` forward — see
 [CLI](cli.md#post-feedsidedit--change-one-subscription) for why each of those has to
 happen.
+
+An edit that shortens the cadence moves `next_poll_at` too, but only as far as
+`last_polled_at + poll_interval_override`, never to `now()`. The distinction is the
+difference between a cadence and a refresh: choosing hourly on a feed fetched two
+minutes ago means the next check is in 58 minutes, and a feed last fetched four hours
+ago is due immediately because it already is. Setting the general preference on
+Settings does the same across the reader's feeds, skipping those with an override of
+their own and those that are disabled, and only where it brings a poll forward —
+choosing a longer cadence never postpones a poll that is already imminent.
 
 ### `articles`
 

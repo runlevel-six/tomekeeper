@@ -798,6 +798,19 @@ kbd {
   color: var(--ink);
 }
 .add-feed input[type="text"]:focus-visible { border-color: var(--accent); outline: none; }
+/* Not stretched to the width of the address field above it: a list of ten fixed
+   options is as wide as its longest option, and a full-width select reads as an
+   input somebody forgot to fill in. */
+.add-feed select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.add-feed select:focus-visible { border-color: var(--accent); outline: none; }
 .add-feed .actions-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; }
 .add-feed .hint-inline { margin: 0.3rem 0 0; font-size: 0.82rem; color: var(--ink-soft); }
 .add-feed label.checkbox {
@@ -997,6 +1010,25 @@ kbd {
   color: var(--ink-soft);
 }
 .settings .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+/* The cadence picker. A label above rather than beside, like the feed form's
+   fields, so the two places this control appears look like the same control. */
+.settings label[for="poll-every"] {
+  display: block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+  margin-bottom: 0.3rem;
+}
+.settings select {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.settings select:focus-visible { border-color: var(--accent); outline: none; }
 .settings .radio {
   display: block;
   margin: 0.4rem 0;

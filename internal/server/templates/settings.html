@@ -7,6 +7,9 @@
   {{if .Saved}}
     <p class="import-result ok"><span>Saved.</span></p>
   {{end}}
+  {{if .Problem}}
+    <p class="import-result bad">{{.Problem}}</p>
+  {{end}}
 
   <form method="post" action="/settings">
     <fieldset class="palettes">
@@ -71,6 +74,36 @@
         Starred and saved articles are never marked this way, and nothing else is
         touched: the archive keeps everything, and any row can be marked unread
         again with its own button.
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Checking feeds</legend>
+      <label for="poll-every">Check my feeds</label>
+      <select id="poll-every" name="poll_every">
+        {{range .PollChoices}}
+          <option value="{{.Value}}"{{if eq .Value $.PollEvery}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      {{/*
+        What automatic actually does, because it is the default and nobody has been
+        told: the interval is learned per feed, which is why a busy feed and a
+        dormant one are not checked at the same rate. The reason to change it is
+        usually one of the two ends — wanting everything sooner, or wanting a
+        70-feed list to stop making 70 requests an hour.
+      */}}
+      <p class="note">
+        Automatically means each feed keeps its own pace: checked more often while it
+        is publishing, and progressively less often while it is quiet, between
+        {{with .PollFloor}}{{.}}{{else}}the instance's floor{{end}} and a day. Choosing
+        an interval holds every feed to it instead.
+      </p>
+      <p class="note">
+        A single feed can be set apart from this on the <a href="/feeds">Feeds</a>
+        page, and its own setting wins.
+        {{with .PollFloor}}Nothing is checked more often than {{.}} whatever is chosen
+        here — that limit belongs to the instance, not to the reader.{{end}}
+        A failing feed is still backed off from until it recovers.
       </p>
     </fieldset>
 

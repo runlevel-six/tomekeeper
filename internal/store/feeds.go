@@ -28,6 +28,36 @@ type Feed struct {
 	ConsecutiveFailures int
 	LastError           string
 	Disabled            bool
+
+	// PollIntervalOverride is the cadence the reader chose for this feed alone, or
+	// nil. Distinct from PollInterval, which is what the poller has learned and
+	// rewrites on every poll.
+	PollIntervalOverride *time.Duration
+
+	// DefaultPollInterval is the same reader's general preference, carried on every
+	// feed they own so that resolving "how often should this be checked" needs one
+	// row rather than a second query per poll. Nil when they have not set one.
+	//
+	// Not a column on feeds: it comes from users, and it is read here because the
+	// answer is a property of the pair.
+	DefaultPollInterval *time.Duration
+}
+
+// ChosenInterval is the cadence the reader asked for, and whether they asked at
+// all.
+//
+// The per-feed override wins over the general preference, which is the whole point
+// of having both: the preference is what to do with seventy feeds, and the override
+// is the one feed it is wrong for.
+func (f Feed) ChosenInterval() (time.Duration, bool) {
+	switch {
+	case f.PollIntervalOverride != nil:
+		return *f.PollIntervalOverride, true
+	case f.DefaultPollInterval != nil:
+		return *f.DefaultPollInterval, true
+	default:
+		return 0, false
+	}
 }
 
 // FeedParams is the subscription data an OPML file or a manual add supplies.
@@ -41,26 +71,59 @@ type FeedParams struct {
 // feedColumns is the shared SELECT list. Nullable text is coalesced to the
 // empty string so that scanning never needs a pointer for a value that has no
 // meaningful difference between NULL and "".
+//
+// The two cadence columns are read as nullable seconds, NULL meaning "no choice
+// was made" in both cases. The reader's general preference is a correlated subquery
+// rather than a join, which is what lets this list stay usable in a RETURNING
+// clause — where there is no FROM to join to, but feeds.user_id is still in scope.
 const feedColumns = `
 	id, user_id, feed_url, COALESCE(site_url, ''), title, COALESCE(category, ''),
 	COALESCE(etag, ''), COALESCE(last_modified, ''),
 	EXTRACT(EPOCH FROM poll_interval)::bigint,
 	next_poll_at, last_polled_at, last_success_at,
-	consecutive_failures, COALESCE(last_error, ''), disabled`
+	consecutive_failures, COALESCE(last_error, ''), disabled,
+	EXTRACT(EPOCH FROM poll_interval_override)::bigint,
+	EXTRACT(EPOCH FROM (SELECT u.default_poll_interval FROM users u
+	                     WHERE u.id = feeds.user_id))::bigint`
 
 func scanFeed(row pgx.Row) (Feed, error) {
 	var (
 		f              Feed
 		intervalSecond int64
+		overrideSecond *int64
+		defaultSecond  *int64
 	)
 	err := row.Scan(&f.ID, &f.UserID, &f.FeedURL, &f.SiteURL, &f.Title, &f.Category,
 		&f.ETag, &f.LastModified, &intervalSecond, &f.NextPollAt, &f.LastPolledAt,
-		&f.LastSuccessAt, &f.ConsecutiveFailures, &f.LastError, &f.Disabled)
+		&f.LastSuccessAt, &f.ConsecutiveFailures, &f.LastError, &f.Disabled,
+		&overrideSecond, &defaultSecond)
 	if err != nil {
 		return Feed{}, err
 	}
 	f.PollInterval = time.Duration(intervalSecond) * time.Second
+	f.PollIntervalOverride = secondsToDuration(overrideSecond)
+	f.DefaultPollInterval = secondsToDuration(defaultSecond)
 	return f, nil
+}
+
+// secondsToDuration converts a nullable interval-as-seconds into an optional
+// duration, keeping NULL and "no choice" the same thing all the way up.
+func secondsToDuration(seconds *int64) *time.Duration {
+	if seconds == nil {
+		return nil
+	}
+	d := time.Duration(*seconds) * time.Second
+	return &d
+}
+
+// durationSeconds is the reverse, for the parameter make_interval takes. Nil in,
+// nil out, so an absent choice is stored as NULL rather than as zero.
+func durationSeconds(d *time.Duration) *float64 {
+	if d == nil {
+		return nil
+	}
+	seconds := d.Seconds()
+	return &seconds
 }
 
 // UpsertFeed adds a subscription for a user, or updates the title and category
@@ -109,6 +172,11 @@ type FeedEdit struct {
 	Title    string
 	Category string
 	Disabled bool
+
+	// PollInterval is how often the reader wants this one feed checked, and nil is
+	// a real value: it means "however often you think", which is both the default
+	// and the way back to it.
+	PollInterval *time.Duration
 }
 
 // ErrFeedURLTaken means an edit would move a feed onto an address the same reader
@@ -138,6 +206,14 @@ var ErrFeedURLTaken = errors.New("already subscribed to that address")
 // that was meant to fix it and is waiting to find out whether it worked. Turning a
 // feed off is the case that keeps its history — the count and the last error are
 // still there to read when somebody comes back to the row.
+//
+// A cadence has its own, gentler effect on the schedule. Shortening one has to move
+// the next poll or the choice does not take effect until the poll it was meant to
+// change — up to a day away, which presents as a setting that did nothing. Moving
+// it to `now()` would be the wrong correction, though: that is a refresh, and it
+// would poll a feed fetched a minute ago. So the poll is brought forward only as
+// far as the new cadence allows, measured from the last one — which is where the
+// schedule would already be if the choice had been made a poll earlier.
 func (s *Store) UpdateFeed(ctx context.Context, userID UserID, feedID FeedID, e FeedEdit) (Feed, error) {
 	if e.FeedURL == "" {
 		return Feed{}, fmt.Errorf("feed URL must not be empty")
@@ -170,11 +246,22 @@ func (s *Store) UpdateFeed(ctx context.Context, userID UserID, feedID FeedID, e 
 			                            THEN 0 ELSE consecutive_failures END,
 			last_error           = CASE WHEN feed_url <> $3 OR (disabled AND NOT $6)
 			                            THEN NULL ELSE last_error END,
+			poll_interval_override = make_interval(secs => $7::float8),
+			-- least() ignores NULLs rather than returning one, which is what makes
+			-- the second branch a no-op when the cadence is automatic: there is no
+			-- bound to bring the poll forward to, so the schedule stands. Same
+			-- expression for a cadence that did not change — it recomputes the bound
+			-- the schedule is already under.
 			next_poll_at         = CASE WHEN feed_url <> $3 OR (disabled AND NOT $6)
-			                            THEN now() ELSE next_poll_at END
+			                            THEN now()
+			                            ELSE least(next_poll_at,
+			                                       COALESCE(last_polled_at, now())
+			                                         + make_interval(secs => $7::float8))
+			                       END
 		WHERE id = $1 AND user_id = $2
 		RETURNING `+feedColumns,
-		feedID, userID, e.FeedURL, e.Title, e.Category, e.Disabled))
+		feedID, userID, e.FeedURL, e.Title, e.Category, e.Disabled,
+		durationSeconds(e.PollInterval)))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {

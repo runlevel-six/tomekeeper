@@ -547,14 +547,14 @@ session.
 | `GET /export` | Download the archive as a file. The one route allowed to exceed the write timeout. |
 | `POST /feeds/test` | Fetch a feed URL and report what is there. Writes nothing. |
 | `POST /feeds/add` | Subscribe to one feed. `url=`, optional `category=` and `title=`. |
-| `POST /feeds/{id}/edit` | Change one subscription. `url=`, `title=`, `category=` and `enabled=`. An omitted `enabled` turns polling off. |
+| `POST /feeds/{id}/edit` | Change one subscription. `url=`, `title=`, `category=`, `enabled=` and `poll_every=`. An omitted `enabled` turns polling off; an empty `poll_every` means automatic. |
 | `POST /feeds/{id}/unsubscribe` | Remove one subscription. `GET /feeds?unsubscribe=<id>` asks first and says what it costs. |
 | `POST /domain-rules` | Save one rule. |
 | `POST /domain-rules/delete` | Remove one rule. `domain=`. |
 | `POST /domain-rules/reprocess` | Queue re-extraction of one domain. `domain=`. |
 | `POST /feeds/import` | Subscribe to everything in an uploaded OPML file |
 | `POST /feeds/refresh` | Bring every enabled feed forward to due |
-| `POST /settings` | Save preferences |
+| `POST /settings` | Save preferences. `palette=`, `mode=`, `mark_on_scroll=` and `poll_every=`. Posts every preference it holds, so an absent field is read as off or automatic. |
 | `GET /login`, `POST /login`, `POST /logout` | Session |
 | `GET /assets/…` | Archived images, from `TOME_BLOB_ROOT` |
 | `GET /static/…` | Stylesheet, keyboard script, logo, vendored htmx |
@@ -623,10 +623,22 @@ subscriptions in the table, a form underneath is a form nobody scrolls to.
 ### `POST /feeds/{id}/edit` — change one subscription
 
 The same form, with a feed loaded into it by **Edit** on its row (`?edit=<id>`). It
-takes the address, the title, the category, and whether the feed is polled at all;
-emptying the category takes the feed out of that folder.
+takes the address, the title, the category, how often the feed is checked, and
+whether it is polled at all; emptying the category takes the feed out of that folder.
 
-Three things it does to polling, none of which are visible in the row it changes:
+`poll_every` is a Go duration (`15m`, `6h`, `168h`), and empty means automatic — the
+reader's general cadence from **Settings** if they have one, otherwise the learned
+interval. It sets this feed's override only: the picker never comes up showing the
+general preference, because opening a form and saving it would then pin every feed to
+whatever that preference happened to be. A value that will not parse, is not positive,
+or exceeds a year is refused with `400` and nothing else in the edit is applied.
+
+Values below `TOME_POLL_MIN_INTERVAL` are accepted and raised to it at poll time, and
+the picker leaves them out for that reason. Values above `TOME_POLL_MAX_INTERVAL` are
+honored as given: the ceiling exists to stop this service polling a quiet feed for
+nothing, not to stop a reader asking for less.
+
+Five things it does to polling, none of which are visible in the row it changes:
 
 - **A changed address discards the conditional-GET validators** and queues the feed
   for a poll now. An `ETag` the old endpoint issued means nothing to the new one, and
@@ -644,6 +656,12 @@ Three things it does to polling, none of which are visible in the row it changes
   failure re-crosses `TOME_FEED_FAILURE_THRESHOLD` and disables the feed again
   immediately. Turning it *off* keeps the count and the error, so the row can still
   say what went wrong.
+- **A shortened cadence brings the next poll forward**, to `last_polled_at +` the new
+  interval and never to `now()`. Otherwise the choice would not take effect until the
+  poll it was meant to replace, up to a day later. A feed fetched two minutes ago and
+  set to hourly is next checked in 58 minutes; one fetched four hours ago is due
+  immediately, because it already is. A *lengthened* cadence never postpones a poll
+  that was already imminent, and choosing automatic moves nothing.
 
 Moving a feed onto an address the same reader already subscribes to is refused with
 `409` and nothing is changed: two subscriptions to one feed would be

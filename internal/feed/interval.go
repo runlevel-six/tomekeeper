@@ -47,6 +47,22 @@ func (p IntervalPolicy) Clamp(d time.Duration) time.Duration {
 	}
 }
 
+// Chosen returns the interval to use for a cadence the reader asked for.
+//
+// Clamped upward to the floor and not downward to the ceiling, which is the one
+// asymmetry in this file and is deliberate. The floor is politeness and belongs to
+// the operator: TOME_POLL_MIN_INTERVAL is a promise made to other people's servers,
+// and a reader cannot spend somebody else's request budget by picking a number in a
+// dropdown. The ceiling is only ever this policy protecting a quiet feed from being
+// polled pointlessly, so a reader asking for *less* often than the ceiling is
+// asking for something there was never a reason to refuse.
+func (p IntervalPolicy) Chosen(d time.Duration) time.Duration {
+	if d < p.Min {
+		return p.Min
+	}
+	return d
+}
+
 // OnNewItems returns the next interval after a poll that found new items.
 //
 // The interval is halved rather than reset to the floor. "Reset to floor"

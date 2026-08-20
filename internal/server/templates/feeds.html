@@ -214,6 +214,35 @@
 
       {{if .Editing}}
         <div class="field">
+          <label for="feed-poll-every">Check it</label>
+          {{/*
+            This feed's cadence, overriding the general preference on Settings. A
+            select rather than a duration box: "how often" has about ten sensible
+            answers, and a free-text field would invite "1 min" and then have to
+            refuse it.
+          */}}
+          <select id="feed-poll-every" name="poll_every">
+            {{range $.PollChoices}}
+              <option value="{{.Value}}"{{if eq .Value $.PollEvery}} selected{{end}}>{{.Name}}</option>
+            {{end}}
+          </select>
+          <p class="hint-inline">
+            {{if $.UsualCadence}}
+              Automatically means it follows your setting for every feed, which is
+              {{$.UsualCadence}}.
+            {{else}}
+              Automatically means it keeps its own pace: checked often while it is
+              publishing and progressively less often while it is quiet, between
+              {{with $.PollFloor}}{{.}}{{else}}the instance's floor{{end}} and a day.
+            {{end}}
+            Choosing an interval holds this one feed to it instead{{with $.PollFloor}},
+            and nothing is ever checked more often than {{.}}{{end}}.
+            A feed that starts failing is still backed off from — an interval is a
+            floor under the backoff, not a promise to keep retrying on the dot.
+          </p>
+        </div>
+
+        <div class="field">
           <label class="checkbox">
             <input type="checkbox" name="enabled" value="true"{{if .Add.Enabled}} checked{{end}}>
             Check this feed on a schedule
@@ -261,13 +290,16 @@
       {{else if .Saved}}
         <div class="import-result ok">
           <p>Saved <strong>{{.FeedTitle}}</strong>.</p>
-          {{if or .URLChanged .Reenabled .TurnedOff}}
+          {{if or .URLChanged .Reenabled .TurnedOff .PollChanged}}
             <p class="note">
               {{if .URLChanged}}The address changed, so it is queued for a poll now and
               the old endpoint's validators are gone.{{end}}
               {{if .Reenabled}}It is being checked again, with its failure count cleared.{{end}}
               {{if .TurnedOff}}It will not be checked until you turn it back on. Nothing
               already archived from it is affected.{{end}}
+              {{/* Said only when it changed: a cadence line on every save would be noise
+                   on the four out of five edits that were about a title or a folder. */}}
+              {{if and .PollChanged (not .TurnedOff)}}It will be checked {{.Cadence}}.{{end}}
             </p>
           {{end}}
         </div>

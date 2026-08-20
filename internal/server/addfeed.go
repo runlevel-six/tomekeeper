@@ -30,6 +30,12 @@ type addFeedOutcome struct {
 	// whereas an unchecked box meaning "not disabled" is the one they misread.
 	Enabled bool
 
+	// PollEvery is the cadence picker's value — empty for automatic — and, like
+	// Enabled, is drawn only by the edit form. Held as the posted string rather than
+	// as a duration so that a value the store refuses comes back selected: the
+	// reader should see what they chose next to the reason it was not kept.
+	PollEvery string
+
 	// EditingID is the subscription this form has open, and zero on the form that
 	// adds a new one. It survives a test — a hidden field carries it through —
 	// because otherwise checking a corrected address would lose which subscription
@@ -60,6 +66,13 @@ type addFeedOutcome struct {
 	Reenabled  bool
 	TurnedOff  bool
 
+	// PollChanged reports a cadence that is not what it was, and Cadence is the new
+	// one in words. Reported for the same reason as the three above: the feed list
+	// has no column for it, so a save that changed nothing else would look like a
+	// save that did nothing.
+	PollChanged bool
+	Cadence     string
+
 	// AlreadySubscribed is set when a test found a feed this reader already has.
 	// Not an error: it is the answer to "am I subscribed to this?", which is a
 	// reasonable thing to use a test for.
@@ -76,6 +89,11 @@ func submittedForm(r *http.Request) *addFeedOutcome {
 		// polled, and a checkbox offering to create one that is not would be a
 		// choice nobody wants to make at that moment.
 		Enabled: r.PostFormValue("enabled") != "",
+		// Also absent on the add form, and for a similar reason: how often to check
+		// a feed nobody has fetched yet is a question with no information behind it.
+		// The reader's general preference already covers it, and the row can be given
+		// a cadence of its own once it exists.
+		PollEvery: strings.TrimSpace(r.PostFormValue("poll_every")),
 	}
 }
 
@@ -256,11 +274,23 @@ func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	outcome.URL = normalized
 
+	// Refused rather than rounded or ignored. The only way to get here is a
+	// hand-written POST or a picker this release no longer offers, and in both cases
+	// storing something other than what was asked for — including "automatic" — is
+	// worse than saying no.
+	interval, ok := store.PollIntervalFor(outcome.PollEvery)
+	if !ok {
+		outcome.Problem = "That is not a checking interval, so nothing was changed."
+		s.renderFeedsWith(w, r, http.StatusBadRequest, feedsExtras{Add: outcome})
+		return
+	}
+
 	updated, err := s.store.UpdateFeed(r.Context(), userID, feedID, store.FeedEdit{
-		FeedURL:  normalized,
-		Title:    outcome.Title,
-		Category: outcome.Category,
-		Disabled: !outcome.Enabled,
+		FeedURL:      normalized,
+		Title:        outcome.Title,
+		Category:     outcome.Category,
+		Disabled:     !outcome.Enabled,
+		PollInterval: interval,
 	})
 	switch {
 	case errors.Is(err, store.ErrFeedURLTaken):
@@ -286,7 +316,8 @@ func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("edited a feed", "feed_id", id, "url", updated.FeedURL,
 		"url_changed", updated.FeedURL != existing.FeedURL,
-		"category", updated.Category, "disabled", updated.Disabled)
+		"category", updated.Category, "disabled", updated.Disabled,
+		"poll_every", store.PollChoiceValue(updated.PollIntervalOverride))
 
 	// The form closes and goes back to being the add form: what a reader wants to
 	// look at after an edit is the row they just corrected, which is in the list
@@ -298,6 +329,9 @@ func (s *Server) handleEditFeed(w http.ResponseWriter, r *http.Request) {
 		URLChanged: updated.FeedURL != existing.FeedURL,
 		Reenabled:  existing.Disabled && !updated.Disabled,
 		TurnedOff:  updated.Disabled,
+		PollChanged: store.PollChoiceValue(existing.PollIntervalOverride) !=
+			store.PollChoiceValue(updated.PollIntervalOverride),
+		Cadence: cadencePhrase(updated),
 	}})
 }
 
@@ -374,6 +408,11 @@ func (s *Server) editForm(r *http.Request, raw string) *addFeedOutcome {
 		Title:     f.Title,
 		Category:  f.Category,
 		Enabled:   !f.Disabled,
+		// This feed's own cadence, not the one in force: the picker sets the
+		// override, and showing the reader's general preference selected here would
+		// turn opening the form and saving it into a way to pin every feed to
+		// whatever the preference happened to be that day.
+		PollEvery: store.PollChoiceValue(f.PollIntervalOverride),
 	}
 }
 

@@ -218,3 +218,42 @@ Failures back off exponentially from the floor, and a feed is disabled after
 twenty consecutive failures. Disabled is not deleted: the feed keeps its last
 error, and surfacing it is the point. A feed reader that quietly stops
 collecting from a source is worse than one that stops loudly.
+
+### When the reader would rather decide
+
+Learned intervals are right for most feeds and wrong for the ones somebody cares
+about the timing of. A feed that publishes twice a year climbs to the ceiling and
+stays there, which is correct until the week the reader is waiting on it. So there
+are two explicit settings: a general cadence on **Settings**, and an override on any
+one feed's **Edit** form.
+
+The order is: the feed's own override, then the reader's general cadence, then a
+cadence the feed declares for itself, then the learned interval.
+
+A reader's choice beating the feed's own `sy:updatePeriod` is the arguable one — the
+publisher does know their schedule. It is settled that way because an explicit
+setting whose effect depends on markup the reader cannot see is not a setting: asking
+for hourly checks on a feed that declares itself daily would get daily, with nothing
+said and no way to find out why. The declaration is still better information than the
+estimate, so it keeps its place ahead of the learned interval.
+
+Two bounds survive a reader's choice, and the asymmetry between them is the point:
+
+- **The floor holds.** `TOME_POLL_MIN_INTERVAL` is a promise made to other people's
+  servers, and a dropdown cannot spend somebody else's request budget. A shorter
+  choice is raised to it.
+- **The ceiling does not apply.** It exists only to stop this service polling a quiet
+  feed for nothing, so a reader asking for *less* often than the ceiling — weekly, say
+  — is asking for something there was never a reason to refuse.
+
+Failure backoff is not shortened by a chosen cadence either, but the cadence is a
+floor on it. Backoff starts from the 15-minute floor, so without that a feed set to
+weekly would be polled every 15 minutes the moment it broke: hundreds of times more
+often when it is failing than when it works.
+
+Choosing a shorter cadence also moves the next poll, because otherwise the choice
+would not take effect until the poll it was meant to replace — up to a day later,
+which presents as a setting that did nothing. It moves it to `last poll + the new
+interval` rather than to `now()`: that is the difference between a cadence and the
+**Check all feeds now** button, and it means a list of seventy feeds settles into the
+new rhythm instead of arriving on the worker at once.

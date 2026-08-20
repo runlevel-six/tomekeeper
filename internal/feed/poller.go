@@ -123,7 +123,10 @@ func (p *Poller) Poll(ctx context.Context, userID store.UserID, feedID store.Fee
 		// The cheap path, and the one the acceptance criteria are about: a
 		// second poll of an unchanged feed should mostly land here, having
 		// transferred no body at all.
-		interval := p.policy.OnNoChange(f.PollInterval)
+		// Nil rather than a parsed feed, because a 304 has no body to read a
+		// declared cadence out of. Everything else about the decision is the same,
+		// including a cadence the reader chose.
+		interval := p.nextInterval(f, nil, false)
 		if err := p.store.RecordPollNotModified(ctx, userID, feedID, interval); err != nil {
 			return Result{}, err
 		}
@@ -250,10 +253,22 @@ func (p *Poller) ingest(ctx context.Context, userID store.UserID, f store.Feed,
 
 // nextInterval decides when to poll this feed again.
 //
-// A cadence the feed declares for itself wins, because it is better
-// information than anything inferred from a single poll. Otherwise the
-// interval adapts to what the poll found.
+// In order: a cadence the reader chose for this feed, then their general
+// preference, then one the feed declares for itself, then what the poll found.
+//
+// A reader's choice beats the feed's own declaration, which is worth saying because
+// the opposite is arguable — the publisher does know their own schedule. But an
+// explicit setting whose effect depends on markup the reader cannot see is not a
+// setting, it is a suggestion: somebody who asks for hourly checks on a feed
+// carrying `sy:updatePeriod` of daily would get daily, be told nothing, and have no
+// way to find out why. The declaration is still better information than the
+// estimate, so it keeps its place ahead of the adaptive interval.
+//
+// parsed may be nil, for a 304 that carried no body.
 func (p *Poller) nextInterval(f store.Feed, parsed *gofeed.Feed, foundNew bool) time.Duration {
+	if chosen, ok := f.ChosenInterval(); ok {
+		return p.policy.Chosen(chosen)
+	}
 	if hint, ok := syUpdateHint(p.policy, parsed); ok {
 		return hint
 	}
@@ -263,10 +278,20 @@ func (p *Poller) nextInterval(f store.Feed, parsed *gofeed.Feed, foundNew bool) 
 	return p.policy.OnNoChange(f.PollInterval)
 }
 
+// recordFailure notes a failed poll and backs off.
+//
+// A cadence the reader chose does not shorten the backoff — a feed that is down is
+// not a feed whose publishing schedule is the question — but it does act as a floor
+// on it. Without that, the first failure on a feed set to weekly would drop it to
+// the 15-minute floor the backoff starts from, so a broken feed would be polled
+// hundreds of times more often than the reader asked for a working one.
 func (p *Poller) recordFailure(ctx context.Context, userID store.UserID, f store.Feed,
 	cause string, log *slog.Logger,
 ) (Result, error) {
 	interval := p.policy.OnFailure(f.ConsecutiveFailures + 1)
+	if chosen, ok := f.ChosenInterval(); ok {
+		interval = max(interval, p.policy.Chosen(chosen))
+	}
 
 	disabled, err := p.store.RecordPollFailure(ctx, userID, f.ID, cause, interval, p.disableAfter)
 	if err != nil {
@@ -354,7 +379,13 @@ func itemAuthor(item *gofeed.Item) string {
 }
 
 // syUpdateHint reads the syndication module's declared cadence, if present.
+//
+// A nil feed is the 304 case — nothing was transferred, so there is nothing to
+// read — and answers the same way a feed without the extension does.
 func syUpdateHint(policy IntervalPolicy, parsed *gofeed.Feed) (time.Duration, bool) {
+	if parsed == nil {
+		return 0, false
+	}
 	sy, ok := parsed.Extensions["sy"]
 	if !ok {
 		return 0, false

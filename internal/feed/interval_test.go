@@ -160,6 +160,34 @@ func TestFromHint(t *testing.T) {
 	}
 }
 
+// Chosen is the one path that is allowed past the ceiling, and the one that must
+// never go under the floor. The asymmetry is the point: the floor is a promise to
+// other people's servers and the ceiling is only this policy protecting a quiet
+// feed from being polled for nothing.
+func TestChosenRaisesToTheFloorAndIgnoresTheCeiling(t *testing.T) {
+	p := feed.DefaultIntervalPolicy()
+
+	tests := []struct {
+		in, want time.Duration
+	}{
+		{time.Minute, p.Min},
+		{time.Nanosecond, p.Min},
+		{0, p.Min},
+		{-time.Hour, p.Min},
+		{p.Min, p.Min},
+		{time.Hour, time.Hour},
+		{p.Max, p.Max},
+		// Asking for less traffic than the ceiling was never something to refuse.
+		{7 * 24 * time.Hour, 7 * 24 * time.Hour},
+		{365 * 24 * time.Hour, 365 * 24 * time.Hour},
+	}
+	for _, tt := range tests {
+		if got := p.Chosen(tt.in); got != tt.want {
+			t.Errorf("Chosen(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 // Every path must respect the bounds, whatever it is given.
 func TestPolicyAlwaysReturnsBoundedInterval(t *testing.T) {
 	p := feed.DefaultIntervalPolicy()

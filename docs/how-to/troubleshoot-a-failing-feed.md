@@ -70,6 +70,10 @@ nothing to say. The `poll_interval` will have grown toward
 `TOME_POLL_MAX_INTERVAL`, which is the adaptive interval doing its job — the
 feed is not being neglected, it is being polled proportionately.
 
+If that is the wrong answer for this particular feed — an infrequent publisher you
+want to hear from promptly — set a cadence on it rather than fighting the interval:
+[Change how often feeds are checked](change-how-often-feeds-are-checked.md).
+
 ## Re-enable a disabled feed
 
 A feed is disabled after `TOME_FEED_FAILURE_THRESHOLD` consecutive failures

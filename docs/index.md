@@ -41,6 +41,9 @@ doing.
   extracts badly
 - [Back up and restore](how-to/back-up-and-restore.md) — the database and the
   files are two backups, and one of them is not automatic
+- [Change how often feeds are checked](how-to/change-how-often-feeds-are-checked.md)
+  — a cadence for everything, an override for one feed, and the floor neither can
+  cross
 - [Export everything](how-to/export-everything.md) — a portable copy of the whole
   archive, and what a round trip preserves
 - [Install with Docker Compose](how-to/install-docker-compose.md) — one machine,

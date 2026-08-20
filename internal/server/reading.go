@@ -40,6 +40,11 @@ type pageData struct {
 	// which lists act on it is the list's own business. Off unless they turned it
 	// on.
 	MarkReadOnScroll bool
+
+	// DefaultPollInterval is their general feed-checking cadence, nil for
+	// automatic. Carried here because two pages need it and the preferences row is
+	// already being read; nothing in the chrome draws it.
+	DefaultPollInterval *time.Duration
 }
 
 func (s *Server) pageData(r *http.Request, nav string) pageData {
@@ -56,6 +61,7 @@ func (s *Server) pageData(r *http.Request, nav string) pageData {
 	} else {
 		d.Theme = prefs.Theme
 		d.MarkReadOnScroll = prefs.MarkReadOnScroll
+		d.DefaultPollInterval = prefs.DefaultPollInterval
 	}
 
 	// A failed count is not worth failing a page over — the reader came here to
@@ -666,6 +672,16 @@ type feedsPage struct {
 	// subscribing, which needs an outbound HTTP client.
 	TestingAvailable bool
 
+	// PollChoices are the cadences the edit form offers for one feed, and PollFloor
+	// is the instance's shortest, named so the form can say what a shorter choice
+	// would be raised to.
+	PollChoices []store.PollChoice
+	PollFloor   string
+
+	// UsualCadence is the reader's general preference in words, which is what
+	// "automatic" on one feed defers to.
+	UsualCadence string
+
 	feedsExtras
 }
 
@@ -680,6 +696,20 @@ func (p feedsPage) Editing() store.FeedID {
 	}
 	return p.Add.EditingID
 }
+
+// pollEvery is the cadence the form holds, which is what the picker has to be built
+// around: empty on a page with no form open, and on the add form, which has no
+// picker.
+func (p feedsPage) pollEvery() string {
+	if p.Add == nil {
+		return ""
+	}
+	return p.Add.PollEvery
+}
+
+// PollEvery is the same value for the template, so the picker's selected option
+// does not have to walk into a nil Add.
+func (p feedsPage) PollEvery() string { return p.pollEvery() }
 
 // FormAction is where the one-subscription form posts: the add route, or the edit
 // route for the feed it has open.
@@ -828,6 +858,14 @@ func (s *Server) renderFeedsWith(w http.ResponseWriter, r *http.Request, status 
 		View: feedViewFrom(r.URL.Query()),
 	}
 	page.Unread = counts.Total
+	page.PollFloor = s.pollFloorLabel()
+	// The picker is drawn from what the form currently holds, so an interval this
+	// release no longer offers is still on the list while that feed is open.
+	page.PollChoices = s.pollChoices(page.pollEvery())
+	if page.DefaultPollInterval != nil {
+		choice, _ := store.PollChoiceFor(page.DefaultPollInterval)
+		page.UsualCadence = choice.Phrase
+	}
 
 	// The categories in use, for the suggestion list on the add form. Names only:
 	// this page never showed the counts, and they are the half of ListCategories that

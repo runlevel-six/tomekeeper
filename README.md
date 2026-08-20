@@ -52,6 +52,11 @@ What is there:
   stops polling it, or unsubscribes — a moved feed keeps its history instead of
   becoming a second subscription, and unsubscribing deletes the subscription without
   deleting anything it archived.
+- **How often it looks.** Intervals are learned per feed, which is right until it is
+  not: a general cadence in **Settings** and an override on any one feed's **Edit**
+  form take it over, and the feed's own setting wins. Neither can poll more often than
+  the instance's floor — that promise belongs to the servers being polled, not to the
+  reader — and asking for less often than the ceiling is never refused.
 - **Fixing a site that extracts badly.** Domain rules are a page rather than a
   shell command: write the selector, and reprocess that domain from the same screen.
   The failed-fetch queue links to the form for the host that failed.
