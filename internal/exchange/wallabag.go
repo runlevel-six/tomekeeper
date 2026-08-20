@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"strings"
 	"time"
@@ -238,7 +239,14 @@ func (w Wallabag) Import(ctx context.Context, src Source) iter.Seq2[*Article, er
 				// record boundary, which Decode guarantees when the value itself
 				// was well-formed JSON. A syntax error is not recoverable, because
 				// the position in the file is then unknown.
-				if isSyntaxError(err) {
+				if isIncomplete(err) {
+					// The file stopped. Reported as the truncation it is, in the same
+					// words the closing-bracket check below uses, rather than against a
+					// record number that is an artifact of where the cut fell.
+					yield(nil, fatal(fmt.Errorf("%s ends before its last record: %w", src.Path, err)))
+					return
+				}
+				if isUnrecoverable(err) {
 					// The parser stopped mid-token, so the position in the file is
 					// unknown and nothing after it can be trusted to be a record.
 					yield(nil, fatal(fmt.Errorf("record %d of %s: %w", index+1, src.Path, err)))
@@ -265,15 +273,52 @@ func (w Wallabag) Import(ctx context.Context, src Source) iter.Seq2[*Article, er
 	}
 }
 
-// isSyntaxError reports whether an error leaves the decoder's position unknown.
+// unexpectedEndOfInput is the standard library's wording for a decode that ran out
+// of input.
+//
+// Matched as text, which is not something to do lightly. The justification is that
+// encoding/json reports a truncation as one of two unrelated values depending on
+// where the cut falls — io.ErrUnexpectedEOF for some, a *json.SyntaxError carrying
+// this sentence for others — and only the first is a sentinel that can be compared.
+// A genuine syntax error says something else entirely ("invalid character '}'
+// looking for beginning of value"), so there is no realistic false positive.
+//
+// If a future release changes the sentence, the truncation tests fail on the
+// message they assert. That is the intended alarm: this string is load-bearing and
+// its verification is a test rather than a promise.
+const unexpectedEndOfInput = "unexpected end of JSON input"
+
+// isIncomplete reports whether an error means the input simply ran out.
+//
+// Distinct from a malformed record, and the distinction is what the operator needs:
+// a truncated file is a failed download or a full disk, not a bad entry, and the
+// record number a truncation lands on is an artifact of where the cut fell. On a
+// file cut between records it names a record that does not exist.
+func isIncomplete(err error) bool {
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return true
+	}
+	var syntax *json.SyntaxError
+	return errors.As(err, &syntax) && strings.Contains(syntax.Error(), unexpectedEndOfInput)
+}
+
+// isUnrecoverable reports whether an error leaves the decoder's position unknown.
 //
 // A type mismatch inside a well-formed record is recoverable: Decode consumed
 // exactly that record and the next one begins where it should. A syntax error is
 // not, because the parser stopped mid-token and nothing after it can be trusted to
 // be a record at all.
-func isSyntaxError(err error) bool {
+//
+// An exhausted input belongs here too, and leaving it out was a real bug rather than
+// an untidiness. Treating it as recoverable does not merely mislabel the failure: the
+// decoder cannot advance past the end of the input, so the loop yields the same error
+// against an ever-increasing record number and never terminates. `tome import` on a
+// truncated file printed errors until it was killed. It was invisible for as long as
+// it was because which of the two values a truncation produces moved between Go
+// releases, and the fixtures happened to hold the shape that stayed a syntax error.
+func isUnrecoverable(err error) bool {
 	var syntax *json.SyntaxError
-	return errors.As(err, &syntax)
+	return isIncomplete(err) || errors.As(err, &syntax)
 }
 
 // mapEntry turns one Wallabag record into an Article.

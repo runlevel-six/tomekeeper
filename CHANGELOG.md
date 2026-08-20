@@ -58,6 +58,22 @@ No migration. `users.api_key` was already there.
   at startup, which happens when the variable is unset, therefore also invalidates
   synced image URLs on every restart — the startup warning says so.
 
+### Fixed
+
+- **An import of a truncated export could run forever.** Running out of input was
+  treated as a recoverable per-record problem, and since a decoder at the end of its
+  input cannot advance, the adapter reported `record N: unexpected EOF` with `N`
+  climbing until the process was killed. Both adapters, both the CLI and the upload.
+  It was latent rather than new: the standard library reports a truncation as one of
+  two unrelated error values depending on where the cut falls, and which one it uses
+  moved in Go 1.27, so the shape the fixtures held was the one that stayed fatal.
+  Running out of input is now fatal in either shape, which is what the two-pass import
+  has always promised.
+- **A truncated export now says the file is incomplete rather than naming a record.**
+  A file cut between records has no bad record to point at, and the number it landed
+  on was one past the end — "record 3" of a two-record file, which sends whoever is
+  holding a half-downloaded library looking for something that is not there.
+
 ## [v0.1.0] — 2026-08-20
 
 First tagged release. Everything below has been running against a real archive of

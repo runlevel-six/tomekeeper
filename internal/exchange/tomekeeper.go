@@ -66,7 +66,15 @@ func (Tomekeeper) Import(ctx context.Context, src Source) iter.Seq2[*Article, er
 
 			var article Article
 			if err := dec.Decode(&article); err != nil {
-				if isSyntaxError(err) {
+				// The same three cases the Wallabag adapter distinguishes, and for the
+				// same reasons: an exhausted input is the file being truncated, a syntax
+				// error leaves the position unknown, and anything else is one bad record
+				// in a file that is otherwise readable.
+				if isIncomplete(err) {
+					yield(nil, fatal(fmt.Errorf("%s ends before its last record: %w", src.Path, err)))
+					return
+				}
+				if isUnrecoverable(err) {
 					yield(nil, fatal(fmt.Errorf("record %d of %s: %w", index+1, src.Path, err)))
 					return
 				}
