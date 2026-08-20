@@ -65,9 +65,14 @@ Nothing in `deploy/` builds anything. The manifests reference
 `ghcr.io/runlevel-six/tomekeeper`, and that image has to exist and be pullable
 before the first apply.
 
-**From CI.** Pushing to the default branch runs the whole pipeline and, if every
-job passes, publishes `:latest` and a `sha-<commit>` tag. The run summary prints
-the digest.
+**From CI.** Pushing a release tag (`v0.1.0`) runs the whole pipeline and, if every
+job passes, publishes that version plus `latest`; pushing to the default branch
+publishes `edge` and a `sha-<commit>` tag. The run summary prints the digest. See
+[Cut a release](cut-a-release.md).
+
+The manifests pin a release, so the image they name has to exist before the first
+apply — either cut a tag, or point the `images:` block in your overlay at
+`edge` while you are trying things out.
 
 The trap on a first publish: a container package created by a workflow is
 normally **private, even on a public repository** — repository visibility governs
@@ -107,10 +112,14 @@ the symptom reads like a broken tag rather than a permissions problem:
 repository's CI:
 
 ```bash
-docker build -t ghcr.io/runlevel-six/tomekeeper:latest .
+docker build -t ghcr.io/runlevel-six/tomekeeper:v0.1.0 .
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-docker push ghcr.io/runlevel-six/tomekeeper:latest
+docker push ghcr.io/runlevel-six/tomekeeper:v0.1.0
 ```
+
+Use the version the manifests pin, or change the pin. A hand-built image under a
+release tag is indistinguishable from the published one afterwards, which is a good
+reason to do this only while setting up.
 
 Point the `images:` block in your overlay at your own registry if it is not this
 one.
@@ -128,10 +137,16 @@ kubectl -n tomekeeper wait --for=condition=complete job/tomekeeper-migrate --tim
 kubectl -n tomekeeper logs job/tomekeeper-migrate
 ```
 
-The server and worker will restart a few times while this runs — they cannot
-start against a database with no schema, and they recover on their own once the
-Job finishes. `kubectl apply` does not order resources, and gating the rollout on
-a Job would mean an operator; a short crash loop is the cheaper answer.
+The server and worker wait while this runs, in `Init`, because their `await-schema`
+container will not let them start against a database with no schema. `kubectl apply`
+does not order resources, so that wait is where the ordering lives — the pods
+proceed on their own the moment the Job finishes.
+
+If they sit there longer than the migration took, read the reason:
+
+```bash
+kubectl -n tomekeeper logs -l app.kubernetes.io/component=server -c await-schema
+```
 
 ```bash
 kubectl -n tomekeeper rollout status deploy/tomekeeper-server
@@ -166,10 +181,13 @@ re-running the safe way to recover from an import that stopped halfway.
 
 ## Upgrading
 
-The publish workflow pushes `ghcr.io/runlevel-six/tomekeeper:latest` and a
-`sha-<commit>` tag for every green build on the default branch. Pin the overlay
-to a specific tag so that what is running is a fact rather than whatever `latest`
-resolved to when the pod last restarted.
+The manifests pin a release — `newTag: v0.1.0` in `deploy/base/kustomization.yaml`
+— so an upgrade is one line, and what is running is a fact rather than whatever a
+tag resolved to when the pod last restarted.
+
+`latest` is the newest release and `edge` is the tip of the default branch; neither
+belongs under a deployment. See [Cut a release](cut-a-release.md) for what each tag
+means and how they are published.
 
 Jobs are immutable, so an upgrade that includes a migration needs the old one out
 of the way first:
@@ -188,14 +206,16 @@ goes wrong otherwise, from an outage on 2026-08-20:
   ten-minute window is a no-op, and nothing re-runs. Hence the delete first.
 - **An apply orders nothing.** Kubernetes has no dependency between resources in
   one apply, so the Job and the Deployments go out together and race.
-- **Following `:latest` means an apply changes no spec, so it triggers no
-  rollout.** That is what leads to restarting the deployments by hand — and a
-  manual restart afterwards has no relationship to the Job at all. It is also how
-  the Job and the pods end up on *different* builds: the Job pulls `:latest` when
-  it runs, so a Job that ran while CI was still publishing migrates to the
-  previous head and reports success. Pin the overlay to `sha-<commit>` and this
-  whole failure mode goes away: the apply changes the spec, the rollout is real
-  and ordered after the Job, and both run the same bytes.
+- **A moving tag means an apply changes no spec, so it triggers no rollout.** That
+  was the deeper cause: following `:latest`, an apply was a no-op, so a deploy
+  became "apply, then restart the deployments by hand" — and a manual restart has
+  no relationship to the Job at all. It was also how the Job and the pods ended up
+  on *different* builds, since the Job pulls its tag when it runs: a Job that ran
+  while CI was still publishing migrated to the previous head and reported success.
+
+  Pinning a release fixes both halves, and is why the manifests now do. Changing
+  `newTag` changes the Deployments' specs, so the apply rolls them itself, and the
+  Job and the pods are the same bytes by construction.
 
 Since the `await-schema` initContainer landed, a mis-ordered deploy degrades
 rather than breaks: the pods wait in `Init` with the reason in their logs instead
@@ -279,13 +299,15 @@ kubectl -n tomekeeper exec deploy/tomekeeper-server -- \
 ```
 
 The fix is the upgrade sequence above: delete the old Job, re-apply, wait for the
-new one. This is easy to hit because CI republishes `:latest` on every green
-build and any pod restart pulls it — pin the overlay to a `sha-` tag if you would
-rather upgrades never happen by surprise.
+new one. It used to be easy to hit by accident, when the deployments followed a
+moving tag and any pod restart could pull a newer binary; a pinned release means
+this now only happens when the Job genuinely has not run.
 
-**The worker is in `CrashLoopBackOff` right after an upgrade.** Same cause. It
-refuses to start against a schema older than itself rather than failing every job
-it picks up and burning their retries.
+**The pods sit in `Init` right after an upgrade.** Same cause, seen from the other
+side: `await-schema` is waiting for the migration. Read its log — it says which
+version it found and which it needs — and run the Job. Before that container
+existed, this presented as the worker in `CrashLoopBackOff` and the server
+answering `503`, which was considerably harder to read.
 
 **The worker sits `Pending` with "didn't match pod affinity rules."** The blob
 volume is `ReadWriteOnce`, so the worker has to run on the same node as the

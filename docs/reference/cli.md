@@ -565,6 +565,13 @@ a `go build` with no flags, or `go run` — they are recovered from the Go build
 info embedded from the git work tree, and a build with uncommitted changes is
 reported with a `-dirty` suffix.
 
+The version is `git describe --tags --match 'v[0-9]*'`, which makes it the same
+string as the git tag and the image tag for a release (`v0.1.0`), and a description
+of the distance from the last one otherwise (`v0.1.0-12-gfccf5ba`). The publish
+workflow runs this command inside the image it just pushed and fails the release if
+the two disagree, so a version reported by a running pod can be trusted to name the
+build it came from. See [Cut a release](../how-to/cut-a-release.md).
+
 ### `tome help`
 
 Prints usage to stdout and exits `0`. `tome -h` and `tome --help` are
@@ -1147,8 +1154,10 @@ fails. The whole probe is bounded at 3 seconds.
   needs, and fails readiness with both numbers and the remedy when they differ.
   It is a readiness check rather than a startup check on purpose: refusing to boot
   would mean a crash loop with the reason buried in a restarting container's logs.
-  This matters because CI republishes `:latest` on every green build, so a pod
-  restart can pull a binary newer than the schema with nobody having erred.
+  It mattered most when deployments followed a moving tag, where a pod restart
+  could pull a binary newer than the schema with nobody having erred; deployments
+  pin a release now, and the check is still the thing that makes an upgrade run in
+  the wrong order visible rather than mysterious.
   (`tome worker` takes the stricter line and refuses to start, because a worker
   writing through a schema it does not understand is a data problem rather than a
   serving one.)

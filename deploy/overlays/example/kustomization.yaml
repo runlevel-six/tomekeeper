@@ -46,9 +46,19 @@ patches:
       #
       # and make sure TOME_COOKIE_SECURE stays true either way.
 
-# Pin to a digest rather than following :latest, so that what is running is a
-# fact rather than whatever the tag pointed at when the pod last restarted. The
-# publish workflow prints the digest for each build.
+# The base already pins a release, so this block exists only to hold a version back
+# or move it forward independently of the checkout — deploying v0.1.1 from a tree
+# that has moved on, say. Delete it and you follow the base.
+#
+# Never `latest` or `edge` here. A tag that moves under a running deployment means
+# an apply changes no spec and so triggers no rollout, which turns a deploy into
+# "apply, then restart by hand" — and a restart by hand can outrun the migration.
+# That is how this archive went down once.
+#
+# For an exact-bytes guarantee, replace newTag with the digest the publish workflow
+# prints:
+#
+#   digest: sha256:...
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
-    newTag: latest
+    newTag: v0.1.0

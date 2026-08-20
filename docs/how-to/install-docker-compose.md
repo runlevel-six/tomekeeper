@@ -96,22 +96,29 @@ archived image; `tomekeeper_db-data` holds the database. Neither is backed up by
 anything here — see [back up and restore](back-up-and-restore.md), which is worth
 reading before the archive is large enough to miss.
 
-**`latest` moves.** The compose file follows it, so a `docker compose pull` takes
-whatever CI last published, and a container that pulls a newer binary can meet an
-older schema. `docker compose up -d` re-runs the migration, which is the fix — but
-pinning `TOME_IMAGE` to a version and upgrading deliberately is better once the
-archive matters.
+**The compose file pins a release**, so `docker compose pull` fetches the same bytes
+every time and an upgrade is a thing you choose. Set `TOME_IMAGE` in `.env` to move
+it — `ghcr.io/runlevel-six/tomekeeper:v0.2.0` — or to `:latest` if you would rather
+follow releases as they come. Do not point it at `:edge`, which is the tip of the
+default branch and not a release at all.
 
 ## Upgrading
 
 ```sh
+# In .env, or leave it alone to keep what the compose file pins.
+TOME_IMAGE=ghcr.io/runlevel-six/tomekeeper:v0.2.0
+
 docker compose pull
 docker compose up -d
 ```
 
-The migration runs again as part of that, which is correct and idempotent. If the
-server reports "Internal error" on every page afterwards, the schema is behind the
-binary — check `docker compose logs migrate`, which will say so plainly.
+The migration runs again as part of that, which is correct and idempotent — the
+`migrate` service is ordered before the others, so unlike the Kubernetes manifests
+there is nothing here to get the wrong way round.
+
+Read [the changelog](https://github.com/runlevel-six/tomekeeper/blob/master/CHANGELOG.md)
+before a minor bump: a patch release (`v0.2.0` → `v0.2.1`) never migrates, so it is
+only ever a pull and a restart.
 
 ## Stopping and removing
 

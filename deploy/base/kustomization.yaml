@@ -20,9 +20,17 @@ labels:
       app.kubernetes.io/part-of: tomekeeper
       app.kubernetes.io/managed-by: kustomize
 
+# The one place the deployed version is chosen. Every manifest here also spells
+# the tag out, so the raw YAML is deployable on its own and says what it deploys;
+# scripts/check-release.sh fails if the two ever disagree.
+#
+# A release tag rather than a moving one, and that is the whole point: `latest`
+# meant an apply changed no spec, so it triggered no rollout — which is how a
+# deploy became "apply, then restart by hand", and how the pods and the migration
+# Job ended up on different builds. Bumping this line is the deploy.
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
-    newTag: latest
+    newTag: v0.1.0
 
 # The Secret is deliberately absent. It holds the database password, the session
 # key and the sign-in password, and this repository is public. It is created once

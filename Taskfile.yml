@@ -14,8 +14,12 @@ vars:
   TAGS: nodynamic
   PACKAGE: github.com/runlevel-six/tomekeeper
   IMAGE: '{{.IMAGE | default "tomekeeper"}}'
+  # --match 'v[0-9]*' so only release tags are described. Without it any stray
+  # tag in the repository becomes the version of every local build, which is
+  # exactly what was happening: an unrelated tag was being stamped into binaries
+  # as though it were a release.
   VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+    sh: git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || echo dev
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
   DATE:
@@ -124,13 +128,25 @@ tasks:
         fi
 
   check:
-    desc: Everything CI runs — format, vet, lint, test, build
+    desc: Everything CI runs — format, vet, lint, release pins, test, build
     cmds:
       - task: fmt:check
       - task: vet
       - task: lint
+      - task: release:check
       - task: test
       - task: build
+
+  release:check:
+    desc: Verify the release pins, the changelog, and the patch-migration rule
+    cmds:
+      - ./scripts/check-release.sh
+
+  version:
+    desc: Print the version this checkout would stamp into a build
+    cmds:
+      - echo "{{.VERSION}} ({{.COMMIT}}) {{.DATE}}"
+    silent: true
 
   docker:build:
     desc: Build the container image
@@ -140,7 +156,11 @@ tasks:
         --build-arg VERSION={{.VERSION}}
         --build-arg COMMIT={{.COMMIT}}
         --build-arg DATE={{.DATE}}
-        -t {{.IMAGE}}:{{.VERSION}} -t {{.IMAGE}}:latest .
+        -t {{.IMAGE}}:{{.VERSION}} .
+    # One tag, and not `latest`. A local build is a development build even when it
+    # is built from a release tag — `latest` in the registry means the newest
+    # published release, and a local image answering to the same name is how the
+    # wrong bytes get run.
 
   docker:smoke:
     desc: Verify the container image — probes, embedded web interface, nonroot, clean SIGTERM

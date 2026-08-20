@@ -145,6 +145,31 @@ are yours, not the project's. See
 [Install on Kubernetes](docs/how-to/install-kubernetes.md) for the handful of
 things that will confuse you once.
 
+## Releases
+
+Releases are git tags, and the container image carries the same string:
+
+```
+ghcr.io/runlevel-six/tomekeeper:v0.1.0
+```
+
+That is the tag `v0.1.0`, it is what `tome version` reports inside the image, and it
+is what `deploy/base/kustomization.yaml` pins. One identifier in git, in the
+registry, in a Deployment, and in a log line — and CI refuses to publish a version
+it has published before, so a version number always means one set of bytes.
+
+| Tag | Points at |
+|---|---|
+| `vX.Y.Z` | one release, forever — what a deployment should use |
+| `latest` | the newest release |
+| `edge` | the tip of the default branch, not a release |
+| `sha-<commit>` | one build, forever |
+
+While the major version is `0`: a **patch** release is fixes only and never
+migrates the database, so upgrading is a tag change and nothing else; a **minor**
+release may add a migration or change a default. [CHANGELOG.md](CHANGELOG.md) says
+which, and [Cut a release](docs/how-to/cut-a-release.md) is the process.
+
 ## Documentation
 
 [**docs/**](docs/index.md) — configuration, CLI, and design rationale, in

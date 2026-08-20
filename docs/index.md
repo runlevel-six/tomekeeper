@@ -44,6 +44,8 @@ doing.
 - [Change how often feeds are checked](how-to/change-how-often-feeds-are-checked.md)
   — a cadence for everything, an override for one feed, and the floor neither can
   cross
+- [Cut a release](how-to/cut-a-release.md) — the tag is the release, and what the
+  version number promises an operator
 - [Export everything](how-to/export-everything.md) — a portable copy of the whole
   archive, and what a round trip preserves
 - [Install with Docker Compose](how-to/install-docker-compose.md) — one machine,
