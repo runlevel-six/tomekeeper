@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.8.0` is the tag
-`v0.8.0`, and `tome version` inside it says `v0.8.0`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.9.0` is the tag
+`v0.9.0`, and `tome version` inside it says `v0.9.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -31,6 +31,21 @@ happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [v0.9.0] — 2026-08-21
+
+### Fixed
+
+- **The README generated an unusable Postgres password about 40% of the time.** It
+  still said `openssl rand -base64 24`, which was corrected in
+  [Install on Kubernetes](docs/how-to/install-kubernetes.md) and nowhere else:
+  base64 contains `/`, and a `/` ends the authority section of
+  `postgres://tome:PASSWORD@host/db`. 32 base64 characters carry one with
+  probability 1 − (63/64)³². The other two secrets on that line are not put in a
+  URL and stay base64. `scripts/check-release.sh` reads `deploy/` and
+  `compose.yaml` only, so nothing was ever going to catch this but reading it.
 
 ### Added
 
@@ -369,7 +384,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.9.0...HEAD
+[v0.9.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.8.0...v0.9.0
 [v0.8.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.7.0...v0.8.0
 [v0.7.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.6.0...v0.7.0
 [v0.6.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.5.0...v0.6.0

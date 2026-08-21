@@ -144,7 +144,7 @@ $EDITOR deploy/overlays/local/kustomization.yaml   # hostname, storage class, im
 kubectl create namespace tomekeeper
 kubectl -n tomekeeper create secret generic tomekeeper \
   --from-literal=password="$(openssl rand -base64 24)" \
-  --from-literal=postgres-password="$(openssl rand -base64 24)" \
+  --from-literal=postgres-password="$(openssl rand -hex 24)" \
   --from-literal=session-key="$(openssl rand -base64 32)"
 kubectl apply -k deploy/overlays/local
 ```
@@ -159,10 +159,10 @@ things that will confuse you once.
 Releases are git tags, and the container image carries the same string:
 
 ```
-ghcr.io/runlevel-six/tomekeeper:v0.8.0
+ghcr.io/runlevel-six/tomekeeper:v0.9.0
 ```
 
-That is the tag `v0.8.0`, it is what `tome version` reports inside the image, and it
+That is the tag `v0.9.0`, it is what `tome version` reports inside the image, and it
 is what `deploy/base/kustomization.yaml` pins. One identifier in git, in the
 registry, in a Deployment, and in a log line — and CI refuses to publish a version
 it has published before, so a version number always means one set of bytes.

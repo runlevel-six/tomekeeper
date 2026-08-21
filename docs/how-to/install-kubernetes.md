@@ -76,7 +76,7 @@ Nothing in `deploy/` builds anything. The manifests reference
 `ghcr.io/runlevel-six/tomekeeper`, and that image has to exist and be pullable
 before the first apply.
 
-**From CI.** Pushing a release tag (`v0.8.0`) runs the whole pipeline and, if every
+**From CI.** Pushing a release tag (`v0.9.0`) runs the whole pipeline and, if every
 job passes, publishes that version plus `latest`; pushing to the default branch
 publishes `edge` and a `sha-<commit>` tag. The run summary prints the digest. See
 [Cut a release](cut-a-release.md).
@@ -123,9 +123,9 @@ the symptom reads like a broken tag rather than a permissions problem:
 repository's CI:
 
 ```bash
-docker build -t ghcr.io/runlevel-six/tomekeeper:v0.8.0 .
+docker build -t ghcr.io/runlevel-six/tomekeeper:v0.9.0 .
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-docker push ghcr.io/runlevel-six/tomekeeper:v0.8.0
+docker push ghcr.io/runlevel-six/tomekeeper:v0.9.0
 ```
 
 Use the version the manifests pin, or change the pin. A hand-built image under a
@@ -192,7 +192,7 @@ re-running the safe way to recover from an import that stopped halfway.
 
 ## Upgrading
 
-The manifests pin a release — `newTag: v0.8.0` in `deploy/base/kustomization.yaml`
+The manifests pin a release — `newTag: v0.9.0` in `deploy/base/kustomization.yaml`
 — so an upgrade is one line, and what is running is a fact rather than whatever a
 tag resolved to when the pod last restarted.
 

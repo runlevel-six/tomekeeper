@@ -33,7 +33,7 @@ labels:
 # Job ended up on different builds. Bumping this line is the deploy.
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
-    newTag: v0.8.0
+    newTag: v0.9.0
 
 # The Secret is deliberately absent. It holds the database password, the session
 # key and the sign-in password, and this repository is public. It is created once
