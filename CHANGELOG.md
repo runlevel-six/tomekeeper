@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.5.0` is the tag
-`v0.5.0`, and `tome version` inside it says `v0.5.0`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.6.0` is the tag
+`v0.6.0`, and `tome version` inside it says `v0.6.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -32,8 +32,17 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [v0.6.0] — 2026-08-21
+
 Draining the extraction tail: seven domain rules, one rung that could not see short
-slugs, and a queue that would not empty when you fixed it. **Adds a migration.**
+slugs, and a queue that would not empty when you fixed it. **Adds a migration**, so
+upgrading is the migration Job and then the apply.
+
+The rules themselves are data rather than code — they live in the `domain_rules`
+table and are set with `tome domain-rule set`, so nothing here ships them. What
+shipped is the two things the rules could not fix by themselves.
 
 ### Extraction version 6
 
@@ -271,7 +280,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.5.0...v0.6.0
 [v0.5.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.4.0...v0.5.0
 [v0.4.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.2.0...v0.3.0
