@@ -32,7 +32,42 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+Two corrections to v0.6.0, both found by running it against a real archive rather
+than by reading it. **Adds a migration.**
+
+### Extraction version 7
+
+**Version 6 reached one of the ten strips it was written for.** It matched a short
+slug against an image's whole file name, which was generalized from a single
+example: the site in question names its files `171-err.png`, and only one strip
+happened to be `10x.png`. The signal it missed was the folder —
+`/2020/err/171-err.png` — so a short slug is now matched against any complete
+**path component**, which is what "strong enough a claim to trust" actually meant.
+
+Measured over every article in a real archive whose slug is under four characters,
+which is the only set this branch can affect: **7 gained their strip, nothing else
+changed.**
+
+Run `tome reextract` once after upgrading.
+
+### Fixed
+
+- **A reprocess that produces nothing no longer files an article that already has a
+  body as a failure.** A version bump runs the current ladder over every stored
+  page, and a body produced by older behavior may simply not extract again — the
+  reader still has the article and nobody can act on it. The version 6 catch-up run
+  put eight such articles into the attention queue in one pass, hours after
+  `00010` cleared out the last set. Same emptiness as that fix, arriving from the
+  other direction.
+- `store.Article` now carries `extract_attempt_version`, which until now was
+  written and read only by the query that selects articles to reprocess. A column
+  nothing reads is a shape of bug this archive has already found twice.
+
+### Migrations
+
+- **00011** repeats `00010`'s correction for the rows the version 6 run left
+  behind. Same conditions, same reasoning: a stored page proves the fetch worked,
+  and an imported body over a genuinely failed fetch keeps its failure.
 
 ## [v0.6.0] — 2026-08-21
 

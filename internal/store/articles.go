@@ -35,6 +35,15 @@ type Article struct {
 	// whose body looks wrong is a different investigation depending on whether a
 	// browser was involved.
 	BrowserRendered bool
+
+	// ExtractAttemptVersion is the extractor version of the last attempt,
+	// whatever came of it. Empty means no attempt since the column existed.
+	//
+	// Surfaced here for the same reason as the field above: it was written and read
+	// only by the query that selects articles to reprocess, which made "has the
+	// current ladder seen this page yet" a question answerable only in SQL. A column
+	// nothing reads is the shape of bug this archive has already found twice.
+	ExtractAttemptVersion string
 }
 
 // ArticleParams is the set of fields a reference can contribute about an

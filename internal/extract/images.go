@@ -169,13 +169,17 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 // of the address and a substring of it would be a coincidence: a page called
 // "Fifteen Years" is not evidence about an image called `fifteen.png`.
 //
-// A short slug is held to the same exact standard rather than thrown away, which
-// it used to be. "10x" appearing somewhere inside an image's URL means nothing,
-// but an image *named* `10x.png` on the article at `/2025/10x` is not a
-// coincidence — and the strength of the claim is what the length guard was really
-// protecting, not the length itself. Ten MonkeyUser strips sat unreachable
-// because their slugs were three characters, on a site where the file name is
-// always the slug; the rung written for exactly those pages could not see them.
+// A short slug is held to a *complete path component* rather than thrown away,
+// which it used to be. "err" appearing somewhere inside an image's URL means
+// nothing; a directory named `err`, on the article at `/2020/err`, is not a
+// coincidence. The strength of the claim is what the length guard was really
+// protecting, and length was only ever a proxy for it.
+//
+// Version 6 required the slug to be the whole file name, and that was generalized
+// from a single example: it reached one strip of the ten it was written for,
+// because MonkeyUser names its files `171-err.png` and only one strip happened to
+// be `10x.png`. Both the folder and the file are components; neither is a
+// substring.
 func namesTheArticle(resolved, slug string, titles []string) bool {
 	name := imageSlug(resolved)
 
@@ -184,7 +188,7 @@ func namesTheArticle(resolved, slug string, titles []string) bool {
 			if strings.Contains(strings.ToLower(resolved), slug) {
 				return true
 			}
-		} else if name == slug {
+		} else if namesAPathComponent(resolved, slug) {
 			return true
 		}
 	}
@@ -237,6 +241,33 @@ func titleSlugs(title string) []string {
 // isTitleSeparator reports whether a rune is one of the characters sites use to
 // join a site's name to an article's.
 func isTitleSeparator(r rune) bool { return strings.ContainsRune(":|·—–", r) }
+
+// namesAPathComponent reports whether the slug is a whole component of an image's
+// path — a directory, or the file name with its extension off.
+//
+// A component, never a substring: that is the entire difference between "this
+// image belongs to this article" and "these three characters occur in a URL". The
+// article at /2020/err owns /2020/err/171-err.png by its folder, and does not own
+// /assets/err-sprite-sheet.png by an accident of naming.
+func namesAPathComponent(resolved, slug string) bool {
+	p := resolved
+	if u, err := url.Parse(resolved); err == nil {
+		p = u.Path
+	}
+	for _, segment := range strings.Split(p, "/") {
+		if segment == "" {
+			continue
+		}
+		// One comparison covers folders and the file alike: trimming an extension
+		// a directory does not have is a no-op. Written as two conditions first,
+		// and the neuter test for the folder half passed with it deleted — which
+		// is how the redundancy showed up rather than living here forever.
+		if slugify(strings.TrimSuffix(segment, path.Ext(segment))) == slug {
+			return true
+		}
+	}
+	return false
+}
 
 // imageSlug is an image's file name without its extension, normalized the way a
 // title is, so that `deadline_season.png` and "Deadline Season" can be compared.

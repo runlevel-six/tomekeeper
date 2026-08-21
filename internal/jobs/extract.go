@@ -119,6 +119,25 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 
 	if err != nil {
 		if errors.Is(err, extract.ErrNoContent) {
+			// An article that already has a body is not a failure. A bulk
+			// reprocess runs the current ladder over every stored page, and a
+			// page whose body was produced by older behavior may simply not
+			// extract again — the reader still has the article, and there is
+			// nothing here for anyone to fix.
+			//
+			// Recorded as a failure until 2026-08-21, when a version bump put
+			// eight such articles into the attention queue in one run, every one
+			// of them holding a perfectly good body. That is the same emptiness
+			// ClearExtractionFailure was written for, arriving from the other
+			// direction: a queue that lists work nobody can do is a queue that
+			// stops being read.
+			if current, err := w.store.CurrentContent(ctx, id); err == nil && current.HTML != "" {
+				log.Info("reprocessing produced nothing; keeping the existing body",
+					"extractor", current.ExtractorName,
+					"version", current.ExtractorVersion)
+				return nil
+			}
+
 			// Expected, not exceptional: paywalls, JavaScript shells, and
 			// pages that 200 while saying nothing. Recording it puts the
 			// article in the queue that domain rules exist to drain, instead

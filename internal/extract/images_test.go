@@ -281,6 +281,43 @@ func TestADomainRuleStillNeedsTextWhenThereIsNoImage(t *testing.T) {
 	}
 }
 
+// A short slug is evidence when it names the image's own folder, which is how the
+// site that motivated this actually files its strips: /2020/err/171-err.png. A
+// whole-file-name rule reached one strip of ten here, because only one happened to
+// be named exactly after its article.
+func TestAShortSlugMatchesItsFolder(t *testing.T) {
+	const page = `<html><head><title>Err | Monkeyuser</title></head><body>
+	  <header><img src="/images/logo.png" alt="Site"></header>
+	  <div class="comic"><img src="/2020/err/171-err.png" alt="err" title="Off by one, again"></div>
+	  <aside><img src="/assets/err-sprite-sheet.png" alt="chrome"></aside>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://www.monkeyuser.com/2020/err",
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	if r.Name != extract.NamePageImages {
+		t.Fatalf("extractor = %q, want %q", r.Name, extract.NamePageImages)
+	}
+	if !strings.Contains(r.HTML, "171-err.png") {
+		t.Errorf("the strip, filed under a folder named after the article, is not in the body:\n%s", r.HTML)
+	}
+	// The counterweight, and the reason this is a component match and not a
+	// substring one: "err" occurs in both of these too.
+	if strings.Contains(r.HTML, "sprite-sheet") {
+		t.Errorf("an asset that merely contains the slug was taken as content:\n%s", r.HTML)
+	}
+	if strings.Contains(r.HTML, "logo.png") {
+		t.Errorf("the site logo was taken as content:\n%s", r.HTML)
+	}
+	if !strings.Contains(r.HTML, "Off by one") {
+		t.Errorf("the hover text did not survive as a caption:\n%s", r.HTML)
+	}
+}
+
 // A slug shorter than the substring floor is still evidence when it is the image's
 // whole file name. The rung exists for image-only pages, and a webcomic titled
 // "10x" is exactly such a page.

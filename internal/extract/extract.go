@@ -58,10 +58,15 @@ import (
 // Version 6 (2026-08-21): a slug too short to match as a substring is now matched
 // against an image's whole file name instead of being discarded. The length guard
 // was standing in for "is this claim strong enough to trust", and an exact file
-// name is a strong claim at any length — so the rung written for image-only pages
-// could not reach a strip at /2025/10x named 10x.png. Ten of them on a real
-// archive, on a site where the file name is always the slug.
-const Version = "6"
+// name is a strong claim at any length.
+//
+// Version 7 (2026-08-21): and a whole *path component*, not just the whole file
+// name. Version 6 reached one of the ten strips it was written for, because the
+// site names its files `171-err.png` and only one happened to be `10x.png` — the
+// signal it missed was the folder, `/2020/err/171-err.png`. Measured over every
+// article in a real archive whose slug is under four characters, which is the only
+// set this branch can affect: 7 gained their strip, nothing else changed.
+const Version = "7"
 
 // Extractor names recorded on content rows.
 const (

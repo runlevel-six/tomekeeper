@@ -224,11 +224,12 @@ func (s *Store) GetArticle(ctx context.Context, id ArticleID) (Article, error) {
 		       COALESCE(site_name, ''), COALESCE(language, ''),
 		       published_at, first_seen_at, fetch_status, COALESCE(fetch_error, ''),
 		       assets_status, COALESCE(raw_blob_sha, ''), COALESCE(raw_blob_path, ''),
-		       browser_rendered
+		       browser_rendered, COALESCE(extract_attempt_version, '')
 		FROM articles WHERE id = $1`, id,
 	).Scan(&a.ID, &a.URLCanonical, &a.URLOriginal, &a.Title, &a.Author,
 		&a.SiteName, &a.Language, &a.PublishedAt, &a.FirstSeenAt, &a.FetchStatus,
-		&a.FetchError, &a.AssetsStatus, &a.RawBlobSHA, &a.RawBlobPath, &a.BrowserRendered)
+		&a.FetchError, &a.AssetsStatus, &a.RawBlobSHA, &a.RawBlobPath, &a.BrowserRendered,
+		&a.ExtractAttemptVersion)
 	if err != nil {
 		return Article{}, fmt.Errorf("looking up article %d: %w", id, err)
 	}
