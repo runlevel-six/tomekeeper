@@ -32,7 +32,45 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+**Adds a migration.**
+
+### Added
+
+- **Categories can be created, renamed and deleted from the interface.** A category
+  used to be free text on a subscription, existing exactly as long as some feed
+  claimed it — so there was no object to create, an empty folder was impossible, and
+  renaming one meant rewriting every feed in it.
+
+  **Deleting asks what happens to the feeds** — leave them filed under nothing, move
+  them to another category, or unsubscribe them — and **no answer touches an
+  article.** Nothing in this project deletes one, and an article has no category of
+  its own to lose: it is derived through `feed_items` to the feed that carried it, so
+  refiling a feed moves everything it ever brought in. The unsubscribe option says
+  plainly that the archive is kept *and* that anything never opened stops being
+  listed, which is the same consequence unsubscribing one feed has always had.
+
+  The nameless bucket is deliberately not manageable. It is the absence of a category
+  rather than one named for absence, so there is nothing there to rename or delete.
+
+### Fixed
+
+- **Renaming a category no longer reshuffles a synced client's folders.** The Fever
+  group id was a hash of the category's *name*, because the protocol requires an id
+  and there was no row to take one from — so a rename made the old folder vanish from
+  a client and a new one appear holding the same feeds. Clients cache folder
+  membership against those ids. The id now belongs to the category, and 57 lines of
+  hashing and collision-rehandling are gone.
+
+### Migrations
+
+- **00013** adds `categories` and `feeds.category_id`, backfilling from the old
+  column. `feeds.category` is deliberately **not** dropped: `internal/db`'s schema
+  guard treats a database newer than the binary as safe on the stated grounds that
+  "the old binary's queries still work against a superset schema", which is true only
+  while migrations are additive. Dropping it would leave an older binary passing the
+  guard and then failing on every query naming it — the outage that guard exists to
+  prevent, from the other direction. It is frozen at the backfill and droppable once
+  no deployable binary reads it.
 
 ## [v0.11.0] — 2026-08-21
 

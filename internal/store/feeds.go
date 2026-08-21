@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,12 +14,17 @@ import (
 // Feed is a row of the feeds table. Feeds are user-scoped: every method here
 // takes a UserID, and there is no variant that omits it.
 type Feed struct {
-	ID                  FeedID
-	UserID              UserID
-	FeedURL             string
-	SiteURL             string
-	Title               string
-	Category            string
+	ID       FeedID
+	UserID   UserID
+	FeedURL  string
+	SiteURL  string
+	Title    string
+	Category string
+
+	// CategoryID is the folder's row, zero for a feed filed nowhere. Carried
+	// alongside the name because the Fever API needs an id that survives a rename —
+	// which is the reason categories became a table at all.
+	CategoryID          CategoryID
 	ETag                string
 	LastModified        string
 	PollInterval        time.Duration
@@ -74,17 +80,26 @@ type FeedParams struct {
 //
 // The two cadence columns are read as nullable seconds, NULL meaning "no choice
 // was made" in both cases. The reader's general preference is a correlated subquery
-// rather than a join, which is what lets this list stay usable in a RETURNING
-// clause — where there is no FROM to join to, but feeds.user_id is still in scope.
+// rather than a join, so that this list needs only the one join below.
+
+// feedFrom is the shared FROM clause that goes with feedColumns.
+//
+// They are separate constants that must be used together: feedColumns reads the
+// category *name* through this join, because feeds.category is frozen at the 00013
+// backfill and a query without the join would return a stale folder name that
+// renames and refiles never touch. Naming the join here rather than repeating it at
+// five call sites is the only thing stopping one of them from being forgotten.
+const feedFrom = ` FROM feeds f LEFT JOIN categories c ON c.id = f.category_id `
+
 const feedColumns = `
-	id, user_id, feed_url, COALESCE(site_url, ''), title, COALESCE(category, ''),
-	COALESCE(etag, ''), COALESCE(last_modified, ''),
-	EXTRACT(EPOCH FROM poll_interval)::bigint,
-	next_poll_at, last_polled_at, last_success_at,
-	consecutive_failures, COALESCE(last_error, ''), disabled,
-	EXTRACT(EPOCH FROM poll_interval_override)::bigint,
+	f.id, f.user_id, f.feed_url, COALESCE(f.site_url, ''), f.title, COALESCE(c.name, ''), COALESCE(f.category_id, 0),
+	COALESCE(f.etag, ''), COALESCE(f.last_modified, ''),
+	EXTRACT(EPOCH FROM f.poll_interval)::bigint,
+	f.next_poll_at, f.last_polled_at, f.last_success_at,
+	f.consecutive_failures, COALESCE(f.last_error, ''), f.disabled,
+	EXTRACT(EPOCH FROM f.poll_interval_override)::bigint,
 	EXTRACT(EPOCH FROM (SELECT u.default_poll_interval FROM users u
-	                     WHERE u.id = feeds.user_id))::bigint`
+	                     WHERE u.id = f.user_id))::bigint`
 
 func scanFeed(row pgx.Row) (Feed, error) {
 	var (
@@ -93,7 +108,7 @@ func scanFeed(row pgx.Row) (Feed, error) {
 		overrideSecond *int64
 		defaultSecond  *int64
 	)
-	err := row.Scan(&f.ID, &f.UserID, &f.FeedURL, &f.SiteURL, &f.Title, &f.Category,
+	err := row.Scan(&f.ID, &f.UserID, &f.FeedURL, &f.SiteURL, &f.Title, &f.Category, &f.CategoryID,
 		&f.ETag, &f.LastModified, &intervalSecond, &f.NextPollAt, &f.LastPolledAt,
 		&f.LastSuccessAt, &f.ConsecutiveFailures, &f.LastError, &f.Disabled,
 		&overrideSecond, &defaultSecond)
@@ -140,19 +155,29 @@ func (s *Store) UpsertFeed(ctx context.Context, userID UserID, p FeedParams) (Fe
 		p.Title = p.FeedURL
 	}
 
+	// An OPML folder name becomes a category the same way a typed one does. This is
+	// how a re-import keeps working: folder names arrive as strings and always have.
+	categoryID, err := s.ensureCategory(ctx, userID, p.Category)
+	if err != nil {
+		return 0, false, err
+	}
+
 	var (
 		id      FeedID
 		created bool
 	)
-	err := s.pool.QueryRow(ctx, `
-		INSERT INTO feeds (user_id, feed_url, site_url, title, category)
-		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''))
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO feeds (user_id, feed_url, site_url, title, category_id)
+		VALUES ($1, $2, NULLIF($3, ''), $4, $5)
 		ON CONFLICT (user_id, feed_url) DO UPDATE SET
 			title    = EXCLUDED.title,
 			site_url = COALESCE(EXCLUDED.site_url, feeds.site_url),
-			category = COALESCE(EXCLUDED.category, feeds.category)
+			-- COALESCE, so a re-import that omits a folder does not un-file a feed
+			-- the reader has since moved. Unchanged in meaning from when this was a
+			-- string; the value is now an id.
+			category_id = COALESCE(EXCLUDED.category_id, feeds.category_id)
 		RETURNING id, (xmax = 0)`,
-		userID, p.FeedURL, p.SiteURL, p.Title, p.Category,
+		userID, p.FeedURL, p.SiteURL, p.Title, categoryID,
 	).Scan(&id, &created)
 	if err != nil {
 		return 0, false, fmt.Errorf("upserting feed %s: %w", p.FeedURL, err)
@@ -225,11 +250,22 @@ func (s *Store) UpdateFeed(ctx context.Context, userID UserID, feedID FeedID, e 
 	// Every CASE below reads the row as it was: in an UPDATE, a bare column
 	// reference on the right-hand side is the old value, so `feed_url = $3` asks
 	// "is the address unchanged" without a second query to find out.
-	f, err := scanFeed(s.pool.QueryRow(ctx, `
-		UPDATE feeds SET
+	// The form offers a name, not an id, and typing a new one creates the folder —
+	// which is how this behaved when a category was free text, and the ergonomics
+	// worth keeping. Resolved before the update rather than inside it because an
+	// UPDATE cannot conjure a row in another table; a folder created for an update
+	// that then fails is left behind empty, which is harmless now that an empty
+	// category is a thing that can exist.
+	categoryID, err := s.ensureCategory(ctx, userID, e.Category)
+	if err != nil {
+		return Feed{}, err
+	}
+
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE feeds AS f SET
 			feed_url = $3,
 			title    = $4,
-			category = NULLIF($5, ''),
+			category_id = $5,
 			disabled = $6,
 			etag          = CASE WHEN feed_url = $3 THEN etag          ELSE NULL END,
 			last_modified = CASE WHEN feed_url = $3 THEN last_modified ELSE NULL END,
@@ -258,21 +294,50 @@ func (s *Store) UpdateFeed(ctx context.Context, userID UserID, feedID FeedID, e 
 			                                       COALESCE(last_polled_at, now())
 			                                         + make_interval(secs => $7::float8))
 			                       END
-		WHERE id = $1 AND user_id = $2
-		RETURNING `+feedColumns,
-		feedID, userID, e.FeedURL, e.Title, e.Category, e.Disabled,
-		durationSeconds(e.PollInterval)))
+		WHERE f.id = $1 AND f.user_id = $2`,
+		feedID, userID, e.FeedURL, e.Title, categoryID, e.Disabled,
+		durationSeconds(e.PollInterval))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
 			return Feed{}, fmt.Errorf("moving feed %d to %s: %w", feedID, e.FeedURL, ErrFeedURLTaken)
 		}
-		// Scoped to the reader, so a feed belonging to somebody else updates no rows
-		// and is reported as not found — the same answer GetFeed gives, and for the
-		// same reason.
 		return Feed{}, fmt.Errorf("updating feed %d: %w", feedID, err)
 	}
-	return f, nil
+	// Scoped to the reader, so a feed belonging to somebody else updates no rows and
+	// is reported as not found — the same answer GetFeed gives, and for the same
+	// reason.
+	if tag.RowsAffected() == 0 {
+		return Feed{}, pgx.ErrNoRows
+	}
+
+	// Read back rather than returned by the update: the category *name* comes from a
+	// join, and a RETURNING clause has no FROM to join to. One column list is worth
+	// more than one round trip on a form submit.
+	return s.GetFeed(ctx, userID, feedID)
+}
+
+// ensureCategory turns a folder name into a row, creating it if the name is new.
+//
+// An empty name means no category, which is a NULL rather than a row — see the 00013
+// migration for why "no folder" must not be a folder. Existing names are reused
+// rather than duplicated, which the unique constraint would refuse anyway; doing the
+// lookup here means a reader retyping a name they already have does not see an error
+// about it.
+func (s *Store) ensureCategory(ctx context.Context, userID UserID, name string) (*CategoryID, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, nil
+	}
+
+	var id CategoryID
+	if err := s.pool.QueryRow(ctx, `
+		INSERT INTO categories (user_id, name) VALUES ($1, $2)
+		ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name
+		RETURNING id`, userID, name).Scan(&id); err != nil {
+		return nil, fmt.Errorf("filing under category %q: %w", name, err)
+	}
+	return &id, nil
 }
 
 // uniqueViolation is SQLSTATE 23505. Named because a bare string at the comparison
@@ -286,7 +351,7 @@ const uniqueViolation = "23505"
 // information about another user's subscriptions.
 func (s *Store) GetFeed(ctx context.Context, userID UserID, feedID FeedID) (Feed, error) {
 	f, err := scanFeed(s.pool.QueryRow(ctx,
-		`SELECT `+feedColumns+` FROM feeds WHERE id = $1 AND user_id = $2`,
+		`SELECT `+feedColumns+feedFrom+`WHERE f.id = $1 AND f.user_id = $2`,
 		feedID, userID))
 	if err != nil {
 		return Feed{}, fmt.Errorf("looking up feed %d: %w", feedID, err)
@@ -302,7 +367,7 @@ func (s *Store) GetFeed(ctx context.Context, userID UserID, feedID FeedID) (Feed
 // archive.
 func (s *Store) FeedByURL(ctx context.Context, userID UserID, feedURL string) (Feed, error) {
 	f, err := scanFeed(s.pool.QueryRow(ctx,
-		`SELECT `+feedColumns+` FROM feeds WHERE user_id = $1 AND feed_url = $2`,
+		`SELECT `+feedColumns+feedFrom+`WHERE f.user_id = $1 AND f.feed_url = $2`,
 		userID, feedURL))
 	if err != nil {
 		return Feed{}, fmt.Errorf("looking up feed %q for user %d: %w", feedURL, userID, err)
@@ -313,7 +378,7 @@ func (s *Store) FeedByURL(ctx context.Context, userID UserID, feedURL string) (F
 // ListFeeds returns all of a user's feeds, ordered for display.
 func (s *Store) ListFeeds(ctx context.Context, userID UserID) ([]Feed, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+feedColumns+` FROM feeds WHERE user_id = $1 ORDER BY category NULLS FIRST, title`,
+		`SELECT `+feedColumns+feedFrom+`WHERE f.user_id = $1 ORDER BY c.name NULLS FIRST, f.title`,
 		userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing feeds: %w", err)
@@ -427,15 +492,21 @@ func (s *Store) SetFeedDisabled(ctx context.Context, userID UserID, feedID FeedI
 	return nil
 }
 
-// Category is one of the folders an OPML import produced, with enough counts to
-// be worth showing in a list.
+// Category is one of a reader's folders, with enough counts to be worth showing in
+// a list.
 //
-// Categories are not a table. They are the `category` column on feeds, which is
-// where an OPML folder name lands — so a category exists exactly as long as some
-// feed claims it, and renaming one is a matter of re-importing. That is a
-// deliberate choice over a `categories` table: the reader never creates one by
-// hand, and a table would need reconciling against every import.
+// Categories became a table in migration 00013. They were the `category` column on
+// feeds until then — a category existing exactly as long as some feed claimed it,
+// which made creating an empty one impossible and renaming one a rewrite of every
+// feed in it. The reason for the change was not the interface: the Fever group id
+// was a hash of the *name*, so renaming a category silently reshuffled a client's
+// folders.
 type Category struct {
+	// ID is the row. Zero for the nameless bucket, which is the absence of a
+	// category rather than a category named for absence — nothing can rename or
+	// delete "no folder".
+	ID CategoryID
+
 	// Name is the folder name. Empty means these feeds carry no category, which
 	// callers have to represent explicitly rather than as a missing value — see
 	// StreamQuery.NoCategory.
@@ -452,19 +523,26 @@ type Category struct {
 // UnreadCountsFor is: two feeds in one category can carry the same syndicated
 // story, and it is one unread article to the reader.
 func (s *Store) ListCategories(ctx context.Context, userID UserID) ([]Category, error) {
+	// Driven from categories rather than from feeds, which is the whole point of the
+	// table: a folder with nothing in it has to appear, or "create a category, then
+	// move feeds into it" is a sequence the reader cannot perform. A FULL JOIN, so
+	// the nameless bucket — which has no row, by design — still arrives as a group.
 	rows, err := s.pool.Query(ctx, `
-		SELECT COALESCE(f.category, ''),
+		SELECT COALESCE(c.id, 0), COALESCE(c.name, ''),
 		       count(DISTINCT f.id),
 		       count(DISTINCT a.id) FILTER (WHERE NOT COALESCE(st.read, false))
-		FROM feeds f
+		FROM categories c
+		  FULL JOIN feeds f ON f.category_id = c.id AND f.user_id = $1
 		  LEFT JOIN feed_items fi ON fi.feed_id = f.id
 		  LEFT JOIN articles a ON a.id = fi.article_id
 		  LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
-		WHERE f.user_id = $1
-		GROUP BY COALESCE(f.category, '')
+		WHERE (c.user_id = $1 OR c.id IS NULL)
+		  AND (f.user_id = $1 OR f.id IS NULL)
+		GROUP BY c.id, c.name
 		-- Empty last: a category with a name is a decision the reader made, and
 		-- the leftovers belong at the bottom of the list rather than the top.
-		ORDER BY (COALESCE(f.category, '') = ''), COALESCE(f.category, '')`,
+		HAVING c.id IS NOT NULL OR count(f.id) > 0
+		ORDER BY (COALESCE(c.name, '') = ''), COALESCE(c.name, '')`,
 		userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing categories for user %d: %w", userID, err)
@@ -474,7 +552,7 @@ func (s *Store) ListCategories(ctx context.Context, userID UserID) ([]Category, 
 	var out []Category
 	for rows.Next() {
 		var c Category
-		if err := rows.Scan(&c.Name, &c.Feeds, &c.Unread); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Feeds, &c.Unread); err != nil {
 			return nil, fmt.Errorf("scanning a category: %w", err)
 		}
 		out = append(out, c)
@@ -574,13 +652,19 @@ func (s *Store) DeleteFeed(ctx context.Context, userID UserID, feedID FeedID) (b
 // category, which is a bucket a reader can ask for.
 func (s *Store) ListCategoryNames(ctx context.Context, userID UserID) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT COALESCE(category, '')
-		FROM feeds
-		WHERE user_id = $1
-		GROUP BY COALESCE(category, '')
+		SELECT name FROM (
+		    -- Every named folder the reader has, whether or not a feed is in it: an
+		    -- empty one has to be offerable in a picker, or it can never be filled.
+		    SELECT name FROM categories WHERE user_id = $1
+		    UNION
+		    -- And the nameless bucket, but only when something is actually in it.
+		    -- There is no row for it by design, so it cannot be listed from the table.
+		    SELECT '' FROM feeds
+		    WHERE user_id = $1 AND category_id IS NULL
+		) names
 		-- Empty last, the same order ListCategories uses, so the compact control and
 		-- the category index cannot disagree about which comes first.
-		ORDER BY (COALESCE(category, '') = ''), COALESCE(category, '')`, userID)
+		ORDER BY (name = ''), name`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing category names for user %d: %w", userID, err)
 	}
@@ -603,9 +687,9 @@ func (s *Store) ListCategoryNames(ctx context.Context, userID UserID) ([]string,
 func (s *Store) FeedsInCategory(ctx context.Context, userID UserID, category string) ([]Feed, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+feedColumns+`
-		 FROM feeds
-		 WHERE user_id = $1 AND COALESCE(category, '') = $2
-		 ORDER BY title`,
+		 `+feedFrom+`
+		 WHERE f.user_id = $1 AND COALESCE(c.name, '') = $2
+		 ORDER BY f.title`,
 		userID, category)
 	if err != nil {
 		return nil, fmt.Errorf("listing feeds in category %q: %w", category, err)

@@ -233,12 +233,18 @@ func (q StreamQuery) filter(userID UserID) streamFilter {
 		add(streamSortKey+` < ?`, q.SortedBefore)
 	}
 	if q.Categorized {
-		// COALESCE on the way in as well as the way out: the column is nullable and
-		// an OPML file with a top-level feed stores NULL, so comparing it directly
-		// to '' would silently match nothing.
-		add(`EXISTS (SELECT 1 FROM feed_items fi4 JOIN feeds f4 ON f4.id = fi4.feed_id
+		// COALESCE on the way out: a feed filed nowhere has a NULL category_id and
+		// therefore no joined name, so comparing directly to '' would silently match
+		// nothing — which is the bucket an OPML file's top-level feeds land in.
+		//
+		// Keyed by name rather than id because that is what the URL carries, and
+		// changing that would break every bookmarked category link. Names are unique
+		// per reader, so it identifies exactly one folder.
+		add(`EXISTS (SELECT 1 FROM feed_items fi4
+		             JOIN feeds f4 ON f4.id = fi4.feed_id
+		             LEFT JOIN categories c4 ON c4.id = f4.category_id
 		             WHERE fi4.article_id = a.id AND f4.user_id = $1
-		               AND COALESCE(f4.category, '') = ?)`, q.Category)
+		               AND COALESCE(c4.name, '') = ?)`, q.Category)
 	}
 	return f
 }

@@ -209,6 +209,12 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /feeds/{id}", s.requireUser(s.handleFeedStream))
 	// Both the category index and one category's stream: `?name=` chooses.
 	mux.HandleFunc("GET /categories", s.requireUser(s.handleCategories))
+	// Creating, renaming and deleting a folder. Separate paths rather than one
+	// endpoint dispatching on a hidden field, so each is nameable in a log and none
+	// can be reached by a form that meant a different one.
+	mux.HandleFunc("POST /categories/new", s.requireUser(s.handleCreateCategory))
+	mux.HandleFunc("POST /categories/rename", s.requireUser(s.handleRenameCategory))
+	mux.HandleFunc("POST /categories/delete", s.requireUser(s.handleDeleteCategory))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
 

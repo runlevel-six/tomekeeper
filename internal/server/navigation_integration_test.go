@@ -200,8 +200,12 @@ func TestCategoryIndexAndStream(t *testing.T) {
 	// escaped. Escaping is the template's business and there is more than one
 	// correct answer — a space may be `+` or `%20`, and either may then be
 	// HTML-escaped — but there is only one correct *destination*.
+	// `?name=` specifically. The index also carries `?edit=` and `?delete=` links
+	// now, and matching any /categories? link took the last one on the page — which
+	// became a management action rather than a stream, and failed with a message
+	// about a missing article.
 	categoryLink := ""
-	for _, m := range regexp.MustCompile(`href="(/categories\?[^"]+)"`).FindAllStringSubmatch(index, -1) {
+	for _, m := range regexp.MustCompile(`href="(/categories\?name=[^"]*)"`).FindAllStringSubmatch(index, -1) {
 		categoryLink = html.UnescapeString(m[1])
 	}
 	if categoryLink == "" {

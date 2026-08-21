@@ -77,6 +77,16 @@ func TestListCategoriesGroupsFeedsAndCountsUnread(t *testing.T) {
 		t.Fatalf("ListCategories() returned %d categories, want %d: %+v", len(got), len(want), got)
 	}
 	for i := range want {
+		// The id is a serial, so it is compared for the property that matters rather
+		// than for a value: **a named category has one and the nameless bucket does
+		// not.** That is the whole shape of the 00013 decision — "no folder" is the
+		// absence of a row, not a row standing for absence — and it is the thing that
+		// would break silently if a later change gave the bucket an id of its own.
+		if (got[i].ID != 0) != (want[i].Name != "") {
+			t.Errorf("category %q has id %d; a named category needs one and the nameless bucket must not have one",
+				got[i].Name, got[i].ID)
+		}
+		got[i].ID = 0
 		if got[i] != want[i] {
 			t.Errorf("category %d = %+v, want %+v", i, got[i], want[i])
 		}

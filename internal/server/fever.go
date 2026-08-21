@@ -3,8 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"hash/fnv"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -69,7 +67,7 @@ import (
 // An item id is an article id, a group is a category, and is_saved is the starred
 // flag. Each of those is a structural decision with a consequence, and each is
 // argued where it is implemented — see internal/store/fever.go for the first and
-// third, and feverGroupIDs below for the second.
+// third, and feverGroupsFor below for the second.
 
 // feverAPIVersion is the version this speaks. Three is what Fever 1.14 reported and
 // what every surviving client expects.
@@ -339,13 +337,15 @@ func (s *Server) feverMarkGroup(ctx context.Context, r *http.Request, userID sto
 	what := "everything"
 
 	if groupID > 0 {
-		// Resolving the id needs the same assignment that produced it, so the names
-		// come from the same place the groups response builds them from.
-		names, err := s.store.ListCategoryNames(ctx, userID)
+		// Resolved from the reader's own subscriptions, which is where the groups
+		// response takes its ids from too — so the two cannot disagree about which
+		// folder an id means. It used to need the *names*, because the id was a hash
+		// of one.
+		feeds, err := s.store.ListFeeds(ctx, userID)
 		if err != nil {
 			return err
 		}
-		category, ok := feverCategoryFor(names, groupID)
+		category, ok := feverCategoryFor(feeds, groupID)
 		if !ok {
 			// A group id this reader has no category for. Nothing to mark, and worth a
 			// line: it is what a stale client cache looks like.
@@ -574,14 +574,23 @@ func feverFeeds(feeds []store.Feed) []feverFeed {
 // inventing an "Uncategorized" group would put a folder in somebody's reader that
 // does not exist in their archive.
 func feverGroupsFor(feeds []store.Feed) ([]feverGroup, []feverFeedsGroup) {
+	// The id comes from the categories row, not from the name. It used to be a hash
+	// of the name — there was no table and the protocol requires an id — and the
+	// consequence was that **renaming a category silently reshuffled a client's
+	// folders**, because clients cache folder membership against these ids. The old
+	// folder vanished and a new one appeared holding the same feeds. Migration 00013
+	// exists for this.
 	names := make([]string, 0, len(feeds))
+	ids := make(map[string]int64, len(feeds))
 	for _, f := range feeds {
-		if f.Category != "" && !slices.Contains(names, f.Category) {
+		if f.Category == "" || f.CategoryID == 0 {
+			continue
+		}
+		if !slices.Contains(names, f.Category) {
 			names = append(names, f.Category)
+			ids[f.Category] = int64(f.CategoryID)
 		}
 	}
-
-	ids := feverGroupIDs(names)
 
 	groups := make([]feverGroup, 0, len(names))
 	for _, name := range names {
@@ -609,81 +618,19 @@ func feverGroupsFor(feeds []store.Feed) ([]feverGroup, []feverFeedsGroup) {
 	return groups, byGroup
 }
 
-// feverGroupMax bounds a group id.
+// feverCategoryFor is the category a group id names.
 //
-// The protocol says a group id is a positive integer and reserves 0 and -1 for its
-// two super groups, so ids are assigned in [1, 2^31-1] — inside a signed 32-bit
-// range, because a client written in 2013 storing these in an SQLite INTEGER column
-// is not a thing to find out about later.
-const feverGroupMax = 1<<31 - 1
-
-// feverGroupIDs assigns a group id to each category name.
+// Resolved against the reader's own subscriptions, so a group id belonging to another
+// reader's folder resolves to nothing here — the categories table is scoped per
+// reader, and this only ever sees one reader's feeds.
 //
-// Categories here are free text on a subscription — there is no categories table and
-// therefore no id to hand out, which the protocol requires. So the id is derived
-// from the name, and the property that matters is *stability*: a client caches group
-// ids and its folder membership against them, so an id that changed when an
-// unrelated category was added would silently reshuffle somebody's reader. A hash of
-// the name is stable across restarts, across reorderings, and across every category
-// but the one being renamed. An index into a sorted list is none of those things.
-//
-// Collisions are resolved by rehashing with a counter, over names visited in sorted
-// order so that the outcome depends on the set rather than on the order the database
-// returned. At this width and a realistic number of folders the probability is
-// around one in ten million, but the symptom — two categories silently sharing a
-// group — is the kind that gets diagnosed as "the client is broken", so it is worth
-// fifteen lines to make impossible.
-func feverGroupIDs(names []string) map[string]int64 {
-	sorted := slices.Clone(names)
-	slices.Sort(sorted)
-
-	ids := make(map[string]int64, len(sorted))
-	used := make(map[int64]struct{}, len(sorted))
-
-	for _, name := range sorted {
-		id := feverGroupHash(name, 0)
-		for attempt := 1; ; attempt++ {
-			if _, taken := used[id]; !taken {
-				break
-			}
-			id = feverGroupHash(name, attempt)
-		}
-		used[id] = struct{}{}
-		ids[name] = id
-	}
-	return ids
-}
-
-// feverGroupHash is one candidate id for a name.
-func feverGroupHash(name string, attempt int) int64 {
-	h := fnv.New64a()
-	if attempt > 0 {
-		// Folded into the hashed bytes rather than added to the result, so a retry
-		// lands somewhere unrelated instead of next door to the collision.
-		_, _ = fmt.Fprintf(h, "%d\n", attempt)
-	}
-	_, _ = h.Write([]byte(name))
-	return int64(h.Sum64()%feverGroupMax) + 1
-}
-
-// feverCategoryFor is feverGroupIDs read backwards: the category a group id names.
-//
-// Built from the reader's own category names, so a group id belonging to a different
-// reader's folder resolves to nothing here even if it collides numerically.
-func feverCategoryFor(names []string, groupID int64) (string, bool) {
-	// The nameless bucket is not a group, so it must not be assignable an id — the
-	// groups response leaves it out and this has to agree, or a group id could resolve
-	// to "no category" and mark the wrong articles.
-	named := make([]string, 0, len(names))
-	for _, name := range names {
-		if name != "" {
-			named = append(named, name)
-		}
-	}
-
-	for name, id := range feverGroupIDs(named) {
-		if id == groupID {
-			return name, true
+// The nameless bucket is not a group and must not be assignable an id: the groups
+// response leaves it out, and a group id resolving to "no category" would mark the
+// wrong articles read.
+func feverCategoryFor(feeds []store.Feed, groupID int64) (string, bool) {
+	for _, f := range feeds {
+		if f.Category != "" && f.CategoryID != 0 && int64(f.CategoryID) == groupID {
+			return f.Category, true
 		}
 	}
 	return "", false

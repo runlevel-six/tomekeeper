@@ -937,6 +937,22 @@ type categoriesPage struct {
 	pageData
 
 	Categories []categoryRow
+
+	// Editing and Deleting are the row a form is open on, nil otherwise. Pointers
+	// rather than ids so the template needs no second lookup to name what it is
+	// about to change.
+	Editing  *categoryRow
+	Deleting *categoryRow
+
+	// Movable are the other categories a deleted one's feeds could go to, which is
+	// every managed row except the one being deleted. Empty when there is nowhere to
+	// move them, in which case the form does not offer it — an option leading to an
+	// empty picker is worse than no option.
+	Movable []categoryRow
+
+	// Saved reports what just happened, Problem why it did not.
+	Saved   string
+	Problem string
 }
 
 type categoryRow struct {
@@ -946,6 +962,12 @@ type categoryRow struct {
 	// that has none.
 	Heading string
 	Path    string
+
+	// Managed says this row is a real category the reader may rename or delete.
+	// False for the nameless bucket, which is the absence of a category rather than
+	// one named for absence: there is nothing there to rename, and nothing to
+	// delete. See migration 00013.
+	Managed bool
 }
 
 // handleCategories is both the index and one category's stream.
@@ -960,6 +982,15 @@ func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.renderCategories(w, r, http.StatusOK, "", "")
+}
+
+// renderCategories draws the index, optionally reporting on what just happened.
+//
+// Rendered rather than redirected, like every other form here: the outcome belongs
+// to the request that earned it, and a redirect would lose the message.
+func (s *Server) renderCategories(w http.ResponseWriter, r *http.Request, status int, saved, problem string) {
+
 	categories, err := s.store.ListCategories(r.Context(), signedInUser(r))
 	if err != nil {
 		s.log.Error("listing categories failed", "error", err)
@@ -973,10 +1004,48 @@ func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
 			Category: c,
 			Heading:  categoryHeading(c.Name),
 			Path:     categoryPath(c.Name),
+			Managed:  c.Name != "",
 		})
 	}
 
-	s.render(w, http.StatusOK, "categories", page)
+	// Asking about a deletion, which is a page rather than a dialog for the reason
+	// the bulk mark's is: the content security policy has no 'unsafe-inline', and a
+	// question that is a URL is reloadable, linkable, and canceled by navigating
+	// away.
+	if raw := r.URL.Query().Get("delete"); raw != "" {
+		if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			for _, row := range page.Categories {
+				if row.Managed && int64(row.ID) == id {
+					page.Deleting = &row
+				}
+			}
+			if page.Deleting == nil {
+				// A category they do not have. Not an error page: the list they asked
+				// for is right here, and the question simply has no subject.
+				s.log.Warn("asked to delete a category that is not there",
+					"category_id", id, "user_id", signedInUser(r))
+			}
+		}
+	}
+	if raw := r.URL.Query().Get("edit"); raw != "" {
+		if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			for _, row := range page.Categories {
+				if row.Managed && int64(row.ID) == id {
+					page.Editing = &row
+				}
+			}
+		}
+	}
+	if page.Deleting != nil {
+		for _, row := range page.Categories {
+			if row.Managed && row.ID != page.Deleting.ID {
+				page.Movable = append(page.Movable, row)
+			}
+		}
+	}
+	page.Saved, page.Problem = saved, problem
+
+	s.render(w, status, "categories", page)
 }
 
 // attentionPage is the failed-fetch queue.

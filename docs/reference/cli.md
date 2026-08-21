@@ -973,6 +973,43 @@ Two properties worth knowing:
   mark that re-stamped everything would quietly extend the life of what the reader
   had already finished.
 
+### Categories
+
+A category is a row in `categories`, scoped to one reader, with `feeds.category_id`
+pointing at it. It was free text on the subscription until migration `00013`.
+
+| Route | Does |
+|---|---|
+| `GET /categories` | The index. `?name=` is one category's stream, `?edit=` opens the rename form, `?delete=` asks the deletion question |
+| `POST /categories/new` | Creates an empty one |
+| `POST /categories/rename` | Changes the name and nothing else |
+| `POST /categories/delete` | Deletes it, with `disposition` saying what happens to its feeds |
+
+Three dispositions, and **none of them touches an article**: `uncategorized` leaves
+the feeds filed under nothing, `move` refiles them under another category, and
+`unsubscribe` drops the subscriptions. Nothing in this project deletes an article, and
+an article has no category of its own — it is derived through `feed_items` to the feed
+that carried it, so refiling a feed moves everything it ever brought in, retroactively.
+
+The `unsubscribe` outcome says two things rather than one: the archive is kept, *and*
+anything never opened stops being listed. Both are true — an article is visible when a
+feed points at it or the reader has acted on it — and saying only the first is how a
+reader concludes their archive was lost. It is the same residue unsubscribing one feed
+leaves, and what a future `tome prune` is for.
+
+The foreign key is `ON DELETE SET NULL`, which is the decision in the schema:
+`CASCADE` would delete subscriptions, and `RESTRICT` would refuse to delete a
+non-empty folder, which is the case a reader wants it for.
+
+**The nameless bucket is the absence of a row, not a row.** "No folder" cannot be
+renamed or deleted, so it is offered no controls. A category literally named
+*Uncategorized* — which is what a FreshRSS export produces for feeds that had none,
+and the OPML importer takes folder names verbatim — is an ordinary category, now
+distinguishable from having none.
+
+**A group id in the Fever API is the category's row id.** It used to be a hash of the
+name, so renaming a category silently replaced a folder in every synced client.
+
 ### Text size
 
 A named step on `users`, rendered into the first paint as `data-text` on `<html>` —

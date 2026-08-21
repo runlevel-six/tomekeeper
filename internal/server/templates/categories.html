@@ -4,13 +4,97 @@
 <div class="categories">
   <h1>Categories</h1>
 
-  {{if .Categories}}
-    <p class="hint">
-      The folders your subscription list came in. A category is not stored
-      separately — it is whatever each feed says it is filed under, so re-importing
-      an OPML file with the folders rearranged rearranges these.
-    </p>
+  {{with .Saved}}<p class="import-result ok">{{.}}</p>{{end}}
+  {{with .Problem}}<p class="import-result bad">{{.}}</p>{{end}}
 
+  {{/*
+    The form above the list, and doubling as the edit form when one is open — the
+    same arrangement the Feeds page settled on, so the two pages do not disagree
+    about where a form belongs.
+  */}}
+  {{if .Editing}}
+    <form class="add-feed" method="post" action="/categories/rename">
+      <input type="hidden" name="id" value="{{.Editing.ID}}">
+      <label for="category-name">Rename “{{.Editing.Name}}”</label>
+      <input type="text" id="category-name" name="name" value="{{.Editing.Name}}"
+             required autofocus>
+      {{/*
+        Said out loud because a reader has no way to know it, and the alternative is
+        assuming the worst: renaming a folder is not a bulk edit of the feeds in it,
+        and nothing an app synced through the Fever protocol has cached will break.
+      */}}
+      <p class="hint-inline">
+        The feeds stay where they are, and a synced app keeps this folder rather than
+        seeing it replaced.
+      </p>
+      <button type="submit">Rename</button>
+      <a class="danger-link" href="/categories">Cancel</a>
+    </form>
+  {{else}}
+    <form class="add-feed" method="post" action="/categories/new">
+      <label for="category-name">New category</label>
+      <input type="text" id="category-name" name="name" placeholder="Reading later" required>
+      <p class="hint-inline">
+        A category can be empty. Make it here, then file feeds into it from
+        <a href="/feeds">Feeds</a>.
+      </p>
+      <button type="submit">Add</button>
+    </form>
+  {{end}}
+
+  {{/*
+    The delete question, as a page rather than a dialog: the content security policy
+    has no 'unsafe-inline', and a question that is a URL is reloadable, linkable, and
+    canceled by navigating away.
+
+    Three answers, and none of them touches an article. That is worth stating on the
+    form itself — "delete" invites the assumption that the contents go too, and the
+    only way a reader learns otherwise is being told.
+  */}}
+  {{with .Deleting}}
+    <form class="confirm-mark" method="post" action="/categories/delete">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <p>Delete <strong>{{.Name}}</strong>?</p>
+
+      {{if .Feeds}}
+        <p class="note">
+          It holds {{plural .Feeds "feed"}}. Choose what happens to
+          {{if eq .Feeds 1}}it{{else}}them{{end}} — whichever you pick,
+          <strong>every article they have archived is kept</strong>.
+        </p>
+
+        <label class="radio">
+          <input type="radio" name="disposition" value="uncategorized" checked>
+          Leave the feeds filed under nothing
+        </label>
+
+        {{if $.Movable}}
+          <label class="radio">
+            <input type="radio" name="disposition" value="move">
+            Move the feeds to
+            <select name="into">
+              {{range $.Movable}}
+                <option value="{{.ID}}">{{.Name}}</option>
+              {{end}}
+            </select>
+          </label>
+        {{end}}
+
+        <label class="radio">
+          <input type="radio" name="disposition" value="unsubscribe">
+          Unsubscribe the feeds — stops polling them and keeps everything they archived
+        </label>
+      {{else}}
+        <p class="note">It has no feeds in it, so there is nothing to move.</p>
+        <input type="hidden" name="disposition" value="uncategorized">
+      {{end}}
+
+      <button type="submit">Delete it</button>
+      <a href="/categories">Cancel</a>
+    </form>
+  {{end}}
+
+  {{if .Categories}}
     <ul class="category-list">
       {{range .Categories}}
         <li>
@@ -19,12 +103,23 @@
             {{if .Unread}}<span class="badge count">{{.Unread}}</span>{{end}}
           </a>
           <span class="detail">{{plural .Feeds "feed"}}</span>
+          {{/*
+            Only a real category gets these. The nameless bucket is the absence of a
+            category rather than one named for absence — there is nothing to rename
+            and nothing to delete.
+          */}}
+          {{if .Managed}}
+            <span class="rule-actions">
+              <a class="row-edit" href="/categories?edit={{.ID}}">Rename</a>
+              <a class="row-edit" href="/categories?delete={{.ID}}">Delete</a>
+            </span>
+          {{end}}
         </li>
       {{end}}
     </ul>
   {{else}}
     <p class="placeholder">
-      No feeds yet, so nothing to file. Import an OPML export under
+      No categories yet. Add one above, or import an OPML export under
       <a href="/feeds">Feeds</a> and its folders appear here.
     </p>
   {{end}}
