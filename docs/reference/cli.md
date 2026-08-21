@@ -1062,6 +1062,41 @@ sizes have to live between about 13 and 18 pixels, and four steps in that range 
 1.05 apart. That is what the previous four *were*, unintentionally — 12.8px, 13.6,
 13.6 and 14.2 — and they read as one size with rounding errors.
 
+### `tome prune` — collect what unsubscribing left behind
+
+```console
+$ tome prune
+14.2 MB across 63 articles would be released. Nothing has changed.
+Run again with --yes to release them, or --list to see which.
+```
+
+Articles no feed references and nobody has acted on. Retention cannot reach them:
+`ExpirableArticles` requires `read AND read_at < cutoff`, so an article that arrived,
+was never opened, and then lost its feed is never expirable at any setting.
+Unsubscribing deliberately deletes no articles — re-subscribing relinks them by
+canonical URL — so nothing had ever collected them.
+
+| Flag | Does |
+|---|---|
+| *(none)* | Reports what would be released and changes nothing |
+| `--yes` | Releases it |
+| `--list` | Names every article rather than only counting them |
+| `--limit N` | Considers at most N, biggest first |
+
+**It releases bodies, not articles.** The row survives with `content_expired_at` set,
+exactly as retention leaves it, so the archive keeps knowing the article existed.
+Never a candidate: anything read, starred, kept, saved, or carrying an imported body —
+that last for the reason retention refuses it, since an import may be the only
+surviving copy of a page that is gone.
+
+Reporting by default is the opposite convention to `reextract --dry-run`, and
+deliberately so: re-extracting is free and reversible, while this releases bytes that
+would have to be fetched again. The safe answer is the one you get by accident.
+
+One property worth knowing: state writes are guarded by the same visibility predicate
+reads are, so an article with no feed reference and no state row cannot acquire one.
+Once "nobody has acted on it" holds for an orphan, nothing can make it false again.
+
 ### `POST /articles/{id}/refetch` — fetch a page again
 
 The only remedy for a problem the stored copy cannot be talked out of. Extraction runs
@@ -1070,7 +1105,9 @@ have since expired, a page that needed a browser before anybody flagged its doma
 re-extracting cannot help and only the origin can.
 
 Offered on each row of the failed-fetch queue, which is where such an article is
-noticed. **A POST, because it spends a request on somebody else's server**: a GET here
+noticed, and as `tome refetch <id>...` for the case a button cannot serve — a repair
+is rarely one article, since a site whose image URLs expired takes every article from
+that site with it. The command reports by default and queues only with `--yes`. **A POST, because it spends a request on somebody else's server**: a GET here
 would be followed by every crawler and link prefetcher that saw the page.
 
 Never automatic. The fetch worker refuses a page it already has unless explicitly

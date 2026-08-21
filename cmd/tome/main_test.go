@@ -206,3 +206,38 @@ func TestReextractAcceptsBothFlagSpellings(t *testing.T) {
 		}
 	}
 }
+
+// A command that spends requests on somebody else's server must refuse a bad
+// invocation before it reaches the database, let alone the network.
+//
+// Every case here returns without opening a connection, which is what makes them
+// runnable with no configuration at all — and is the property worth keeping: a
+// mistyped id should cost a message, not eight requests to a site that did not ask
+// for them.
+func TestRefetchRejectsBadInvocations(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no article ids", nil, "Usage:"},
+		{"a word instead of an id", []string{"comics"}, "not an article id"},
+		{"a negative id", []string{"-3"}, "flag provided but not defined"},
+		{"zero", []string{"0"}, "not an article id"},
+		{"one good id and one bad", []string{"12", "twelve"}, "not an article id"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut strings.Builder
+			if code := refetch(tc.args, &out, &errOut); code != exitUsage {
+				t.Errorf("refetch(%v) = %d, want %d — a bad invocation must not proceed",
+					tc.args, code, exitUsage)
+			}
+			if got := errOut.String(); !strings.Contains(got, tc.want) {
+				t.Errorf("stderr = %q, want it to mention %q", got, tc.want)
+			}
+			if out.Len() != 0 {
+				t.Errorf("a refused invocation wrote to stdout: %q", out.String())
+			}
+		})
+	}
+}

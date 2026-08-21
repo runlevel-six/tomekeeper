@@ -32,7 +32,32 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`tome refetch <id>...`** does from a command what the failed-fetch queue's button
+  does per row. A repair is rarely one article: a site whose image URLs expired takes
+  every article from that site with it, and a domain flagged for a browser after the
+  fact takes everything fetched before the flag. Reports by default and queues only
+  with `--yes`, because every article costs one request to somebody else's server.
+
+- **`tome prune`** collects the residue unsubscribing leaves: articles no feed
+  references and nobody has acted on. Retention cannot reach them — it only ever
+  expires articles that were *read*, so one that arrived, was never opened, and then
+  lost its feed is never expirable at any setting — and unsubscribing deliberately
+  deletes no articles, because re-subscribing relinks them by canonical URL. So
+  nothing had ever collected them.
+
+  It **releases bodies**, exactly as retention does, rather than deleting article
+  rows: the archive keeps knowing the article existed. Anything read, starred, saved,
+  or imported is never a candidate, and an imported body is refused for the reason
+  retention refuses it — it may be the only surviving copy of a page that is gone.
+
+  **Reports by default and acts only with `--yes`** — the opposite convention to
+  `reextract --dry-run`, deliberately: re-extracting is free and reversible, while
+  this releases bytes that would have to be fetched again. It reports the bytes rather
+  than only the count, because "prune 812 articles" is not a decision anybody can take
+  and "recover 140 MB" is.
+
 
 ## [v0.13.0] — 2026-08-21
 

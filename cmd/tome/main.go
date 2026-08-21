@@ -56,6 +56,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "export":
 		return exportArchive(args[1:], stdout, stderr)
 
+	case "refetch":
+		return refetch(args[1:], stdout, stderr)
+
+	case "prune":
+		return prune(args[1:], stdout, stderr)
+
 	case "reextract":
 		return reextract(args[1:], stdout, stderr)
 
