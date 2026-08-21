@@ -52,6 +52,13 @@ happens, because it is the one change that wants a follow-up command
   The nameless bucket is deliberately not manageable. It is the absence of a category
   rather than one named for absence, so there is nothing there to rename or delete.
 
+- **The feed form offers the categories that exist, and an explicit "no category".**
+  It was a free-text field with suggestions, on the grounds that a category existed
+  only because some feed claimed one — there is a list now. The old arrangement also
+  had a real gap: filing a feed under nothing meant *emptying* the field, which
+  worked and which nobody discovered. A companion field still names a new category,
+  and a typed name wins over the picker, which the form says out loud.
+
 ### Fixed
 
 - **Renaming a category no longer reshuffles a synced client's folders.** The Fever

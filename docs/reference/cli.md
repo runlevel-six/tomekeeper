@@ -1007,6 +1007,13 @@ renamed or deleted, so it is offered no controls. A category literally named
 and the OPML importer takes folder names verbatim — is an ordinary category, now
 distinguishable from having none.
 
+The feed form offers a picker of the categories that exist — including empty ones,
+which is most of why they became rows — with an explicit **— No category —** and a
+companion field for a new name. Two controls because neither does the whole job: a
+select cannot name a folder that does not exist yet, and a text field cannot offer
+"none" findably. **A typed name wins**, since the picker always has some value and
+would otherwise overrule somebody who filled the field in.
+
 **A group id in the Fever API is the category's row id.** It used to be a hash of the
 name, so renaming a category silently replaced a folder in every synced client.
 

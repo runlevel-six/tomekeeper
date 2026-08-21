@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -265,9 +266,14 @@ func TestAddFeedWithoutAFetchClient(t *testing.T) {
 	}
 }
 
-// The categories already in use are offered as suggestions, which is what keeps
-// "Tech" and "tech" from both existing.
-func TestFeedFormSuggestsExistingCategories(t *testing.T) {
+// The categories that exist are offered to choose from, which is what keeps "Tech"
+// and "tech" from both existing — and filing a feed under nothing is a visible
+// option rather than a field you have to guess at emptying.
+//
+// Asserted as properties rather than as markup: this was a text field with a
+// datalist and is now a select with a companion field, and a test naming the element
+// would have failed for a change that improved the thing it was protecting.
+func TestFeedFormOffersTheCategoriesThatExist(t *testing.T) {
 	rd, tr := fetchingFixture(t)
 
 	if _, _, err := tr.store.UpsertFeed(t.Context(), tr.alice, store.FeedParams{
@@ -275,13 +281,80 @@ func TestFeedFormSuggestsExistingCategories(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertFeed() = %v", err)
 	}
+	// An empty category has to be offered too, or it can never be filled — which is
+	// most of why categories became a table.
+	if _, err := tr.store.CreateCategory(t.Context(), tr.alice, "Reading later"); err != nil {
+		t.Fatalf("CreateCategory() = %v", err)
+	}
 
 	body := rd.body("/feeds")
-	if !strings.Contains(body, `<datalist id="known-categories">`) {
-		t.Errorf("the form offers no category suggestions:\n%s", body)
+	for _, want := range []string{
+		`<option value="Comics">`,
+		`<option value="Reading later">`,
+		`name="new_category"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the category control is missing %s:\n%s", want, body)
+		}
 	}
-	if !strings.Contains(body, `<option value="Comics">`) {
-		t.Errorf("an existing category is not suggested:\n%s", body)
+
+	// "No category" is a choice and must look like one. Emptying a text field was how
+	// this used to be done, and nobody found it.
+	if !strings.Contains(body, `<option value="">`) {
+		t.Errorf("the form offers no explicit way to file a feed under nothing:\n%s", body)
+	}
+}
+
+// The two halves of the control resolve to one answer, and a typed name wins: it is
+// the more specific act, and the picker always has some value so it would otherwise
+// silently overrule somebody who filled the field in.
+func TestATypedCategoryBeatsThePicker(t *testing.T) {
+	rd, tr := fetchingFixture(t)
+	ctx := t.Context()
+
+	if _, _, err := tr.store.UpsertFeed(ctx, tr.alice, store.FeedParams{
+		FeedURL: "https://example.com/comics.xml", Title: "Comics", Category: "Comics",
+	}); err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+
+	feed, err := tr.store.FeedByURL(ctx, tr.alice, "https://example.com/comics.xml")
+	if err != nil {
+		t.Fatalf("FeedByURL() = %v", err)
+	}
+	id := strconv.FormatInt(int64(feed.ID), 10)
+
+	// Both filled: the typed one is what happens.
+	rec := rd.do(http.MethodPost, "/feeds/"+id+"/edit", url.Values{
+		"url": {feed.FeedURL}, "title": {feed.Title},
+		"category": {"Comics"}, "new_category": {"Webcomics"},
+		"enabled": {"on"}, "poll_every": {""},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST edit = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	if feed, err = tr.store.GetFeed(ctx, tr.alice, feed.ID); err != nil {
+		t.Fatalf("GetFeed() = %v", err)
+	}
+	if feed.Category != "Webcomics" {
+		t.Errorf("category = %q, want the typed %q to win over the picked %q",
+			feed.Category, "Webcomics", "Comics")
+	}
+
+	// And the explicit empty option files it under nothing.
+	rec = rd.do(http.MethodPost, "/feeds/"+id+"/edit", url.Values{
+		"url": {feed.FeedURL}, "title": {feed.Title},
+		"category": {""}, "new_category": {""},
+		"enabled": {"on"}, "poll_every": {""},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST edit = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	if feed, err = tr.store.GetFeed(ctx, tr.alice, feed.ID); err != nil {
+		t.Fatalf("GetFeed() = %v", err)
+	}
+	if feed.Category != "" || feed.CategoryID != 0 {
+		t.Errorf("category = %q/%d, want the feed filed under nothing", feed.Category, feed.CategoryID)
 	}
 }
 

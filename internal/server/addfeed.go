@@ -79,11 +79,30 @@ type addFeedOutcome struct {
 	AlreadySubscribed bool
 }
 
+// chosenCategory resolves the two controls the form offers into one name.
+//
+// A picker of the categories that exist, including an explicit "no category", and a
+// text field for a new one. Two controls rather than one because neither does the
+// whole job: a select cannot name a folder that does not exist yet, and a text field
+// cannot offer "none" in a way anybody finds — emptying it worked and nobody knew.
+//
+// A typed name wins. It is the more specific act: somebody who fills it in has said
+// something the list could not say, while the select always has *some* value and
+// would otherwise silently overrule them.
+func chosenCategory(r *http.Request) string {
+	if fresh := strings.TrimSpace(r.PostFormValue("new_category")); fresh != "" {
+		return fresh
+	}
+	// The sentinel is a value no category can have: a name is NOT NULL and checked
+	// non-blank in the schema, so an empty string cannot collide with a real one.
+	return strings.TrimSpace(r.PostFormValue("category"))
+}
+
 // submittedForm reads the fields the form posts, whichever button was pressed.
 func submittedForm(r *http.Request) *addFeedOutcome {
 	return &addFeedOutcome{
 		URL:      strings.TrimSpace(r.PostFormValue("url")),
-		Category: strings.TrimSpace(r.PostFormValue("category")),
+		Category: chosenCategory(r),
 		Title:    strings.TrimSpace(r.PostFormValue("title")),
 		// Absent on the add form, which has no such control: a new subscription is
 		// polled, and a checkbox offering to create one that is not would be a
