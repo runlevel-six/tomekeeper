@@ -1,5 +1,5 @@
 {{define "base"}}<!DOCTYPE html>
-<html lang="en"{{if and .Theme (ne .Theme "auto")}} data-theme="{{.Theme}}"{{end}}>
+<html lang="en"{{if and .Theme (ne .Theme "auto")}} data-theme="{{.Theme}}"{{end}}{{if and .TextScale (ne .TextScale "normal")}} data-text="{{.TextScale}}"{{end}}>
 <head>
   <meta charset="utf-8">
   {{/*

@@ -190,7 +190,7 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
 
 {
   // A drag that begins vertical and ends horizontal. The end-of-gesture check
-  // cannot catch this one — by the time the finger lifts it has travelled further
+  // cannot catch this one — by the time the finger lifts it has traveled further
   // across than down — so this is what makes the mid-drag bail load-bearing. Found
   // by neutering that bail and watching every case still pass.
   const w = makeWorld();
@@ -252,7 +252,7 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
 }
 
 {
-  // The behaviour the maintainer could not confirm by hand: pulling up past the
+  // The behavior the maintainer could not confirm by hand: pulling up past the
   // threshold and then back down again abandons it.
   const w = makeWorld({ page: "list" });
   w.fire("touchstart", [[200, 800]]);

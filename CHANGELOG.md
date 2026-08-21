@@ -32,7 +32,35 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+**Adds a migration.**
+
+### Added
+
+- **A text size preference in Settings**, four named steps. Like the palette it is a
+  column on `users` rendered into the first paint rather than a cookie read by
+  script — and for a sharper reason: a size applied after layout reflows the whole
+  page under somebody who has started reading it.
+
+  It scales the **root** font size as a percentage, so one number moves every view
+  and it multiplies whatever font size the browser is already set to instead of
+  replacing it. Column widths are in `rem` as well, so about 68 characters per line
+  survives a size change rather than the text growing into a column that stayed put.
+  Archived standalone pages keep their own typography, as they must — they have to
+  open with none of this running.
+
+### Fixed
+
+- **The interface overrode the browser's own font-size setting.** `body` was pinned
+  at `16px`, so everything inheriting from it ignored a reader who had already asked
+  their browser for larger text. It is `1rem` now. This changes rendering for anyone
+  whose browser font size was not the default — in their favour.
+- **The article had four supporting type sizes pretending to be distinct.** The
+  byline at 12.8px, the outbound link at 13.6, the image notice at 13.6 and captions
+  at 14.2 — 1.4px apart on a phone, which reads as one size with rounding errors —
+  and none of them moved when the body did. Now one supporting tier derived from the
+  body, so the article holds its proportions at every width and every size step.
+  Three levels rather than four is deliberate: four do not fit in the range a phone
+  has available.
 
 ## [v0.9.0] — 2026-08-21
 

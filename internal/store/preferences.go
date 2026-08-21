@@ -16,6 +16,11 @@ type Preferences struct {
 	// Theme is the palette and light/dark choice, as one value. See themes.go.
 	Theme string
 
+	// TextScale is the named type-size step. See textscale.go. Like the palette it
+	// has to reach the first paint, and for a stronger reason: a size applied after
+	// layout reflows the whole page under someone who has started reading it.
+	TextScale string
+
 	// MarkReadOnScroll is whether an unread list marks articles read as they are
 	// scrolled past. Off unless the reader turned it on.
 	MarkReadOnScroll bool
@@ -33,15 +38,16 @@ type Preferences struct {
 // invent them. The default palette is 'auto' and automatic marking is off, which
 // is what a reader who has never opened the settings page has.
 func (s *Store) GetPreferences(ctx context.Context, userID UserID) (Preferences, error) {
-	prefs := Preferences{Theme: "auto"}
+	prefs := Preferences{Theme: "auto", TextScale: TextScaleNormal}
 
 	var pollSeconds *int64
 	if err := s.pool.QueryRow(ctx, `
-		SELECT COALESCE(theme, 'auto'), mark_read_on_scroll,
+		SELECT COALESCE(theme, 'auto'), COALESCE(text_scale, 'normal'), mark_read_on_scroll,
 		       EXTRACT(EPOCH FROM default_poll_interval)::bigint
 		FROM users WHERE id = $1`, userID,
-	).Scan(&prefs.Theme, &prefs.MarkReadOnScroll, &pollSeconds); err != nil {
-		return Preferences{Theme: "auto"}, fmt.Errorf("reading preferences for user %d: %w", userID, err)
+	).Scan(&prefs.Theme, &prefs.TextScale, &prefs.MarkReadOnScroll, &pollSeconds); err != nil {
+		return Preferences{Theme: "auto", TextScale: TextScaleNormal},
+			fmt.Errorf("reading preferences for user %d: %w", userID, err)
 	}
 	prefs.DefaultPollInterval = secondsToDuration(pollSeconds)
 	return prefs, nil

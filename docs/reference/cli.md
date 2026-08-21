@@ -973,6 +973,39 @@ Two properties worth knowing:
   mark that re-stamped everything would quietly extend the life of what the reader
   had already finished.
 
+### Text size
+
+A named step on `users`, rendered into the first paint as `data-text` on `<html>` —
+never read by script. The palette works the same way for the same reason, and there
+is a sharper one here: a size applied after layout reflows the whole page under
+somebody who has already started reading it.
+
+| Step | Ratio |
+|---|---|
+| Smaller | 0.92 |
+| Normal | 1 (absent from the markup, like the default palette) |
+| Larger | 1.15 |
+| Largest | 1.32 |
+
+It is a ratio of the **root font size**, expressed as a percentage — so it
+multiplies whatever font size the browser is already set to rather than replacing
+it. Every size in the stylesheet is in `rem`, or in `em` off something that is, so
+one number moves every view: titles, bodies, list rows, labels, and the column
+widths. The widths matter: `--measure` and the article's `max-width` are in `rem`
+too, so roughly 68 characters per line survives a size change instead of the text
+growing into a column that stayed put.
+
+Archived standalone pages are unaffected. They carry their own inline stylesheet and
+link to nothing, because they have to open on a machine with none of this running.
+
+**The article has three type levels, not four.** Title, body, and one supporting
+size for the byline, the outbound link, the image notice and captions — all derived
+from the body rather than pinned, so the proportions hold at every width and every
+step. Four distinct levels were tried and do not fit: on a phone the supporting
+sizes have to live between about 13 and 18 pixels, and four steps in that range are
+1.05 apart. That is what the previous four *were*, unintentionally — 12.8px, 13.6,
+13.6 and 14.2 — and they read as one size with rounding errors.
+
 ### Touch gestures
 
 Two, both accelerators for a control that is already on the page, and both no-ops

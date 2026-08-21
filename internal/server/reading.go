@@ -36,6 +36,12 @@ type pageData struct {
 	// than applied by a script, so the palette is right in the first paint.
 	Theme string
 
+	// TextScale is the value for <html data-text>. Rendered for the same reason as
+	// the palette and a more pressing one: a size applied by script reflows the
+	// page after it has been laid out, which is a worse experience than either
+	// size on its own.
+	TextScale string
+
 	// MarkReadOnScroll is the reader's preference, not a decision about this page:
 	// which lists act on it is the list's own business. Off unless they turned it
 	// on.
@@ -60,6 +66,7 @@ func (s *Server) pageData(r *http.Request, nav string) pageData {
 		s.log.Warn("reading preferences failed", "error", err)
 	} else {
 		d.Theme = prefs.Theme
+		d.TextScale = prefs.TextScale
 		d.MarkReadOnScroll = prefs.MarkReadOnScroll
 		d.DefaultPollInterval = prefs.DefaultPollInterval
 	}

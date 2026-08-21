@@ -53,6 +53,26 @@
       {{end}}
     </fieldset>
 
+    {{/*
+      Type size. Radios rather than a select for the reason the palette uses them:
+      one tap instead of two, and every option visible without opening anything.
+
+      The whole interface moves, not only article bodies — every size in the
+      stylesheet is relative to the root, including the column widths, so the
+      measure holds instead of the text growing into a column that stayed put.
+    */}}
+    <fieldset>
+      <legend>Text size</legend>
+      {{range .TextSizes}}
+        <label class="radio">
+          <input type="radio" name="text_size" value="{{.Value}}"
+                 {{if eq .Value $.TextSize}}checked{{end}}>
+          {{.Name}}
+          <span class="swatch-blurb">{{.Blurb}}</span>
+        </label>
+      {{end}}
+    </fieldset>
+
     <fieldset>
       <legend>Reading</legend>
       <label class="checkbox">

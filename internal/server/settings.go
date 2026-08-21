@@ -17,6 +17,10 @@ type settingsPage struct {
 	Mode    string
 	Saved   bool
 
+	// TextSizes are the named steps, and TextSize is the stored one.
+	TextSizes []struct{ Value, Name, Blurb string }
+	TextSize  string
+
 	// MarkOnScroll is the stored preference, which is what the checkbox shows.
 	MarkOnScroll bool
 
@@ -70,6 +74,16 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalized against the known steps for the same reason: this value is written
+	// into a data attribute on the document element, and the stylesheet can only
+	// map the names it knows.
+	if err := s.store.SetTextScale(r.Context(), userID,
+		store.TextScaleValue(r.PostFormValue("text_size"))); err != nil {
+		s.log.Error("saving the text size failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	// The count is logged rather than shown. "How often" is the question the reader
 	// asked; how many feeds that moved forward is the worker's business, and it is
 	// the number worth having when somebody asks why a poll happened when it did.
@@ -109,6 +123,17 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 		PollFloor: s.pollFloorLabel(),
 	}
 	page.Palette, page.Mode = store.SplitTheme(page.Theme)
+
+	// Named steps with a word about each, because "Larger" alone does not say
+	// larger than what. The blurbs are the only thing that makes the difference
+	// between two adjacent steps legible before choosing one.
+	page.TextSizes = []struct{ Value, Name, Blurb string }{
+		{store.TextScaleSmaller, "Smaller", "More on screen at once"},
+		{store.TextScaleNormal, "Normal", "What this has always been"},
+		{store.TextScaleLarger, "Larger", "Easier at arm's length"},
+		{store.TextScaleLargest, "Largest", "Largest this goes"},
+	}
+	page.TextSize = page.TextScale
 	// Read back from pageData rather than from the form that may have just set it, so
 	// the checkbox reports what is stored — a save that failed silently would
 	// otherwise show as a save that worked. The cadence picker is read back for the

@@ -117,6 +117,13 @@ type loginPage struct {
 	// page into a 500 with no clue as to why.
 	Theme string
 
+	// TextScale is empty here for the same reasons, and this field is the proof
+	// that the comment above was worth writing: adding the size preference to
+	// base.html turned every unauthenticated page into a 500 until it existed.
+	// The tests caught it; a reader locked out of their own archive would have
+	// been the alternative.
+	TextScale string
+
 	// Unread is likewise always zero, and here for the same reason: base.html
 	// puts the count in the page title, and an unread tally is exactly the sort
 	// of thing a sign-in page must not be able to tell an anonymous visitor.

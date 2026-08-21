@@ -133,11 +133,40 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The reader's chosen type size, as a ratio of the root font size.
+
+   On the root because that is what `rem` resolves against, and every size in this
+   stylesheet is in rem or in em off something that is — so one number moves the
+   whole interface, in every view, including the column widths. The measure is
+   `--measure` and `.reader { max-width }`, both in rem, so about 68 characters
+   per line survives a size change instead of the column staying put while the
+   text grows into it.
+
+   A data attribute rather than a style attribute on <html>: style-src is 'self'
+   with no 'unsafe-inline', so an inline declaration would be refused. The server
+   writes the name; this is the only place the ratios exist.
+
+   The steps are deliberately far enough apart to be seen. A setting whose effect
+   a reader has to look for twice is a setting that appears broken. */
+:root { --text-scale: 1; }
+:root[data-text="smaller"] { --text-scale: 0.92; }
+:root[data-text="larger"] { --text-scale: 1.15; }
+:root[data-text="largest"] { --text-scale: 1.32; }
+
+/* A percentage, never a length: it multiplies whatever the browser's own default
+   font size is, so a reader who has already asked their browser for larger text
+   keeps that and scales from it. A px value here would silently overrule them. */
+html { font-size: calc(100% * var(--text-scale, 1)); }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.6 var(--font-body);
+  /* 1rem, not 16px. The hard 16px overruled the browser's own font-size setting
+     for everything that inherited from body, which made this interface the one
+     place on the device that ignored it — and it would have pinned body text
+     while the rest of the page scaled. */
+  font: 1rem/1.6 var(--font-body);
 }
 
 main { padding: 2rem 1.25rem 4rem; }
@@ -576,7 +605,25 @@ kbd {
  * as a narrower ribbon. On a phone the viewport is the constraint anyway and
  * nothing about it changes.
  */
-.reader { max-width: 44rem; }
+/* The article's own type hierarchy, declared once and derived from one size.
+
+   Three levels, not four. The settings page offers titles, body, subtitles and
+   captions as things a reader might want to size, and four *distinct* tiers do not
+   fit: on a phone the supporting sizes all have to live between about 13 and 18
+   pixels, and four steps in that range are 1.05 apart — which is why this used to
+   have meta at 12.8px, the outbound link at 13.6, the image notice at 13.6 and
+   captions at 14.2 and read as one size with rounding errors. Four tiers pretending
+   to be distinct is worse than three that are.
+
+   So: title, body, supporting. Everything supporting is one size, and it is derived
+   from the body rather than pinned in rem, so the article keeps its proportions at
+   every viewport width and at every text-size step instead of the body growing away
+   from its own captions. */
+.reader {
+  max-width: 44rem;
+  --reader-body: clamp(1.0625rem, 1rem + 0.35vw, 1.3rem);
+  --reader-support: calc(var(--reader-body) * 0.8);
+}
 .reader header { border-bottom: 1px solid var(--rule); padding-bottom: 1rem; margin-bottom: 1.75rem; }
 .reader h1 {
   margin-bottom: 0.6rem;
@@ -585,22 +632,28 @@ kbd {
   font-size: clamp(1.6rem, 1.4rem + 0.8vw, 2.2rem);
   line-height: 1.2;
 }
-.reader .origin { margin: 0.6rem 0; font-family: var(--font-ui); font-size: 0.85rem; }
+.reader .origin { margin: 0.6rem 0; font-family: var(--font-ui); font-size: var(--reader-support); }
+/* The byline shares the supporting tier rather than the list rows' .meta, which is
+   sized for a different job: in a list, meta sits under a 18px title beside a 15px
+   excerpt and is legibly the third thing. In an article it is the second thing. */
+.reader header .meta { font-size: var(--reader-support); }
 /* 17px on a phone up to 21px past about 1370px wide, which is where the column
    stops growing. The floor is what this used to be at every width. */
 .reader .body {
-  font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.3rem);
+  font-size: var(--reader-body);
   line-height: 1.65;
 }
 .reader .body p { margin: 0 0 1.15em; }
 .reader .body h2, .reader .body h3 { margin: 1.8em 0 0.5em; }
 .reader .body img { max-width: 100%; height: auto; display: block; margin: 1.5em auto; }
-.reader .image-notice { font-size: 0.85rem; color: var(--ink-soft); border-left: 3px solid var(--rule); padding-left: 0.8rem; }
+.reader .image-notice { font-size: var(--reader-support); color: var(--ink-soft); border-left: 3px solid var(--rule); padding-left: 0.8rem; }
 .reader .body figure { margin: 1.5em 0; }
 /* Everything inside the body is sized in em from here on, so it keeps its
    proportion to the prose as that grows. In rem, a caption stays 13px while the
    text around it reaches 21px and starts to look like a mistake. */
-.reader .body figcaption { font-size: 0.82em; color: var(--ink-soft); text-align: center; }
+/* 0.8em of the body is the same value --reader-support resolves to, reached the
+   other way round: inside the body, em is the honest way to say it. */
+.reader .body figcaption { font-size: 0.8em; color: var(--ink-soft); text-align: center; }
 .reader .body blockquote {
   margin: 1.5em 0;
   padding-left: 1em;
