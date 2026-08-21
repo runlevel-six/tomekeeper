@@ -217,6 +217,9 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /categories/delete", s.requireUser(s.handleDeleteCategory))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
+	// Fetching a page again. A POST because it spends a request on somebody else's
+	// server, and a GET would be followed by every prefetcher that saw the page.
+	mux.HandleFunc("POST /articles/{id}/refetch", s.requireUser(s.handleRefetch))
 
 	// Extraction overrides. Admin surface rather than reader surface — rules are
 	// global — which is why these are grouped apart and why a multi-user build has

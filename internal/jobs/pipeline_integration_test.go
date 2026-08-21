@@ -363,7 +363,7 @@ func TestRobotsDisallowedArticleIsSkipped(t *testing.T) {
 func TestDomainRuleAppliedByReextract(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)
 
-	const promoHeavy = `<!DOCTYPE html><html lang="en"><head><title>Notes</title></head><body>
+	const promoHeavy = `<!DOCTYPE html><html lang="en"><head><title>Localizing assets</title></head><body>
 	  <div class="promo">Subscribe today and save forty percent on an annual membership. Members get
 	  unlimited access to the full archive, the weekly newsletter, exclusive events, and the complete
 	  back catalog going back decades. Cancel any time, no questions asked, money back in full.</div>
@@ -741,6 +741,168 @@ func TestExtractionWithNothingToExtractFromSaysSo(t *testing.T) {
 		if strings.Contains(a.FetchError, "extraction produced no content") {
 			t.Errorf("fetch_error blames the extractors for an article that was never fetched: %q",
 				a.FetchError)
+		}
+	})
+}
+
+// Fetching a page the archive already has, which the worker refuses unless asked.
+//
+// The remedy for a problem the stored copy cannot be talked out of: extraction runs
+// over stored bytes, so when the bytes are wrong — images behind URLs that have since
+// expired, a page that needed a browser before anybody flagged the domain — no amount
+// of re-extracting helps and only the origin can.
+//
+// Both halves are asserted, because the interesting one is the refusal: a re-fetch
+// that happened by itself would be this archive spending somebody else's bandwidth
+// on a page it already had.
+func TestAPageIsFetchedAgainOnlyWhenAsked(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+
+	// Both comfortably past the two-hundred-character floor: a body shorter than that
+	// is rejected as a paywall stub, and a fixture that trips the floor fails as
+	// "extraction produced no content" a long way from anything this test is about.
+	first := `<!DOCTYPE html><html><head><title>Localizing assets</title></head><body><article>
+	  <p>The first version of this page. The measure that matters for an archive is not
+	  how many pages were saved but how many still render years later, and a saved page
+	  depending on a stylesheet from a lapsed domain is a saved page in name only.</p>
+	  <p>Which is why localizing assets is not an optimization but the whole of the
+	  exercise, repeated for every article the poller brings in.</p>
+	</article></body></html>`
+	second := `<!DOCTYPE html><html><head><title>Localizing assets</title></head><body><article>
+	  <p>The second version, which is what the origin serves now and the whole reason
+	  anybody would ask for this page again. Extraction runs over stored bytes, so when
+	  the bytes themselves are wrong no amount of re-extracting can help.</p>
+	  <p>Only the origin can fix that, and asking it costs a request somebody has to
+	  choose to spend.</p>
+	</article></body></html>`
+
+	page := first
+	var fetches int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		fetches++
+		_, _ = io.WriteString(w, page)
+	}))
+	defer srv.Close()
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: srv.URL + "/notes",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
+		// Enqueued rather than waited for: the periodic scheduler would get here
+		// eventually, and depending on its timing makes this test slow when it passes
+		// and mysterious when it does not.
+		if _, err := riverClient.Insert(ctx, jobs.FetchArticleArgs{ArticleID: int64(articleID)}, nil); err != nil {
+			t.Fatalf("Insert() = %v", err)
+		}
+
+		waitFor(t, "the first fetch and extraction", func() bool {
+			_, err := s.CurrentContent(ctx, articleID)
+			return err == nil
+		}, func() string {
+			a, _ := s.GetArticle(ctx, articleID)
+			return fmt.Sprintf("fetches=%d fetch_status=%s error=%q", fetches, a.FetchStatus, a.FetchError)
+		})
+
+		before, err := s.GetArticle(ctx, articleID)
+		if err != nil {
+			t.Fatalf("GetArticle() = %v", err)
+		}
+		if before.Title == "" {
+			t.Fatal("extraction did not set a title, so the paths cannot diverge and this proves nothing")
+		}
+		fetchesAfterFirst := fetches
+
+		// An ordinary enqueue must not re-fetch. This is the guard: the pipeline
+		// enqueues fetches freely — three feeds carrying one story, a retry, a
+		// scheduler sweep — and any of them re-fetching would be this archive
+		// spending somebody else's bandwidth on a page it already had.
+		// Inserted directly, which is exactly what the poller and the scheduler do:
+		// FetchArticleArgs with nothing set. There is no helper for it, and that is
+		// the point — Again has one caller.
+		res, err := riverClient.Insert(ctx, jobs.FetchArticleArgs{ArticleID: int64(articleID)}, nil)
+		if err != nil {
+			t.Fatalf("Insert() = %v", err)
+		}
+		// The insert has to actually happen, or the assertion below passes because
+		// River deduplicated it rather than because the worker declined to act.
+		if res.UniqueSkippedAsDuplicate {
+			t.Fatalf("the second fetch was deduplicated, so this proves nothing about the worker")
+		}
+		// Nothing is written when the job declines to act, so there is no state to
+		// wait for — only the absence of one. A settle is the honest instrument here.
+		time.Sleep(750 * time.Millisecond)
+		if fetches != fetchesAfterFirst {
+			t.Errorf("an ordinary enqueue re-fetched the page: %d requests then %d",
+				fetchesAfterFirst, fetches)
+		}
+
+		// Asked explicitly, it fetches and the stored page is the new one.
+		page = second
+		if err := jobs.EnqueueRefetch(ctx, riverClient, articleID); err != nil {
+			t.Fatalf("EnqueueRefetch() = %v", err)
+		}
+
+		waitFor(t, "the body to come from the second version", func() bool {
+			c, err := s.CurrentContent(ctx, articleID)
+			return err == nil && strings.Contains(c.Text, "second version")
+		}, func() string {
+			c, _ := s.CurrentContent(ctx, articleID)
+			return fmt.Sprintf("body is %q, fetches=%d", c.Text, fetches)
+		})
+
+		if fetches <= fetchesAfterFirst {
+			t.Errorf("a re-fetch made no request: %d then %d", fetchesAfterFirst, fetches)
+		}
+
+		after, err := s.GetArticle(ctx, articleID)
+		if err != nil {
+			t.Fatalf("GetArticle() = %v", err)
+		}
+
+		// What makes the assertion below reachable, and it took a neuter to get right:
+		// this article was created with no title, so its first fetch named the
+		// directory from the URL slug, and the extraction that followed filled the
+		// title in. Recomputing the path now would name it after that title instead.
+		//
+		// The page's title therefore has to slugify *differently* from its URL path —
+		// "Localizing assets" against /notes. With a title that happened to match the
+		// slug the two paths coincided, the assertion held for the wrong reason, and
+		// removing the code under test changed nothing.
+
+		// **Overwritten in place, not stored beside.** The article's directory holds
+		// its page, its index.html and its localized images, and a re-fetch that
+		// picked a new directory would separate them and orphan the old page. The
+		// directory's name comes from the title, which extraction updates — so this
+		// is reachable rather than theoretical, and the fix is to reuse the path the
+		// article already has.
+		if after.RawBlobPath != before.RawBlobPath {
+			t.Errorf("the page moved to a new path: %q then %q — an article's files must stay together",
+				before.RawBlobPath, after.RawBlobPath)
+		}
+		if after.RawBlobSHA == before.RawBlobSHA {
+			t.Errorf("the stored page's checksum did not change, so the new bytes were not recorded")
+		}
+		if ok, err := blobs.Exists(ctx, after.RawBlobPath); err != nil {
+			t.Fatalf("Exists() = %v", err)
+		} else if !ok {
+			t.Errorf("no page is stored at %q", after.RawBlobPath)
 		}
 	})
 }

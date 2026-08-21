@@ -92,7 +92,24 @@
             {{else}}
               <a class="rule-link" href="{{.RulePath}}" title="Write an extraction rule for {{.Host}}">Rule for {{.Host}}</a>
             {{end}}
-          {{end}}</td>
+          {{end}}
+
+            {{/*
+              Fetching the page again, which is the only remedy for a problem the
+              stored copy cannot be talked out of. Two live examples: a site whose
+              images sit behind URLs that expired before a rule existed, and a page
+              that needed a browser before anybody flagged the domain — the stored
+              bytes are wrong in both, and no amount of re-extracting fixes bytes.
+              
+              A form rather than a link, because it costs the origin a request: a
+              GET here would be followed by every crawler and prefetcher that saw
+              the page.
+            */}}
+            <form class="refetch" method="post" action="/articles/{{.ArticleID}}/refetch">
+              <input type="hidden" name="from" value="attention">
+              <button type="submit" title="Ask {{.Host}} for this page again and archive what comes back. Costs one request.">Fetch again</button>
+            </form>
+          </td>
         </tr>
         {{end}}
       </tbody>

@@ -27,6 +27,17 @@ import (
 // whichever subscription led to it.
 type FetchArticleArgs struct {
 	ArticleID int64 `json:"article_id"`
+
+	// Again asks for a page this archive already has to be fetched a second time,
+	// replacing what is stored.
+	//
+	// Off for everything the pipeline does, and deliberately not something a
+	// scheduler can turn on: the refusal below exists because a re-fetch is a
+	// request the origin did not need to serve. This is for the cases where the
+	// stored page is not good enough and only the origin can fix that — a site
+	// whose images are behind URLs that have since expired, or a page that needed a
+	// browser before anybody flagged the domain. Both were live examples.
+	Again bool `json:"again,omitempty"`
 }
 
 // Kind implements river.JobArgs.
@@ -85,13 +96,20 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 
 	log := w.log.With("article_id", job.Args.ArticleID, "url", article.URLCanonical)
 
-	if article.FetchStatus == store.FetchOK && article.RawBlobPath != "" {
+	if !job.Args.Again && article.FetchStatus == store.FetchOK && article.RawBlobPath != "" {
 		// Already fetched. Re-fetching would be a request the origin did not
 		// need to serve, and a re-fetch is a new version
 		// rather than an overwrite — a decision for `tome reextract`, not for
 		// a duplicate job.
+		//
+		// Asking again is possible but never automatic: nothing in the pipeline sets
+		// Again, so a page is fetched twice only because somebody said to.
 		log.Debug("article already fetched, skipping")
 		return nil
+	}
+
+	if job.Args.Again {
+		log = log.With("again", true)
 	}
 
 	// A domain somebody has flagged as needing JavaScript is handed to the render
@@ -140,6 +158,20 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 	sha := hex.EncodeToString(sum[:])
 
 	path := blob.RawPath(article.FirstSeenAt, article.Title, article.URLCanonical)
+
+	// A re-fetch overwrites the page in place, at whatever path the article already
+	// points at.
+	//
+	// Recomputing it would usually agree — the directory's hash comes from the
+	// canonical URL, which does not change — but its *name* comes from the title, and
+	// extraction updates the title from the page. So an article whose title changed
+	// since its first fetch would get a second directory: the new page in one, its
+	// index.html and localized images in the other, and the original page orphaned.
+	// Keeping an article's files together matters more than naming a directory after
+	// the title it has today.
+	if job.Args.Again && article.RawBlobPath != "" {
+		path = article.RawBlobPath
+	}
 	compressed, err := gzipBytes(raw)
 	if err != nil {
 		return err
@@ -158,6 +190,9 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 	log.Info("fetched article",
 		"bytes", len(raw), "stored_bytes", len(compressed), "path", path)
 
+	// A re-fetch has to reach extraction even when the ladder would otherwise decide
+	// the article is already current: the whole point is that the *page* changed.
+
 	// Extraction is a separate job so that an extractor crash or a slow
 	// extraction cannot cost the fetch, which is the expensive, impolite-to-
 	// repeat half of the work.
@@ -165,7 +200,10 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 	if client == nil {
 		return fmt.Errorf("no river client in context; cannot enqueue extraction")
 	}
-	if _, err := client.Insert(ctx, ExtractArticleArgs{ArticleID: job.Args.ArticleID}, nil); err != nil {
+	if _, err := client.Insert(ctx, ExtractArticleArgs{
+		ArticleID: job.Args.ArticleID,
+		Force:     job.Args.Again,
+	}, nil); err != nil {
 		return fmt.Errorf("enqueueing extraction: %w", err)
 	}
 	return nil
