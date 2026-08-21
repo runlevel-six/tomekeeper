@@ -34,8 +34,9 @@ here has seen.
 ```sh
 git clone https://github.com/runlevel-six/tomekeeper.git
 cd tomekeeper
-task check    # everything CI runs: fmt, vet, lint, release pins, test, build
-task build    # bin/tome
+task hooks:install   # adds the DCO sign-off trailer for you; see below
+task check           # everything CI runs: fmt, vet, lint, pins, sign-off, test, build
+task build           # bin/tome
 ```
 
 Requires Go (see `go.mod` for the minimum) and [Task](https://taskfile.dev).
@@ -141,6 +142,15 @@ Signed-off-by: Your Name <your.email@example.com>
 
 This certifies that you wrote the patch or have the right to submit it under
 the project's license. Full text: <https://developercertificate.org/>
+
+`task hooks:install` makes this automatic — it points `core.hooksPath` at
+`.githooks/`, whose `prepare-commit-msg` adds the trailer when it is missing.
+Passing `-s` as well is harmless; an identical trailer is never duplicated. Merge
+commits are left alone, because someone else's commits are not yours to certify.
+
+CI checks it too, over the commits a push or a pull request added — a hook only
+helps whoever installed it. `task dco` runs the same check locally, and it will
+tell you how to add a trailer you forgot.
 
 ## License
 

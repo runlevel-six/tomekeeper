@@ -137,6 +137,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The DCO check walks a range of commits, and the default shallow
+          # checkout has no range to walk — it would report a pass over nothing.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -153,6 +157,33 @@ jobs:
       # bump that puts the migration Job and the pods on different builds.
       - name: Check release pins
         run: ./scripts/check-release.sh
+
+      # The DCO trailer CONTRIBUTING.md requires. .githooks/prepare-commit-msg
+      # adds it, but a hook only helps whoever ran `task hooks:install`, so this
+      # is the half that does not depend on a contributor's local setup.
+      #
+      # Scoped to what the event added, never to all history: commits from before
+      # this check exist without a trailer, and a check that fails forever gets
+      # switched off.
+      - name: Check the DCO sign-off on new commits
+        env:
+          BASE: >-
+            ${{ github.event_name == 'pull_request'
+                && github.event.pull_request.base.sha
+                || github.event.before }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "a tag points at commits already checked when they landed on the branch"
+            exit 0
+          fi
+          case "$BASE" in
+            "" | 0000000000000000000000000000000000000000)
+              # A branch's first push has no previous tip to compare against.
+              range=$GITHUB_SHA ;;
+            *)
+              range=$BASE..$GITHUB_SHA ;;
+          esac
+          ./scripts/check-dco.sh "$range"
 
   image:
     name: Image and acceptance

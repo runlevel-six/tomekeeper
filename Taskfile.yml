@@ -128,14 +128,31 @@ tasks:
         fi
 
   check:
-    desc: Everything CI runs — format, vet, lint, release pins, test, build
+    desc: Everything CI runs — format, vet, lint, release pins, sign-off, test, build
     cmds:
       - task: fmt:check
       - task: vet
       - task: lint
       - task: release:check
+      - task: dco
       - task: test
       - task: build
+
+  hooks:install:
+    desc: Point git at .githooks, which adds the DCO sign-off trailer for you
+    cmds:
+      # core.hooksPath rather than copying into .git/hooks, so the hooks stay
+      # under review like anything else and a change reaches everyone who ran
+      # this once. It is opt-in on purpose: a clone should not execute code
+      # because it was cloned.
+      - git config core.hooksPath .githooks
+      - chmod +x .githooks/*
+      - echo "git will now run the hooks in .githooks/ — sign-off is automatic."
+
+  dco:
+    desc: Verify new commits carry a DCO sign-off (origin/master..HEAD by default)
+    cmds:
+      - ./scripts/check-dco.sh {{.CLI_ARGS}}
 
   release:check:
     desc: Verify the release pins, the changelog, and the patch-migration rule

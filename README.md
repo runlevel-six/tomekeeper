@@ -191,6 +191,7 @@ task                  # list tasks
 task check            # format, vet, lint, test, build — everything CI runs
 task test             # unit tests; integration tests skip without a database
 task test:integration # all tests, failing if TOME_TEST_DATABASE_URL is unset
+task dco              # verify new commits carry a DCO sign-off
 task fuzz             # fuzz URL canonicalization
 task docker:smoke     # acceptance criteria against the container image
 ```
