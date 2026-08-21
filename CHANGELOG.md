@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.13.0` is the tag
-`v0.13.0`, and `tome version` inside it says `v0.13.0`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.14.0` is the tag
+`v0.14.0`, and `tome version` inside it says `v0.14.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -31,6 +31,23 @@ happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [v0.14.0] — 2026-08-21
+
+### Fixed
+
+- A test proved the wrong thing intermittently, failing about half of CI's runs on
+  master. `TestAPageIsFetchedAgainOnlyWhenAsked` asserted that an ordinary enqueue
+  does not re-fetch a page the archive already has — through the job queue, where
+  fetches are unique per article across every non-terminal state. Proving the worker
+  declined therefore required the previous fetch to be finished first, and a stored
+  body does not show that: extraction is enqueued by the last statement of the fetch's
+  own work, before it returns, so the extract job can run to completion while the
+  fetch job is still `running`. The insert was refused as a duplicate and the test
+  said so rather than passing on it. The refusal is now proved by calling the worker
+  directly, which needs no timing at all; the queue keeps the half it is good for.
 
 ### Added
 
@@ -583,7 +600,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.14.0...HEAD
+[v0.14.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.12.1...v0.13.0
 [v0.12.1]: https://github.com/runlevel-six/tomekeeper/compare/v0.12.0...v0.12.1
 [v0.12.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.11.0...v0.12.0

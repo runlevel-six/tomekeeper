@@ -829,29 +829,22 @@ func TestAPageIsFetchedAgainOnlyWhenAsked(t *testing.T) {
 		}
 		fetchesAfterFirst := fetches
 
-		// An ordinary enqueue must not re-fetch. This is the guard: the pipeline
-		// enqueues fetches freely — three feeds carrying one story, a retry, a
-		// scheduler sweep — and any of them re-fetching would be this archive
-		// spending somebody else's bandwidth on a page it already had.
-		// Inserted directly, which is exactly what the poller and the scheduler do:
-		// FetchArticleArgs with nothing set. There is no helper for it, and that is
-		// the point — Again has one caller.
-		res, err := riverClient.Insert(ctx, jobs.FetchArticleArgs{ArticleID: int64(articleID)}, nil)
-		if err != nil {
-			t.Fatalf("Insert() = %v", err)
-		}
-		// The insert has to actually happen, or the assertion below passes because
-		// River deduplicated it rather than because the worker declined to act.
-		if res.UniqueSkippedAsDuplicate {
-			t.Fatalf("the second fetch was deduplicated, so this proves nothing about the worker")
-		}
-		// Nothing is written when the job declines to act, so there is no state to
-		// wait for — only the absence of one. A settle is the honest instrument here.
-		time.Sleep(750 * time.Millisecond)
-		if fetches != fetchesAfterFirst {
-			t.Errorf("an ordinary enqueue re-fetched the page: %d requests then %d",
-				fetchesAfterFirst, fetches)
-		}
+		// The other half of this — that an *ordinary* enqueue does not re-fetch — is
+		// proved by TestAnAlreadyFetchedPageIsLeftAlone, which calls Work directly,
+		// rather than here.
+		//
+		// It was here, and it was the wrong instrument. Fetches are unique per article
+		// across every non-terminal state, `running` included, so the assertion first
+		// needed the previous fetch to be finished — and a body does not show that.
+		// Extraction is enqueued by the last statement of the fetch's own Work, before
+		// it returns, so the extract job can run and produce content while the fetch
+		// job is still `running`. The insert was then refused as a duplicate and the
+		// test said so, which is why CI failed about half the time and every re-run
+		// went green.
+		//
+		// Waiting for the fetch row instead would have worked and still been the wrong
+		// shape: a refusal is the absence of an effect, and a queue is not where you
+		// look for one.
 
 		// Asked explicitly, it fetches and the stored page is the new one.
 		page = second
