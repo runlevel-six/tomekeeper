@@ -145,4 +145,28 @@
   {{template "actions" (actionsOf $item)}}
 </article>
 {{end}}
+
+{{/*
+  The end of the list, drawn by whichever render reaches it — the document for a
+  short list, the last appended fragment for a long one. That is the whole reason
+  it can exist: with rows appended as they are revealed, no fixed element in the
+  document is ever at the bottom.
+
+  It is here because the bottom of a list is where a reader has finished and had
+  no way to say so. The mark-read control lives in the page head, which is forty
+  pages up, and marking as you scroll can never reach the last screenful because
+  those rows never leave over the top edge. Same two-step confirmation as the
+  control at the top, and the same href — one path to the write, not a second one.
+
+  data-pull-to-mark is what the script hangs the pull gesture on. An attribute
+  rather than a class, so restyling cannot silently unhook the behavior, and the
+  gesture only ever follows this link.
+*/}}
+{{if and .AtEnd .Mark.Offered}}
+  <div class="stream-end" data-pull-to-mark>
+    <p class="stream-end-hint">You have reached the end.</p>
+    <a class="mark-read" href="/mark-read?from={{.Mark.From}}"
+       title="Mark everything in this list as read">Mark {{.Mark.Unread}} as read</a>
+  </div>
+{{end}}
 {{end}}

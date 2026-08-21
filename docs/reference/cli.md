@@ -945,6 +945,24 @@ Which lists may be marked, and why it is a short list:
 Anything else — an unknown token, a feed belonging to somebody else, a list that
 must not be marked — is `404`, the same nothing in every case.
 
+**There are two places to reach it, and they are the same request.** The quiet
+control beside the heading, and a louder one at the end of the list — because the
+end of a list is where a reader has actually finished, and the control at the top is
+by then forty pages away. On a touch screen, pulling past the bottom of the list
+follows that second link rather than tapping it; release before the pull completes
+and nothing happens. Both land on the same confirmation.
+
+The end-of-list control is drawn by whichever render reaches the end: the document
+for a list that fits on one page, the last appended fragment for one that does not.
+Rows are appended as they are revealed, so nothing fixed in the document is ever at
+the bottom — which is also why the unread count behind that control is counted only
+on the final page, and not once per page on the way down.
+
+It is worth saying why the bottom of a list needed a control at all when the top
+already had one: marking read as you scroll **cannot reach the last screenful**,
+because those rows never leave over the top edge. The reader who has just finished a
+list is exactly the reader for whom the automatic behavior does the least.
+
 Two properties worth knowing:
 
 - **It marks the list, not the page.** A stream page is 50 rows with a cursor; the

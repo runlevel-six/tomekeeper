@@ -369,4 +369,94 @@
     var index = entries().indexOf(entry);
     if (index >= 0) select(index);
   });
+
+  // Pull past the bottom of a list to mark it read.
+  //
+  // An accelerator for the link the server already rendered at the end of the
+  // list, exactly like every other thing in this file: with no JavaScript the
+  // reader taps it instead, and the same two-step confirmation follows either way.
+  // Nothing here writes anything — it follows an href.
+  //
+  // Only past the true bottom, which on a list that appends rows as they are
+  // revealed is the only moment a pull means "I have finished" rather than "give me
+  // more". That is also why the element the gesture attaches to is rendered by the
+  // last page rather than sitting in the document: before then there is no bottom.
+  (function () {
+    // How far past the bottom counts. Big enough not to fire on the tail of a
+    // flick, small enough to reach one-handed. A guess, like the dwell time above
+    // it; change the number, not the structure.
+    var threshold = 90;
+
+    var pulling = null;
+    var startY = 0;
+    var distance = 0;
+
+    function endOfList() {
+      return document.querySelector(".stream-end[data-pull-to-mark]");
+    }
+
+    // atBottom asks the document, not the element: the gesture is about having run
+    // out of list, and a short list can be at its end without ever scrolling.
+    function atBottom() {
+      var doc = document.documentElement;
+      var scrolled = window.scrollY + window.innerHeight;
+      return scrolled >= doc.scrollHeight - 2;
+    }
+
+    function reset() {
+      if (!pulling) return;
+      pulling.removeAttribute("data-pulling");
+      pulling.removeAttribute("data-pull-armed");
+      pulling.style.removeProperty("--pull");
+      pulling = null;
+      distance = 0;
+    }
+
+    document.addEventListener("touchstart", function (event) {
+      if (event.touches.length !== 1) return;
+      startY = event.touches[0].clientY;
+      distance = 0;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (event) {
+      if (event.touches.length !== 1) return;
+
+      var end = endOfList();
+      if (!end || !atBottom()) {
+        reset();
+        return;
+      }
+
+      // Dragging upwards moves content up, which is what asking for more of a list
+      // looks like — and at the bottom there is no more.
+      distance = startY - event.touches[0].clientY;
+      if (distance <= 0) {
+        reset();
+        return;
+      }
+
+      pulling = end;
+      end.setAttribute("data-pulling", "");
+      // Capped at 1 so the transform stops growing once the gesture is complete;
+      // the styling reads it as a fraction of the way there.
+      var fraction = distance / threshold;
+      end.style.setProperty("--pull", String(fraction > 1 ? 1 : fraction));
+      if (distance >= threshold) {
+        end.setAttribute("data-pull-armed", "");
+      } else {
+        end.removeAttribute("data-pull-armed");
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function () {
+      var armed = pulling && distance >= threshold;
+      var link = armed ? pulling.querySelector("a.mark-read") : null;
+      reset();
+      // Following the link rather than posting: the confirmation page is what
+      // makes an accidental pull cost nothing.
+      if (link) window.location.href = link.href;
+    });
+
+    document.addEventListener("touchcancel", reset);
+  })();
 })();

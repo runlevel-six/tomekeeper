@@ -318,6 +318,70 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 }
 .mark-read:hover { color: var(--accent); border-color: var(--accent); }
 
+/* The end of a list, and the second place a list can be marked read.
+
+   The control at the top of the page is the wrong one to reach for after reading
+   forty pages: it is forty pages up, and marking as you scroll can never reach the
+   last screenful, because those rows never leave over the top edge. So the bottom
+   of a list is exactly where a reader has finished and has nothing to say it with.
+
+   Centred and separated by a rule rather than styled as a banner: this is the
+   floor of the list, not another row in it. */
+.stream-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.6rem 1rem 2.4rem;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+
+.stream-end-hint {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+/* The control here is the loud one, unlike its twin in the page head. Reaching the
+   bottom of a list is a deliberate act that took scrolling; the head control has to
+   be quiet because it sits next to the heading on arrival. */
+.stream-end .mark-read {
+  margin-bottom: 0;
+  font-size: 0.95rem;
+  padding: 0.55rem 1.1rem;
+  color: var(--ink);
+}
+
+/* Pulling past the bottom. The script moves the element and reports how far
+   through the gesture the reader is; everything visual is here.
+
+   --pull is 0 to 1. The transform is what makes the gesture feel attached to the
+   finger, and the transition is left off while dragging (the script sets
+   data-pulling) so that following the finger is not smoothed into lag. */
+.stream-end[data-pulling] {
+  transition: none;
+  transform: translateY(calc(var(--pull, 0) * 0.5rem));
+}
+
+.stream-end[data-pull-armed] .mark-read {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Announced to the reader mid-gesture, because a pull that has not gone far enough
+   and one that has look identical otherwise. */
+.stream-end[data-pull-armed] .stream-end-hint::after {
+  content: " Release to mark this list read.";
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-end[data-pulling] { transform: none; }
+}
+
 .confirm-mark {
   padding: 0.9rem 1rem;
   margin-bottom: 1.5rem;

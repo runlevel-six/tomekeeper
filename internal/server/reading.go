@@ -100,6 +100,14 @@ type streamPage struct {
 	// in the template so that the two halves cannot be checked in one place and
 	// forgotten in another.
 	MarkOnScroll bool
+
+	// AtEnd says this render reaches the end of the list, so it is the one that
+	// draws the end-of-list controls.
+	//
+	// True on the last page whether it arrived as a document or as the final
+	// appended fragment, which is the only reason a control can sit at the bottom
+	// of an infinitely-scrolling list at all.
+	AtEnd bool
 }
 
 // markControl is the "mark all as read" control on a stream page: whether to
@@ -247,8 +255,33 @@ func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec strea
 	}
 	page.Items = items
 
+	fragment := isHTMX(r) && r.URL.Query().Get("before") != ""
+
+	// AtEnd is what makes the end of a list a place rather than an accident. With
+	// rows appended as they are revealed, the last screenful is where a reader has
+	// finished — and it is the one place the mark-read control was not, because it
+	// sits in the page head above forty pages of articles.
+	page.AtEnd = page.NextPage == ""
+
+	page.Mark.From, page.Mark.Path = spec.Token, spec.Path
+	if spec.Markable && (!fragment || page.AtEnd) {
+		// Counted on the document and on the *final* fragment only. Keeping this
+		// below the htmx return was about forty pages not paying for forty counts,
+		// and one page in forty is not forty: the end of the list is the only
+		// fragment that draws a control needing a number.
+		//
+		// A failed count costs the reader one control rather than the page they came
+		// for, exactly as a failed unread tally does.
+		if n, err := s.store.CountUnreadIn(r.Context(), userID, spec.Query); err != nil {
+			s.log.Warn("counting unread in a stream failed", "from", spec.Token, "error", err)
+		} else {
+			page.Mark.Unread = n
+			page.Mark.Offered = n > 0
+		}
+	}
+
 	// An htmx request for the next page wants rows, not a document.
-	if isHTMX(r) && r.URL.Query().Get("before") != "" {
+	if fragment {
 		s.renderFragment(w, http.StatusOK, "stream-rows", page)
 		return
 	}
@@ -261,18 +294,6 @@ func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec strea
 	// Same reasoning, and the same place: the attribute sits on the list's
 	// container, which a fragment of rows does not redraw.
 	page.MarkOnScroll = spec.ScrollMarkable && page.MarkReadOnScroll
-
-	page.Mark.From, page.Mark.Path = spec.Token, spec.Path
-	if spec.Markable {
-		// A failed count costs the reader one control rather than the page they came
-		// for, exactly as a failed unread tally does.
-		if n, err := s.store.CountUnreadIn(r.Context(), userID, spec.Query); err != nil {
-			s.log.Warn("counting unread in a stream failed", "from", spec.Token, "error", err)
-		} else {
-			page.Mark.Unread = n
-			page.Mark.Offered = n > 0
-		}
-	}
 
 	// The mark requests live at their own path, and pageData took this request's
 	// path for the reload control — which would leave the reload button on a

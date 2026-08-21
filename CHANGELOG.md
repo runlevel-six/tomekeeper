@@ -32,7 +32,25 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A list can be marked read from its end, and on a touch screen by pulling past
+  the bottom.** The control beside the heading is the wrong one to reach for after
+  reading forty pages — it is forty pages up — and marking read as you scroll can
+  never reach the last screenful, because those rows never leave over the top edge.
+  So the bottom of a list was exactly where a reader had finished and had nothing to
+  say it with.
+
+  Both controls are the same request and the same two-step confirmation; there is no
+  second path to the write. The pull gesture follows the link rather than posting,
+  so an accidental pull costs a page you navigate away from. With no JavaScript the
+  control is still there to tap.
+
+  The end-of-list control is drawn by whichever render reaches the end — the
+  document for a short list, the last appended fragment for a long one — because
+  rows are appended as they are revealed and nothing fixed in the document is ever
+  at the bottom. Its unread count is counted on that final page only, not once per
+  page on the way down.
 
 ## [v0.7.0] — 2026-08-21
 
