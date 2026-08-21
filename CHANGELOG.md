@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.10.0` is the tag
-`v0.10.0`, and `tome version` inside it says `v0.10.0`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.10.1` is the tag
+`v0.10.1`, and `tome version` inside it says `v0.10.1`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -33,6 +33,27 @@ happens, because it is the one change that wants a follow-up command
 ## [Unreleased]
 
 Nothing yet.
+
+## [v0.10.1] — 2026-08-21
+
+### Fixed
+
+- **A text size no longer changes the layout width.** Every step now gets the column
+  the largest step produced, which is what it was asked for after use. The widths are
+  pinned to that step's value and divided back out by whatever scale is in force, so a
+  column follows the reader's *browser* font size but not their chosen text size —
+  changing the text size changes the text and nothing else.
+
+  This reverses the reasoning the preference shipped with, which grew the column with
+  the type to hold roughly 68 characters per line. It no longer holds: the largest step
+  gives nearer 71 characters and the smallest nearer 97. A stable layout was preferred
+  to a stable measure, deliberately, and it is written down so nobody restores the old
+  behavior thinking it was an oversight.
+
+  The sign-in box still hugs its content — nobody is signed in there, so there is no
+  chosen size to honor. Breakpoints needed no change: `rem` inside a media query
+  resolves against the browser's initial font size rather than the root element's, so a
+  text size cannot move one.
 
 ## [v0.10.0] — 2026-08-21
 
@@ -416,7 +437,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.10.1...HEAD
+[v0.10.1]: https://github.com/runlevel-six/tomekeeper/compare/v0.10.0...v0.10.1
 [v0.10.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.9.0...v0.10.0
 [v0.9.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.8.0...v0.9.0
 [v0.8.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.7.0...v0.8.0
