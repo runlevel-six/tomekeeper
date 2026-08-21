@@ -574,4 +574,105 @@
 
     document.addEventListener("touchcancel", release);
   })();
+
+  // Pull down from the top to reload.
+  //
+  // Follows `.chrome .reload`, which is the link `r` presses and the only way to ask
+  // for newer articles in a standalone window — the comment on that control in
+  // base.html says as much: installed on a phone there is no address bar, no reload
+  // button, and no pull-to-refresh. This is the gesture that comment was waiting for.
+  //
+  // It reloads the page. It does not poll the feeds; that control is on the Feeds
+  // page and labeled, because it costs every subscribed site a request. A gesture
+  // this easy to perform must not be the one that does that.
+  //
+  // The reload control is in the header, so at the top of the page — which is the
+  // only place this gesture starts — it is on screen. That makes this the same shape
+  // as the pull at the end of a list: highlight the control, because there is one to
+  // highlight. The page follows the finger as well, which the swipe established.
+  (function () {
+    // The same distance the other two commit at.
+    var threshold = 90;
+
+    var tracking = false;
+    var startY = 0;
+    var startX = 0;
+    var distance = 0;
+
+    function control() {
+      return document.querySelector(".chrome .reload");
+    }
+
+    function atTop() {
+      return window.scrollY <= 0;
+    }
+
+    function release() {
+      var el = document.querySelector(".chrome");
+      if (el) {
+        el.removeAttribute("data-pulling");
+        el.removeAttribute("data-pull-armed");
+        el.style.removeProperty("--pull");
+      }
+      tracking = false;
+      distance = 0;
+    }
+
+    document.addEventListener("touchstart", function (event) {
+      release();
+      if (event.touches.length !== 1) return;
+      if (!atTop() || !control()) return;
+
+      tracking = true;
+      startY = event.touches[0].clientY;
+      startX = event.touches[0].clientX;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (event) {
+      if (!tracking) return;
+      if (event.touches.length !== 1) {
+        release();
+        return;
+      }
+
+      var dy = event.touches[0].clientY - startY;
+      var dx = event.touches[0].clientX - startX;
+
+      // Sideways wins if it is sideways: the swipe-back gesture starts from the same
+      // touch, and two gestures that both fire is worse than either not firing.
+      if (Math.abs(dx) > Math.abs(dy)) {
+        release();
+        return;
+      }
+      // Upwards is ordinary scrolling.
+      if (dy <= 0) {
+        release();
+        return;
+      }
+      // No mid-drag check that we are still at the top: touchstart refuses to begin
+      // away from it, and a downward drag cannot leave it. One was written here and
+      // removed when neutering it changed nothing — a clause no test can reach is
+      // either dead or protecting a state that does not occur.
+
+      distance = dy;
+      var chrome = document.querySelector(".chrome");
+      if (!chrome) return;
+      chrome.setAttribute("data-pulling", "");
+      var fraction = distance / threshold;
+      chrome.style.setProperty("--pull", String(fraction > 1 ? 1 : fraction));
+      if (distance >= threshold) {
+        chrome.setAttribute("data-pull-armed", "");
+      } else {
+        chrome.removeAttribute("data-pull-armed");
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchend", function () {
+      var armed = tracking && distance >= threshold;
+      release();
+      if (armed) follow(".chrome .reload");
+    });
+
+    document.addEventListener("touchcancel", release);
+  })();
 })();

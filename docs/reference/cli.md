@@ -1025,15 +1025,32 @@ without JavaScript.
 
 | Gesture | Where | What it does |
 |---|---|---|
+| Pull down from the top | any page | Follows the reload control — the same thing `r` does |
 | Pull past the bottom | any list that can be marked read | Follows the end-of-list mark-read link, which asks before it acts |
 | Swipe left-to-right | an article | Follows the back link — the same thing `u` and `esc` do |
+
+Pulling down from the top reloads because installed on a phone there is nothing else
+that can: no address bar, no reload button, and no pull-to-refresh of the platform's
+own in a standalone window. It reloads the page; it does **not** poll the feeds. That
+control is on the Feeds page and labeled, because it costs every subscribed site a
+request, and a gesture this easy to perform must not be the one that spends them.
+
+Where the browser has a pull-to-refresh of its own — Android's does — it is
+suppressed with `overscroll-behavior-y: contain`, so the two cannot both fire and
+reload twice.
 
 Left-to-right for back because that is the direction the whole device uses; a
 gesture that means something different in one app than everywhere else is one people
 stop trusting. Right-to-left deliberately does nothing: previous and next are
 buttons, and the article nav sits at both the top and the foot of every article.
 
-Both commit at the same distance, and both give up if the drag turns into a scroll —
+All three commit at the same distance. **Which one fires is decided by direction,
+mid-drag rather than at the end**: a mostly-sideways drag is the swipe, a
+mostly-downward one at the top is the refresh, and a drag that turns into a scroll is
+neither. Deciding at the end would let a long diagonal satisfy two of them at once
+and navigate twice.
+
+The pull gestures give up if the drag turns into a scroll —
 reading is mostly vertical scrolling, so that is judged on the way rather than at the
 end. A swipe that begins inside something scrollable sideways belongs to that thing:
 archived bodies carry wide code blocks and tables, and stealing the first sideways

@@ -175,6 +175,11 @@ html { font-size: calc(100% * var(--text-scale, 1)); }
 
 body {
   margin: 0;
+  /* Ours is the only pull-to-refresh. Android's browser has its own at the top of a
+     page and would fire alongside this, reloading twice; a standalone window has
+     none at all, which is the case this gesture exists for. `contain` stops the
+     overscroll reaching the browser without stopping it inside the page. */
+  overscroll-behavior-y: contain;
   background: var(--bg);
   color: var(--ink);
   /* 1rem, not 16px. The hard 16px overruled the browser's own font-size setting
@@ -242,6 +247,41 @@ code {
 .tool:hover { color: var(--accent); }
 .tool .label { font-size: inherit; }
 .reload span[aria-hidden] { font-size: 1.15em; line-height: 1; }
+
+/* Pulling down from the top to reload.
+
+   The reload control is in this header, so at the top of the page — the only place
+   this gesture starts — it is on screen. That makes it the same shape as the pull at
+   the end of a list: highlight the control, because there is one to highlight. The
+   header also follows the finger, which is what the swipe established for the case
+   where nothing visible can change state. */
+.chrome[data-pulling] {
+  transition: none;
+  transform: translateY(calc(var(--pull, 0) * 0.75rem));
+}
+
+.chrome { transition: transform 160ms ease-out; }
+
+.chrome[data-pull-armed] .reload {
+  color: var(--accent);
+}
+
+/* The glyph turns as the pull completes, which is the whole message: this control is
+   about to be pressed. Static at rest, so nothing spins for a reader who is only
+   scrolling. */
+.chrome[data-pulling] .reload span[aria-hidden] {
+  display: inline-block;
+  transform: rotate(calc(var(--pull, 0) * 180deg));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome,
+  .chrome[data-pulling],
+  .chrome[data-pulling] .reload span[aria-hidden] {
+    transition: none;
+    transform: none;
+  }
+}
 
 button {
   font: inherit;

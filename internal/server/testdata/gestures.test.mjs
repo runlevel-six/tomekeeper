@@ -62,7 +62,7 @@ function element(attrs = {}) {
   return el;
 }
 
-function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
+function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 1000 } = {}) {
   const listeners = new Map();
   const navigated = [];
 
@@ -86,6 +86,11 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
 
   const article = element({ tagName: "ARTICLE", className: "reader" });
 
+  const reloadLink = element({ tagName: "A", className: "tool reload" });
+  reloadLink.click = () => navigated.push("reload");
+  const glyph = element({ tagName: "SPAN" });
+  const chrome = element({ tagName: "HEADER", className: "chrome" });
+
   const document = {
     body,
     documentElement: { scrollHeight: 2000 },
@@ -98,6 +103,8 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
       if (sel === ".reader-nav a[rel='up']") return page === "article" ? backLink : null;
       if (sel === "article.reader") return page === "article" ? article : null;
       if (sel === ".stream-end[data-pull-to-mark]") return page === "list" ? streamEnd : null;
+      if (sel === ".chrome .reload") return reloadLink;
+      if (sel === ".chrome") return chrome;
       if (sel === ".stream[data-mark-on-scroll]") return null;
       return null;
     },
@@ -106,7 +113,7 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
   body.addEventListener = () => {};
 
   const window = {
-    scrollY: 1000,
+    scrollY,
     innerHeight: 1000,
     addEventListener() {},
     setTimeout: () => 0,
@@ -138,7 +145,11 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
     handlers.forEach((h) => h(event));
   }
 
-  return { fire, navigated, article, streamEnd, get href() { return window.location.href; } };
+  return {
+    fire, navigated, article, streamEnd, chrome,
+    get href() { return window.location.href; },
+    set scrollY(v) { window.scrollY = v; },
+  };
 }
 
 // --- swipe left-to-right to go back --------------------------------------
@@ -272,6 +283,118 @@ function makeWorld({ page = "article", bodyScrollsSideways = false } = {}) {
   check("a short pull does nothing", w.href, "");
 }
 
+
+// --- pull down from the top to reload ---------------------------------------
+
+{
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 100]]);
+  w.fire("touchmove", [[202, 200]]);
+  check("armed past the threshold", w.chrome.hasAttribute("data-pull-armed"), true);
+  w.fire("touchend", [[202, 200]]);
+  check("a pull from the top reloads", w.navigated.join(","), "reload");
+}
+
+{
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 100]]);
+  w.fire("touchmove", [[202, 140]]);
+  w.fire("touchend", [[202, 140]]);
+  check("a short pull does not reload", w.navigated.length, 0);
+}
+
+{
+  // Part-way down a page, pulling down is just scrolling.
+  const w = makeWorld({ scrollY: 800 });
+  w.fire("touchstart", [[200, 100]]);
+  w.fire("touchmove", [[202, 300]]);
+  w.fire("touchend", [[202, 300]]);
+  check("a pull away from the top does nothing", w.navigated.length, 0);
+}
+
+{
+  // Scrolling up is the ordinary thing this gesture must not steal.
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 300]]);
+  w.fire("touchmove", [[202, 100]]);
+  w.fire("touchend", [[202, 100]]);
+  check("an upward drag does not reload", w.navigated.length, 0);
+}
+
+{
+  // The two gestures start from the same touch at the top of an article, and only
+  // one of them may fire. A mostly-sideways drag belongs to the swipe.
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[20, 300]]);
+  w.fire("touchmove", [[160, 320]]);
+  w.fire("touchend", [[160, 320]]);
+  check("a sideways drag goes back rather than reloading", w.navigated.join(","), "up");
+}
+
+{
+  // And a mostly-downward drag belongs to the refresh, not the swipe.
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[20, 100]]);
+  w.fire("touchmove", [[60, 300]]);
+  w.fire("touchend", [[60, 300]]);
+  check("a downward drag reloads rather than going back", w.navigated.join(","), "reload");
+}
+
+{
+  // Scrolling up to the top and continuing past it. The drag begins a few pixels
+  // down, so this gesture never starts — without the check at touchstart it would
+  // arm the moment the browser reached zero, refreshing under someone who was only
+  // scrolling up. The mid-drag check cannot catch this: by then it *is* at the top.
+  const w = makeWorld({ scrollY: 5 });
+  w.fire("touchstart", [[200, 100]]);
+  w.scrollY = 0;
+  w.fire("touchmove", [[202, 250]]);
+  w.fire("touchend", [[202, 250]]);
+  check("a drag that arrives at the top does not reload", w.navigated.length, 0);
+}
+
+{
+  // An upward drag must not move the header either. The release check already stops
+  // it reloading, so without this the only symptom would be the header sliding the
+  // wrong way — visible, and nothing else would catch it.
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 300]]);
+  w.fire("touchmove", [[202, 100]]);
+  check("an upward drag does not offset the header", w.chrome.hasAttribute("data-pulling"), false);
+}
+
+{
+  // A long diagonal: far enough down to arm the refresh *and* far enough across to
+  // arm the swipe. Exactly one may fire, and which one is decided by dominance —
+  // without that, both do, and the page navigates twice.
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[20, 100]]);
+  w.fire("touchmove", [[300, 200]]);
+  w.fire("touchend", [[300, 200]]);
+  check("a long diagonal fires one gesture, not both", w.navigated.join(","), "up");
+}
+
+{
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 100], [210, 110]]);
+  w.fire("touchmove", [[202, 200]]);
+  w.fire("touchend", [[202, 200]]);
+  check("two fingers is not a pull", w.navigated.length, 0);
+}
+
+{
+  const w = makeWorld({ scrollY: 0 });
+  w.fire("touchstart", [[200, 100]]);
+  w.fire("touchmove", [[202, 200]]);
+  w.fire("touchmove", [[202, 120]]);
+  check("disarmed on the way back up", w.chrome.hasAttribute("data-pull-armed"), false);
+  w.fire("touchend", [[202, 120]]);
+  check("releasing a disarmed pull does nothing", w.navigated.length, 0);
+}
+
+// This block must stay last in the file. Cases appended after it run *after* the
+// report, so the count is short and a failure among them exits zero — which is how
+// eight new checks once ran and reported nothing.
 if (failures > 0) {
   console.error(`\n${failures} of ${checks} checks failed.`);
   process.exit(1);

@@ -32,7 +32,27 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Pull down from the top to reload**, on any page. It follows the reload control,
+  which is the same thing `r` does — installed on a phone there is nothing else that
+  can ask for newer articles: no address bar, no reload button, and no
+  pull-to-refresh of the platform's own in a standalone window. The comment on that
+  control has said so since it was written.
+
+  It reloads the page and does **not** poll the feeds. That control is on the Feeds
+  page and labeled, because it costs every subscribed site a request, and a gesture
+  this easy to perform must not be the one that spends them.
+
+  Where the browser has its own pull-to-refresh — Android's does — it is now
+  suppressed, so the two cannot both fire and reload twice. In a standalone window
+  there was never one to suppress, which is the case this exists for.
+
+  The header follows the finger and the reload glyph turns as the pull completes;
+  past the threshold the control highlights, the same way the mark-read control does
+  at the end of a list. Which gesture fires is decided by direction while the drag is
+  happening, so a long diagonal cannot satisfy both the swipe and the refresh and
+  navigate twice.
 
 ## [v0.10.1] — 2026-08-21
 
