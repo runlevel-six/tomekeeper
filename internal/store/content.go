@@ -179,6 +179,42 @@ func (s *Store) RecordFetchFailure(ctx context.Context, id ArticleID, status, re
 	return nil
 }
 
+// ClearExtractionFailure retires the failure recorded against an article whose
+// extraction has since succeeded.
+//
+// RecordFetchFailure is what an extraction that produced nothing calls, so
+// "extraction produced no content" is stored in fetch_status — a column about
+// fetching. That was survivable while the only cure for such an article was a
+// re-fetch, and stopped being survivable when domain rules started rescuing
+// articles from pages already on disk: the body arrives, and the article stays
+// in the attention queue forever because nothing ever took the failure back.
+// Measured on a real archive before this existed: 409 articles with a good
+// current body still listed as failed, 314 of them rescued by a rule. A queue
+// that does not empty when you fix things is a queue people stop reading.
+//
+// Narrow on purpose, in both directions:
+//
+//   - Only where raw_blob_sha is present. A stored page is proof the fetch
+//     itself worked, which is the only thing this column is entitled to say.
+//     An imported body whose page fetch genuinely failed keeps its failure and
+//     stays in the queue, because the archive really is missing that page.
+//   - Only 'failed'. A 'skipped' article was refused by robots.txt and has no
+//     page, and a 'pending' one is owned by RecordFetchWaiting.
+func (s *Store) ClearExtractionFailure(ctx context.Context, id ArticleID) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE articles
+		SET fetch_status = $2,
+		    fetch_error  = NULL
+		WHERE id = $1
+		  AND fetch_status = $3
+		  AND raw_blob_sha IS NOT NULL`,
+		id, FetchOK, FetchFailed)
+	if err != nil {
+		return fmt.Errorf("clearing the extraction failure for article %d: %w", id, err)
+	}
+	return nil
+}
+
 // GetArticle returns one article by id.
 func (s *Store) GetArticle(ctx context.Context, id ArticleID) (Article, error) {
 	var a Article

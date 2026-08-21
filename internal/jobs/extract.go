@@ -190,6 +190,14 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 		return nil
 	}
 
+	// This article now has a body, so any failure recorded when it did not is
+	// history rather than state. Done here rather than inside InsertContent
+	// because a body stored beside an immutable one changes nothing about the
+	// article's standing — the early return above has already left.
+	if err := w.store.ClearExtractionFailure(ctx, id); err != nil {
+		return err
+	}
+
 	// Localizing images and writing the article's files is a separate job:
 	// downloading a dozen images is slow and impolite to repeat, and it must
 	// not be able to cost the extraction that just succeeded.

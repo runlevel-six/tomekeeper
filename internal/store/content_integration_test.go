@@ -674,3 +674,91 @@ func TestReextractCandidatesIncludeArticlesWithNoBody(t *testing.T) {
 			"extract from")
 	}
 }
+
+// A rule that rescues an article from a page already on disk has to take the
+// failure back with it, or the attention queue keeps listing work that is done.
+//
+// Both guards get their own case, because the interesting half is what this
+// must *not* clear: an imported body whose page fetch really did fail is still a
+// gap in the archive, and the queue is where a reader learns that.
+func TestSuccessfulExtractionRetiresTheFailureItRecorded(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	body := store.ContentParams{
+		ExtractorName:    "domain_rule",
+		ExtractorVersion: "5",
+		ContentOrigin:    store.OriginFetched,
+		HTML:             `<p>The strip.</p><img src="https://example.com/strip.png">`,
+		Text:             "The strip.",
+		WordCount:        2,
+	}
+
+	// The rescued article: fetched fine, extracted to nothing, then a rule found
+	// the body in the page that was already stored.
+	rescued := newArticle(t, s, "https://comics.example.com/2026/strip")
+	if err := s.RecordFetchSuccess(ctx, rescued, store.FetchedPage{SHA: "sha-rescued", Path: "p/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+	if err := s.RecordFetchFailure(ctx, rescued, store.FetchFailed, "extraction produced no content"); err != nil {
+		t.Fatalf("RecordFetchFailure() = %v", err)
+	}
+	insertBody(t, s, rescued, body)
+	if err := s.ClearExtractionFailure(ctx, rescued); err != nil {
+		t.Fatalf("ClearExtractionFailure() = %v", err)
+	}
+	article, err := s.GetArticle(ctx, rescued)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchOK {
+		t.Errorf("FetchStatus = %q for an article whose page is on disk and whose body arrived, want %q",
+			article.FetchStatus, store.FetchOK)
+	}
+	if article.FetchError != "" {
+		t.Errorf("FetchError = %q, want it cleared — the reason no longer describes anything", article.FetchError)
+	}
+
+	// The article whose page never landed: a body exists, but it came from an
+	// import, and the archive is still missing the page. The failure stands.
+	imported := newArticle(t, s, "https://example.com/dead-url")
+	if err := s.RecordFetchFailure(ctx, imported, store.FetchFailed, "HTTP 404"); err != nil {
+		t.Fatalf("RecordFetchFailure() = %v", err)
+	}
+	insertBody(t, s, imported, body)
+	if err := s.ClearExtractionFailure(ctx, imported); err != nil {
+		t.Fatalf("ClearExtractionFailure() = %v", err)
+	}
+	if article, err = s.GetArticle(ctx, imported); err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchFailed {
+		t.Errorf("FetchStatus = %q for an article with no stored page, want %q kept — that page is genuinely missing",
+			article.FetchStatus, store.FetchFailed)
+	}
+	if article.FetchError != "HTTP 404" {
+		t.Errorf("FetchError = %q, want the original reason kept", article.FetchError)
+	}
+
+	// A robots.txt refusal is about the fetch, not the extraction, so 'skipped'
+	// is never something this may promote. Given a page as well, which is the
+	// state a site that adds a Disallow after we already archived it produces —
+	// without one, the stored-page guard above would carry this case and the
+	// status clause would be along for the ride.
+	skipped := newArticle(t, s, "https://example.com/disallowed")
+	if err := s.RecordFetchSuccess(ctx, skipped, store.FetchedPage{SHA: "sha-skipped", Path: "q/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+	if err := s.RecordFetchFailure(ctx, skipped, store.FetchSkipped, "disallowed by robots.txt"); err != nil {
+		t.Fatalf("RecordFetchFailure() = %v", err)
+	}
+	if err := s.ClearExtractionFailure(ctx, skipped); err != nil {
+		t.Fatalf("ClearExtractionFailure() = %v", err)
+	}
+	if article, err = s.GetArticle(ctx, skipped); err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchSkipped {
+		t.Errorf("FetchStatus = %q, want %q kept", article.FetchStatus, store.FetchSkipped)
+	}
+}
