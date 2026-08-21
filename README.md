@@ -214,6 +214,10 @@ is a product.
 - **Not supported:** your deployment, your Postgres, your ingress. PRs are
   welcome and will be read; I will not debug an environment I cannot see.
 
+The most useful thing you can send is a page this fails to extract. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for what to include, and for the two rules
+that matter before changing anything.
+
 There is no roadmap commitment and no release cadence.
 
 ## License
