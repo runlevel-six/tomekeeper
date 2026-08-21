@@ -75,6 +75,14 @@ jobs:
             exit 1
           fi
 
+      # The vendored script is the only JavaScript here and it has no build step, so
+      # this is a syntax check plus a stub-DOM run of the touch gestures. node is
+      # preinstalled on the runner; nothing is installed for this.
+      - name: Test the gestures in tome.js
+        run: |
+          node --check internal/server/static/tome.js
+          node internal/server/testdata/gestures.test.mjs
+
       # -tags nodynamic everywhere, matching the Dockerfile: without it the binary
       # links against libc and cannot run in the distroless-static image, and the
       # tests would be exercising a different build than the one that ships.

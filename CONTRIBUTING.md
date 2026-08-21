@@ -35,12 +35,16 @@ here has seen.
 git clone https://github.com/runlevel-six/tomekeeper.git
 cd tomekeeper
 task hooks:install   # adds the DCO sign-off trailer for you; see below
-task check           # everything CI runs: fmt, vet, lint, pins, sign-off, test, build
+task check           # everything CI runs: fmt, vet, lint, pins, sign-off, js, test, build
 task build           # bin/tome
 ```
 
 Requires Go (see `go.mod` for the minimum) and [Task](https://taskfile.dev).
 `task --list` shows every target.
+
+`task test:js` runs the touch gestures in `static/tome.js` against a stub DOM. It is
+node and nothing else — no package.json, no framework, no build step — and it exists
+because those gestures have guards nobody can check by hand.
 
 **Two things about the build and the test suite will mislead you if nobody says
 them out loud:**

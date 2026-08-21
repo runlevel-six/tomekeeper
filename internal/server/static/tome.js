@@ -459,4 +459,119 @@
 
     document.addEventListener("touchcancel", reset);
   })();
+
+  // Swipe left-to-right to go back to the list.
+  //
+  // Follows the same link the keyboard's `u` does, for the same reason the pull
+  // gesture follows an href: there is one way back, and a gesture is an accelerator
+  // for it rather than a second implementation of it. `?from=` is what makes that
+  // link know where "back" is at all.
+  //
+  // Left-to-right only, and back rather than previous, because that is the
+  // direction every phone already uses for this. A gesture that means something
+  // else in one app than in the rest of the device is a gesture people stop
+  // trusting.
+  //
+  // Unlike the pull, the article itself follows the finger. The pull had a control
+  // on screen to highlight; here the nav is at the top and the bottom of the
+  // article, so an armed highlight would be off screen at exactly the moment the
+  // gesture is worth having — which leaves movement as the only feedback there is.
+  (function () {
+    // The same distance the pull commits at, deliberately: two gestures in one
+    // interface should not disagree about how far is far.
+    var threshold = 90;
+
+    var tracking = false;
+    var startX = 0;
+    var startY = 0;
+    var article = null;
+
+    function backLink() {
+      return document.querySelector(".reader-nav a[rel='up']");
+    }
+
+    // A touch that begins inside something scrollable sideways belongs to that
+    // thing. Archived bodies carry wide code blocks and tables on purpose, and
+    // stealing the first sideways drag inside one would make them unreadable.
+    function insideSidewaysScroller(node) {
+      for (var el = node; el && el !== document.body; el = el.parentElement) {
+        if (el.scrollWidth <= el.clientWidth + 1) continue;
+        var overflow = window.getComputedStyle(el).overflowX;
+        if (overflow === "auto" || overflow === "scroll") return true;
+      }
+      return false;
+    }
+
+    function release() {
+      if (article) {
+        article.removeAttribute("data-swiping");
+        article.style.removeProperty("--swipe");
+        article = null;
+      }
+      tracking = false;
+    }
+
+    document.addEventListener("touchstart", function (event) {
+      release();
+      if (event.touches.length !== 1) return;
+      if (!backLink()) return;
+      if (insideSidewaysScroller(event.target)) return;
+
+      article = document.querySelector("article.reader");
+      if (!article) return;
+
+      tracking = true;
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener("touchmove", function (event) {
+      if (!tracking) return;
+      if (event.touches.length !== 1) {
+        release();
+        return;
+      }
+
+      var dx = event.touches[0].clientX - startX;
+      var dy = event.touches[0].clientY - startY;
+
+      // Given up on the way rather than judged at the end: a drag that turns into
+      // a vertical scroll must not be able to finish as a navigation, and reading
+      // is mostly vertical scrolling.
+      if (Math.abs(dy) > Math.abs(dx)) {
+        release();
+        return;
+      }
+      if (dx <= 0) {
+        // Right-to-left means nothing here. Moving the article the wrong way would
+        // promise a gesture that does not exist.
+        if (article) {
+          article.removeAttribute("data-swiping");
+          article.style.removeProperty("--swipe");
+        }
+        return;
+      }
+
+      article.setAttribute("data-swiping", "");
+      var fraction = dx / threshold;
+      article.style.setProperty("--swipe", String(fraction > 1 ? 1 : fraction));
+    }, { passive: true });
+
+    document.addEventListener("touchend", function (event) {
+      if (!tracking) {
+        release();
+        return;
+      }
+      var touch = event.changedTouches && event.changedTouches[0];
+      var dx = touch ? touch.clientX - startX : 0;
+      var dy = touch ? Math.abs(touch.clientY - startY) : 0;
+      release();
+
+      if (dx < threshold) return;
+      if (dx < dy) return;
+      follow(".reader-nav a[rel='up']");
+    });
+
+    document.addEventListener("touchcancel", release);
+  })();
 })();

@@ -455,6 +455,39 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 }
 .reader-nav .back { text-decoration: none; font-weight: 600; }
 .reader-nav .back:hover { text-decoration: underline; }
+
+/* Swiping left-to-right to go back.
+
+   The article follows the finger, which on this page is the only feedback available:
+   the nav is at the top and the bottom, so anything highlighted there is off screen
+   at exactly the moment the gesture is worth using. The pull gesture at the end of a
+   list had a control on screen to change state instead, and needed no movement.
+
+   Travel is real rather than token — the point is to show the page is leaving, not
+   to nudge it. --swipe is 0 to 1 and the script leaves it set only while a
+   left-to-right drag is live. */
+.reader[data-swiping] {
+  transition: none;
+  transform: translateX(calc(var(--swipe, 0) * 3rem));
+  /* Hinting the direction of travel, so a half-swipe reads as "not yet" rather
+     than as a rendering glitch. */
+  opacity: calc(1 - var(--swipe, 0) * 0.25);
+}
+
+/* Snapping back when a swipe is abandoned. Only the return is animated; following
+   the finger is not, or it lags behind it. */
+.reader {
+  transition: transform 160ms ease-out, opacity 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader,
+  .reader[data-swiping] {
+    transition: none;
+    transform: none;
+    opacity: 1;
+  }
+}
 .reader-nav .siblings { display: inline-flex; gap: 0.5rem; }
 .reader-nav .siblings > * {
   border: 1px solid var(--rule);

@@ -77,6 +77,16 @@ tasks:
         fi
         go test -race -cover -tags '{{.TAGS}}' ./...
 
+  test:js:
+    desc: Test the touch gestures in tome.js against a stub DOM (needs node)
+    cmds:
+      # node and nothing else — no package.json, no framework, no build step. The
+      # gestures have guards that cannot be checked by hand: whether a sideways drag
+      # inside a wide code block scrolls it or navigates away is not something
+      # anybody can reliably reproduce on a phone.
+      - node --check internal/server/static/tome.js
+      - node internal/server/testdata/gestures.test.mjs
+
   test:corpus:
     desc: Run the extraction corpus against real pages, failing if TOME_TEST_CORPUS_DIR is unset
     cmds:
@@ -128,13 +138,14 @@ tasks:
         fi
 
   check:
-    desc: Everything CI runs — format, vet, lint, release pins, sign-off, test, build
+    desc: Everything CI runs — format, vet, lint, release pins, sign-off, js, test, build
     cmds:
       - task: fmt:check
       - task: vet
       - task: lint
       - task: release:check
       - task: dco
+      - task: test:js
       - task: test
       - task: build
 

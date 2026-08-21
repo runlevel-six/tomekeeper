@@ -32,7 +32,25 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Swipe left-to-right on an article to go back to the list.** Follows the same
+  link `u` does, so there is one way back rather than a second implementation of
+  one. Left-to-right because that is the direction the whole device uses for this;
+  right-to-left deliberately does nothing, since previous and next are buttons and
+  the article nav sits at both ends of every article.
+
+  It gives up if the drag turns into a scroll — judged on the way, not at the end,
+  because reading is mostly vertical scrolling — and a drag that begins inside
+  something scrollable sideways is left alone, so the wide code blocks and tables in
+  archived bodies stay usable. The article follows the finger while you drag, which
+  is the only feedback available: the nav it would otherwise highlight is off screen
+  from the middle of an article.
+
+- **`task test:js`** — the touch gestures, run against a stub DOM by node and
+  nothing else. No package.json, no framework, no build step. It earned its place
+  immediately: two of the six guards it now covers turned out to be untested by the
+  sequences written first, which the neuters found and hand testing could not.
 
 ## [v0.8.0] — 2026-08-21
 

@@ -973,6 +973,36 @@ Two properties worth knowing:
   mark that re-stamped everything would quietly extend the life of what the reader
   had already finished.
 
+### Touch gestures
+
+Two, both accelerators for a control that is already on the page, and both no-ops
+without JavaScript.
+
+| Gesture | Where | What it does |
+|---|---|---|
+| Pull past the bottom | any list that can be marked read | Follows the end-of-list mark-read link, which asks before it acts |
+| Swipe left-to-right | an article | Follows the back link — the same thing `u` and `esc` do |
+
+Left-to-right for back because that is the direction the whole device uses; a
+gesture that means something different in one app than everywhere else is one people
+stop trusting. Right-to-left deliberately does nothing: previous and next are
+buttons, and the article nav sits at both the top and the foot of every article.
+
+Both commit at the same distance, and both give up if the drag turns into a scroll —
+reading is mostly vertical scrolling, so that is judged on the way rather than at the
+end. A swipe that begins inside something scrollable sideways belongs to that thing:
+archived bodies carry wide code blocks and tables, and stealing the first sideways
+drag inside one would make them unreadable.
+
+What each shows while you are dragging differs, and the difference is the point. The
+pull has a control on screen, so it highlights it; the article nav is at the top and
+the foot, so a highlight there would be off screen exactly when the swipe is worth
+using — the article follows the finger instead.
+
+Tested against a stub DOM rather than by hand (`task test:js`): whether a sideways
+drag inside a wide code block scrolls it or navigates away is not something anyone
+can reliably reproduce on a phone.
+
 ### `POST /mark-read/scrolled` — marking read on the way past
 
 The only place in this interface where reading state changes without anybody
