@@ -132,6 +132,20 @@ type Result struct {
 	SiteName    string
 	Language    string
 	PublishedAt *time.Time
+
+	// PageVisibleChars is how much visible text the stored page itself carried, which
+	// is the denominator the ratio check uses.
+	//
+	// Reported rather than kept private because it is the one number that tells a
+	// JavaScript shell from a page whose structure defeated the extractors, and the two
+	// want opposite remedies — a browser, or a CSS selector. It was computed here and
+	// discarded until 2026-08-21, which made that question answerable only by running
+	// `tome explain` against a pod. It is recorded on the article now so the failed-fetch
+	// queue can show it.
+	//
+	// Set on every result, including a failure: a page that produced no body is exactly
+	// the case where this matters.
+	PageVisibleChars int
 }
 
 // Extractor runs the ladder. It is safe for concurrent use.
@@ -216,7 +230,7 @@ func (e *Extractor) Explain(in Input) (Result, []Step, error) {
 
 // run is the ladder. explain costs an extra measurement per rung and is off for the
 // path that runs on every article.
-func (e *Extractor) run(in Input, explain bool) (Result, []Step, error) {
+func (e *Extractor) run(in Input, explain bool) (result Result, steps []Step, err error) {
 	pageURL, err := url.Parse(in.URL)
 	if err != nil {
 		return Result{}, nil, fmt.Errorf("parsing article URL %q: %w", in.URL, err)
@@ -226,7 +240,12 @@ func (e *Extractor) run(in Input, explain bool) (Result, []Step, error) {
 	// text cannot be measured falls back to the length check alone.
 	visible := visibleTextLength(in.RawHTML)
 
-	var steps []Step
+	// Carried out on every path, including the failures, by a deferred assignment
+	// rather than by repeating it at five returns. The failures are the paths that
+	// matter most here: an article with no body is exactly the one somebody needs this
+	// number for, and the return that produces it is the easiest one to forget.
+	defer func() { result.PageVisibleChars = visible }()
+
 	record := func(s Step) {
 		if explain {
 			steps = append(steps, s)
@@ -664,6 +683,20 @@ type metadata struct {
 	SiteName    string
 	Language    string
 	PublishedAt *time.Time
+
+	// PageVisibleChars is how much visible text the stored page itself carried, which
+	// is the denominator the ratio check uses.
+	//
+	// Reported rather than kept private because it is the one number that tells a
+	// JavaScript shell from a page whose structure defeated the extractors, and the two
+	// want opposite remedies — a browser, or a CSS selector. It was computed here and
+	// discarded until 2026-08-21, which made that question answerable only by running
+	// `tome explain` against a pod. It is recorded on the article now so the failed-fetch
+	// queue can show it.
+	//
+	// Set on every result, including a failure: a page that produced no body is exactly
+	// the case where this matters.
+	PageVisibleChars int
 }
 
 // finish applies the steps every rung shares: resolve relative URLs against

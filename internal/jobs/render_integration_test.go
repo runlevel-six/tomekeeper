@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -258,4 +259,125 @@ func runPipelineWithRenderer(t *testing.T, s *store.Store, browserURL string,
 	}
 
 	runPipelineWith(t, s, blobs, client, renderer, fn)
+}
+
+// A flagged domain with a browser configured but unreachable *says* it is waiting.
+//
+// The state this asserts did not exist until 2026-08-21, and its absence was the whole
+// problem: the article sat pending forever, retried every minute, invisible to the
+// failed-fetch queue and badged "queued" in the reading list with a tooltip claiming the
+// worker had not reached it. Three things have to hold together — the status stays
+// pending so the scheduler keeps trying, the reason is recorded so somebody can see why,
+// and the queue that exists for things needing attention actually lists it.
+func TestAFlaggedArticleWithNoBrowserSaysItIsWaiting(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("<html><body><div id=app></div></body></html>"))
+	}))
+	defer srv.Close()
+
+	feedID, _, err := s.UpsertFeed(ctx, alice, store.FeedParams{
+		FeedURL: srv.URL + "/feed.xml", Title: "Needs JS",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+
+	id := newFetchableArticle(t, s, srv.URL+"/waiting")
+	if _, err := s.InsertFeedItem(ctx, alice, store.FeedItemParams{
+		FeedID: feedID, ArticleID: id, GUID: "guid-waiting",
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+	if err := s.System().UpsertDomainRule(ctx, store.DomainRule{
+		Domain: hostOfURL(t, srv.URL), RequiresJS: true,
+	}); err != nil {
+		t.Fatalf("UpsertDomainRule() = %v", err)
+	}
+
+	// A browser is configured and answers nothing, which is what a Deployment scaled to
+	// zero looks like from here.
+	runPipelineWithRenderer(t, s, "ws://127.0.0.1:1", func(ctx context.Context, rc *river.Client[pgx.Tx]) {
+		if _, err := rc.Insert(ctx, jobs.FetchArticleArgs{ArticleID: int64(id)}, nil); err != nil {
+			t.Fatalf("inserting the fetch: %v", err)
+		}
+
+		waitFor(t, "the article to be marked as waiting", func() bool {
+			a, err := s.GetArticle(ctx, id)
+			return err == nil && a.FetchError != ""
+		})
+	})
+
+	a, err := s.GetArticle(ctx, id)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	// Pending, not failed: an operator's deployment is not the site's fault, and a
+	// recorded failure would never be retried.
+	if a.FetchStatus != store.FetchPending {
+		t.Errorf("fetch_status = %q, want %q — a missing browser must stay retryable",
+			a.FetchStatus, store.FetchPending)
+	}
+	if !strings.Contains(a.FetchError, "browser") {
+		t.Errorf("fetch_error = %q, want it to name the browser", a.FetchError)
+	}
+
+	// And it is visible where somebody looks for things that need attention.
+	rows, err := s.NeedsAttentionFor(ctx, alice, 50)
+	if err != nil {
+		t.Fatalf("NeedsAttentionFor() = %v", err)
+	}
+	var found bool
+	for _, r := range rows {
+		if r.ArticleID == id {
+			found = true
+			if r.FetchStatus != store.FetchPending {
+				t.Errorf("the attention row says %q", r.FetchStatus)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("an article waiting for a browser is missing from the attention queue (%d rows)",
+			len(rows))
+	}
+}
+
+// An article nobody has reached yet stays out of the attention queue.
+//
+// The counterweight, and the reason the predicate is "pending *with a reason*" rather
+// than "pending": every article is pending for a moment after it is created, and a queue
+// that listed all of them would list the whole archive on a first import.
+func TestAnUnreachedArticleIsNotInTheAttentionQueue(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	feedID, _, err := s.UpsertFeed(ctx, alice, store.FeedParams{
+		FeedURL: "https://example.com/feed.xml", Title: "Ordinary",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+	id := newFetchableArticle(t, s, "https://example.com/not-yet-fetched")
+	if _, err := s.InsertFeedItem(ctx, alice, store.FeedItemParams{
+		FeedID: feedID, ArticleID: id, GUID: "guid-not-yet",
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+
+	rows, err := s.NeedsAttentionFor(ctx, alice, 50)
+	if err != nil {
+		t.Fatalf("NeedsAttentionFor() = %v", err)
+	}
+	for _, r := range rows {
+		if r.ArticleID == id {
+			t.Error("a freshly created article appears in the attention queue; on a first " +
+				"import that would list the entire archive")
+		}
+	}
 }

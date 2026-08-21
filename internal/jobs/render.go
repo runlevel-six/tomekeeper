@@ -115,6 +115,18 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 		// that scaling the render deployment up later picks these up rather than leaving
 		// a queue of articles marked failed for a reason that has since gone away.
 		if errors.Is(err, render.ErrUnavailable) {
+			// Pending, with the reason written down. Not `failed`: this is an operator's
+			// deployment scaled to zero or a pod that died, and blaming the site for that
+			// would also make it permanent, since a recorded failure is never retried.
+			//
+			// The note is what makes the wait visible. Without it the article sat pending
+			// forever — retried every minute, failing every time — while the failed-fetch
+			// queue ignored it and the reading list badged it "queued". A reader had no
+			// way to find out, and neither did the operator who could have fixed it.
+			const waiting = "waiting for a headless browser; none is reachable"
+			if noteErr := w.store.RecordFetchWaiting(ctx, id, waiting); noteErr != nil {
+				log.Warn("could not record that this article is waiting", "error", noteErr)
+			}
 			log.Warn("no browser is available, so this article stays pending", "error", err)
 			return err
 		}

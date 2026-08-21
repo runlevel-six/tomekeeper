@@ -117,7 +117,17 @@
     */}}
     {{if not $item.HasBody}}
       {{if eq $item.FetchStatus "pending"}}
-        <span class="badge pending" title="The worker has not reached this page yet">queued</span>
+        {{/*
+          Pending with a reason is not the same as pending without one, and this badge
+          said "queued" for both until 2026-08-21. An article waiting for a headless
+          browser nobody has deployed is retried every minute and fails every time; the
+          tooltip claiming the worker had not reached it yet was the opposite of true.
+        */}}
+        {{if $item.FetchError}}
+          <span class="badge warn" title="{{$item.FetchError}}">waiting</span>
+        {{else}}
+          <span class="badge pending" title="The worker has not reached this page yet">queued</span>
+        {{end}}
       {{else}}
         <span class="badge bad" title="Nothing was extracted from this page">no body</span>
       {{end}}

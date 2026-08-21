@@ -180,6 +180,20 @@ func (s *Server) renderFragmentList(w http.ResponseWriter, status int, name stri
 // Kept deliberately small: logic in a template is logic that cannot be tested, so
 // anything beyond formatting belongs in a handler.
 var templateFuncs = template.FuncMap{
+	// The value behind an optional integer, for a template that has already checked it
+	// is there.
+	//
+	// html/template dereferences a pointer when printing it, but not when passing it to
+	// a comparison — so `lt .PageVisibleChars 600` is a type error while `{{.PageVisibleChars}}`
+	// prints fine. The alternative to this helper is a second non-pointer field on the
+	// row carrying the same number, which is two fields that can disagree about one fact.
+	"deref": func(n *int) int {
+		if n == nil {
+			return 0
+		}
+		return *n
+	},
+
 	// "3 minutes ago", for a reader scanning a stream. Dates are what a reader
 	// actually wants further back, so this switches over rather than reporting
 	// "4,102 hours ago".

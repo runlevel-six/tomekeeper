@@ -19,6 +19,7 @@
           <th scope="col">Article</th>
           <th scope="col">Feed</th>
           <th scope="col">Problem</th>
+          <th scope="col">The page itself</th>
           <th scope="col">Seen</th>
           <th scope="col">Fix</th>
         </tr>
@@ -38,9 +39,37 @@
             {{else if eq .FetchStatus "failed"}}
               <span class="badge bad">failed</span>
               <span class="reason">{{.FetchError}}</span>
+            {{else if eq .FetchStatus "pending"}}
+              {{/*
+                Waiting on something an operator controls, rather than broken. It appears
+                in this queue because it is not going to resolve itself, and it says
+                "waiting" rather than "failed" because the site did nothing wrong.
+              */}}
+              <span class="badge warn">waiting</span>
+              <span class="reason">{{.FetchError}}</span>
             {{else if eq .AssetsStatus "partial"}}
               <span class="badge warn">images incomplete</span>
               <span class="reason">at least one image could not be archived</span>
+            {{end}}
+          </td>
+          {{/*
+            The number that says which remedy this row wants, which is the whole reason
+            it is measured and stored. A page that served a few hundred characters of
+            visible text is a shell whose article arrives by JavaScript: no selector can
+            find what is not there, and it wants a browser. Thousands of characters is a
+            page whose text is present and whose structure defeated the extractors, which
+            is what a rule is for. Both used to read as "extraction produced no content",
+            and telling them apart meant running a CLI against a pod.
+          */}}
+          <td class="measure">
+            {{if .PageVisibleChars}}
+              {{if lt (deref .PageVisibleChars) 600}}
+                <span class="badge warn" title="The page the server sent carried {{deref .PageVisibleChars}} characters of visible text — too few to be the article. Its content is built by JavaScript, so this wants a browser rather than a selector.">shell · {{deref .PageVisibleChars}} chars</span>
+              {{else}}
+                <span class="badge" title="The page carried {{deref .PageVisibleChars}} characters of visible text, so the article is in the HTML and the extractors could not find it. This wants a rule.">{{deref .PageVisibleChars}} chars of text</span>
+              {{end}}
+            {{else}}
+              <span class="reason" title="Not measured. This article has not been extracted since the measurement was added; re-extract it to find out.">not measured</span>
             {{end}}
           </td>
           <td><time datetime="{{.FirstSeenAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since .FirstSeenAt}}</time></td>
@@ -49,7 +78,21 @@
             used to begin by leaving the browser for a shell, which is most of the
             reason rules got written rarely.
           */}}
-          <td>{{if .RulePath}}<a class="rule-link" href="{{.RulePath}}" title="Write an extraction rule for {{.Host}}">Rule for {{.Host}}</a>{{end}}</td>
+          <td>{{if .RulePath}}
+            {{/*
+              The link goes to the same form either way — the JavaScript checkbox and the
+              selector live on one page — but the *label* has to match the diagnosis. A
+              shell has no text to select, so telling somebody to write an extraction rule
+              for one sends them to try the impossible thing first. The measurement is
+              right there in the previous column; using it here is what turns a queue into
+              a next step.
+            */}}
+            {{if and .PageVisibleChars (lt (deref .PageVisibleChars) 600)}}
+              <a class="rule-link" href="{{.RulePath}}" title="This page arrived nearly empty, so its article is built by JavaScript. Flag {{.Host}} as needing a browser — a selector cannot find text the server never sent.">Needs a browser · {{.Host}}</a>
+            {{else}}
+              <a class="rule-link" href="{{.RulePath}}" title="Write an extraction rule for {{.Host}}">Rule for {{.Host}}</a>
+            {{end}}
+          {{end}}</td>
         </tr>
         {{end}}
       </tbody>

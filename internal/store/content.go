@@ -62,6 +62,59 @@ func (s *Store) RecordFetchSuccess(ctx context.Context, id ArticleID, p FetchedP
 	return nil
 }
 
+// RecordFetchWaiting notes why an article has not been fetched yet, without saying it
+// failed.
+//
+// One caller: a render that found no browser. That is not the article's failure and not
+// the site's — it is an operator's deployment scaled to zero, or a pod that died — and
+// recording it as `failed` would be wrong twice over. It would blame the site for
+// infrastructure, and because a recorded failure is never retried, it would make a
+// transient condition permanent.
+//
+// So the status stays `pending`, which keeps the article eligible for the scheduler to
+// try again, and the reason goes in `fetch_error` anyway. That pairing — pending *with* a
+// reason — is what the failed-fetch queue now selects on, and it is the difference between
+// an article that is waiting for a browser and one the worker simply has not reached.
+// Before this existed the two were indistinguishable, and the interface reported both as
+// "queued".
+//
+// Deliberately does not touch assets_status. RecordFetchFailure settles it because every
+// path into that function is the pipeline stopping for good; this one is the pipeline
+// pausing, and an article that later renders successfully needs its images localized like
+// any other.
+func (s *Store) RecordFetchWaiting(ctx context.Context, id ArticleID, reason string) error {
+	if reason == "" {
+		return fmt.Errorf("a waiting reason must not be empty")
+	}
+
+	// Only while the article is still pending. A render queued against an article that
+	// has since been fetched by another route must not overwrite a settled state with a
+	// note about waiting.
+	_, err := s.pool.Exec(ctx, `
+		UPDATE articles SET fetch_error = $2
+		WHERE id = $1 AND fetch_status = 'pending'`, id, reason)
+	if err != nil {
+		return fmt.Errorf("recording that article %d is waiting: %w", id, err)
+	}
+	return nil
+}
+
+// RecordPageMeasurement stores how much visible text the stored page carried.
+//
+// Written by extraction, read by the failed-fetch queue, and the reason it is worth a
+// column is that it answers the question the queue exists to ask: a page with a few
+// hundred characters of visible text is a JavaScript shell and wants a browser, while one
+// with thousands is a structure problem and wants a CSS selector. Those have opposite
+// remedies and were previously indistinguishable in the interface.
+func (s *Store) RecordPageMeasurement(ctx context.Context, id ArticleID, visibleChars int) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE articles SET page_visible_chars = $2 WHERE id = $1`, id, visibleChars)
+	if err != nil {
+		return fmt.Errorf("recording the page measurement for article %d: %w", id, err)
+	}
+	return nil
+}
+
 // RecordFetchFailure marks an article as failed to fetch, with the reason.
 //
 // The reason is kept because the failed-fetch queue is what makes the

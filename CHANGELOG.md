@@ -32,7 +32,35 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The failed-fetch queue now says which remedy a page wants.** Each row reports how much
+  visible text the *served* page carried: a few hundred characters is a JavaScript shell
+  that wants a browser, thousands is a page whose structure defeated the extractors and
+  wants a CSS selector. Those have opposite fixes and both used to read as "extraction
+  produced no content", so telling them apart meant running `tome explain` against a pod.
+- **"Waiting" is a state.** An article whose domain is flagged for rendering when no
+  browser is reachable stays retryable *and* says so — in the queue, and as a `waiting`
+  badge in the reading list. It previously sat pending forever, retried every minute,
+  invisible to the queue, and badged `queued` with the tooltip "the worker has not reached
+  this page yet". It had.
+- The domain-rules page explains what flagging a host for JavaScript actually does, and
+  what happens when no browser is deployed. It used to say rendering did not exist.
+
+### Changed
+
+- **The headless browser now runs by default** (one replica, ~256Mi idle) instead of
+  scaled to zero. Deliberately spending memory on a feature most archives never use,
+  because the alternative is a checkbox that silently does nothing: the reader who flags a
+  domain and the administrator who can scale a Deployment are not the same person, and
+  multi-user widens that gap. Scale it to zero to turn it off — flagged articles then wait
+  visibly rather than failing.
+
+### Migrations
+
+- **00008** adds `articles.page_visible_chars`. Nullable, because NULL means "not measured
+  since this existed" and a default of zero would have claimed every article in the archive
+  served an empty page.
 
 ## [v0.3.0] — 2026-08-20
 

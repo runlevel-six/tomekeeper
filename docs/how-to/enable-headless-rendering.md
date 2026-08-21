@@ -12,38 +12,47 @@ command.
 
 ## Is this site actually JavaScript-rendered?
 
-Ask the archive, rather than guessing from the site's reputation:
+**Look at Attention.** Every row there now carries a *The page itself* column showing how
+much visible text the served HTML actually contained, which is the number that answers
+this:
 
-```sh
-tome explain <article-id>
-```
-
-Look at the `page` row's character count — that is how much **visible text was in the
-HTML that was actually served**:
-
-| What you see | What it means |
+| What it says | What it means |
 |---|---|
-| A few hundred characters or fewer | A shell. The article is built by script, and this page needs a browser. |
-| Thousands of characters, but every extractor rejected it | The text is right there and the structure defeated the extractors. **A domain rule, not a browser.** |
-| Thousands of characters, and a body was extracted | Nothing is wrong with this page. |
+| `shell · 412 chars` | The article is built by JavaScript. No selector can find what was never sent. **This wants a browser.** |
+| `18,204 chars of text` | The text is in the HTML and the extractors could not find it. **This wants a [domain rule](add-a-domain-rule.md).** |
+| `not measured` | This article has not been extracted since the measurement existed. Re-extract it to find out. |
 
-The second row is the common case, and mistaking it for the first is how a browser ends
-up deployed to solve a problem a selector would have solved. On the archive this was
-built against, every failing site checked was the second kind.
+The second row is the common case, and mistaking it for the first is how a browser ends up
+deployed to solve a problem a selector would have solved.
 
-## 1. Scale the browser up
+From the command line, `tome explain <article-id>` reports the same number in its `page`
+row, alongside what every rung of the ladder decided and why.
 
-The manifests ship a `tomekeeper-render` Deployment at **zero replicas** — it costs
-nothing until you want it:
+On the archive this feature was built against, **every failing site checked was the
+second kind** — a structure problem, not a JavaScript one. Check before deploying a
+browser at a problem a selector solves permanently.
+
+## 1. The browser is already running
+
+The manifests ship a `tomekeeper-render` Deployment at **one replica**, so on Kubernetes
+there is nothing to do here. That is a deliberate choice to spend about 256Mi on a
+browser most archives never use, because the alternative is worse: with it scaled to
+zero, ticking "this site needs JavaScript" does nothing observable, and the person who
+ticked it cannot tell why. Multi-user widens that gap — a reader flags the domain and only
+an administrator can scale a Deployment — and it catches administrators too, inheriting a
+deployment where the feature works on one installation and not on theirs.
+
+If you would rather not spend the memory, turn it off deliberately:
 
 ```sh
-kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=1
-kubectl -n tomekeeper rollout status deploy/tomekeeper-render
+kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=0
 ```
 
-The worker already knows where to find it (`TOME_RENDER_BROWSER_URL` points at the
-Service), so there is nothing to restart. Outside Kubernetes, run the browser however
-you like and set that variable yourself:
+Flagged articles then **wait** rather than fail: they stay retryable and say
+`waiting for a headless browser` in [Attention](../reference/cli.md#web-interface), so the
+state is visible instead of silent. Scaling back up collects them.
+
+Outside Kubernetes, run the browser however you like and point the worker at it:
 
 ```sh
 docker run -d --name headless -p 9222:9222 chromedp/headless-shell:latest
@@ -126,23 +135,14 @@ Memory is the other cost: about a gigabyte for the pod, one page at a time
 (`TOME_RENDER_CONCURRENCY`, default 1). Raising the concurrency means raising the pod's
 limit with it, the same coupling image transcoding has.
 
-## When you are done
-
-Scale it back to zero. Flagged domains then stay pending rather than failing, and pick
-up again whenever a browser exists:
-
-```sh
-kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=0
-```
-
 ## Troubleshooting
 
-### Articles from a flagged domain stay `pending` forever
+### Articles from a flagged domain say `waiting`
 
-No browser is reachable. That is reported as a retryable condition rather than a
-failure, on purpose — an operator scaling the Deployment up later gets those articles
-fetched instead of finding a queue of things marked failed for a reason that has since
-gone away.
+No browser is reachable. That is a retryable condition rather than a failure, on purpose:
+scaling the Deployment up later collects those articles instead of leaving a queue of
+things marked failed for a reason that has since gone away. They appear in **Attention**
+with the reason, and in the reading list with a `waiting` badge rather than `queued`.
 
 ```sh
 kubectl -n tomekeeper get deploy tomekeeper-render          # is it scaled up?

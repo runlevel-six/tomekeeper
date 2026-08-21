@@ -163,6 +163,11 @@ type StreamItem struct {
 	// for as long as it takes the worker to reach it, and reporting that as a
 	// failure would make the save feature look broken at the moment it worked.
 	FetchStatus string
+
+	// FetchError is why, when there is a why. It is carried into the stream for one
+	// reason: a pending article with a reason is *waiting* rather than unvisited, and
+	// the badge said "queued" for both until this was available to tell them apart.
+	FetchError string
 }
 
 // streamFilter is the WHERE clause a StreamQuery describes, together with the
@@ -431,7 +436,7 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.author, ''), COALESCE(a.site_name, ''),
 		       a.url_canonical, a.published_at, a.first_seen_at,
 		       COALESCE(a.published_at, a.first_seen_at) AS sort_at,
-		       a.assets_status, a.fetch_status,
+		       a.assets_status, a.fetch_status, COALESCE(a.fetch_error, ''),
 		       COALESCE(c.word_count, 0), left(COALESCE(c.content_text, ''), ` +
 		strconv.Itoa(ExcerptLength) + `), (c.id IS NOT NULL),
 		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
@@ -465,7 +470,8 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		if err := rows.Scan(
 			&it.ArticleID, &it.Title, &it.Author, &it.SiteName,
 			&it.URLCanonical, &it.PublishedAt, &it.FirstSeenAt, &it.SortAt,
-			&it.AssetsStatus, &it.FetchStatus, &it.WordCount, &it.Excerpt, &it.HasBody,
+			&it.AssetsStatus, &it.FetchStatus, &it.FetchError,
+			&it.WordCount, &it.Excerpt, &it.HasBody,
 			&it.Read, &it.Starred, &it.Kept, &it.FeedTitle,
 		); err != nil {
 			return nil, fmt.Errorf("scanning a stream row: %w", err)
@@ -731,6 +737,16 @@ type NeedsAttention struct {
 	FetchError   string
 	AssetsStatus string
 	FirstSeenAt  time.Time
+
+	// PageVisibleChars is how much visible text the stored page had, or nil when it has
+	// not been measured — every article extracted before that column existed.
+	//
+	// Carried here because this is the list where a site that needs attention is found,
+	// and it is the number that says *which kind* of attention: a few hundred characters
+	// is a JavaScript shell that wants a browser, thousands is a structure problem that
+	// wants a selector. Without it both read as "extraction produced no content" and the
+	// only way to tell them apart was a CLI on a pod.
+	PageVisibleChars *int
 }
 
 // NeedsAttentionFor lists the user's articles that did not come through cleanly.
@@ -741,6 +757,14 @@ type NeedsAttention struct {
 // forever. fetch_status is where the reason lives, and 'skipped' belongs here
 // beside 'failed' — a page withheld by robots.txt is a gap in the archive the
 // reader should see, not an error to bury.
+//
+// **A pending article with a reason recorded belongs here too**, and leaving it out was
+// a real hole. An article waiting for a headless browser that nobody has deployed stays
+// pending forever, retried every minute and failing every time — and because this query
+// looked only at failed and skipped, it appeared nowhere, while the reading list badged
+// it "queued" with the tooltip "the worker has not reached this page yet". The worker had
+// reached it, repeatedly. Pending *with* a reason is the state that says so; pending
+// without one is still an article nobody has got to, and stays out.
 func (s *Store) NeedsAttentionFor(ctx context.Context, userID UserID, limit int) ([]NeedsAttention, error) {
 	if limit <= 0 || limit > MaxStreamLimit {
 		limit = DefaultStreamLimit
@@ -750,7 +774,7 @@ func (s *Store) NeedsAttentionFor(ctx context.Context, userID UserID, limit int)
 		SELECT a.id, a.url_canonical, COALESCE(a.title, ''),
 		       COALESCE(feed.title, ''),
 		       a.fetch_status, COALESCE(a.fetch_error, ''), a.assets_status,
-		       a.first_seen_at
+		       a.first_seen_at, a.page_visible_chars
 		FROM articles a
 		LEFT JOIN LATERAL (
 			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
@@ -758,7 +782,9 @@ func (s *Store) NeedsAttentionFor(ctx context.Context, userID UserID, limit int)
 			ORDER BY fi3.seen_at, fi3.id LIMIT 1
 		) feed ON true
 		WHERE `+visibleArticles+`
-		  AND (a.fetch_status IN ('failed', 'skipped') OR a.assets_status = 'partial')
+		  AND (a.fetch_status IN ('failed', 'skipped')
+		       OR (a.fetch_status = 'pending' AND a.fetch_error IS NOT NULL)
+		       OR a.assets_status = 'partial')
 		ORDER BY a.first_seen_at DESC, a.id DESC
 		LIMIT $2`, userID, limit)
 	if err != nil {
@@ -770,7 +796,8 @@ func (s *Store) NeedsAttentionFor(ctx context.Context, userID UserID, limit int)
 	for rows.Next() {
 		var n NeedsAttention
 		if err := rows.Scan(&n.ArticleID, &n.URLCanonical, &n.Title, &n.FeedTitle,
-			&n.FetchStatus, &n.FetchError, &n.AssetsStatus, &n.FirstSeenAt); err != nil {
+			&n.FetchStatus, &n.FetchError, &n.AssetsStatus, &n.FirstSeenAt,
+			&n.PageVisibleChars); err != nil {
 			return nil, fmt.Errorf("scanning an attention row: %w", err)
 		}
 		out = append(out, n)

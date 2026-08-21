@@ -1,19 +1,26 @@
 # The headless browser, for the domains flagged as needing JavaScript.
 #
-# Scaled to zero, deliberately, and that is the interesting part of this file. Most
-# archives never flag a domain: the extraction ladder handles the great majority of
-# sites, a badly-structured one wants a CSS selector rather than a browser, and an
-# image-only page has no text for any renderer to find. So this exists, costs nothing
-# until it is scaled up, and the worker treats its absence as a normal condition
-# rather than an error — see `tome worker`'s startup log, which says out loud when no
-# browser is configured.
+# **Runs by default, even though most archives will never use it.** That is a deliberate
+# reversal of the obvious choice, and the reasoning is about people rather than resources.
 #
-# To turn rendering on:
+# Scaled to zero it costs nothing — but then ticking "this site needs JavaScript" in the
+# interface does nothing observable, and the person who ticked it has no way to know why.
+# Worse, the two halves are held by different people: a reader flags the domain, and only
+# an administrator can scale a Deployment. Multi-user makes that gap wider, and it is not
+# only readers who fall into it — an administrator inheriting a deployment finds a feature
+# that works on one installation and not on theirs, with nothing in the interface to
+# explain the difference.
 #
-#   kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=1
-#   tome domain-rule set --requires-js example.com
+# So the default is a browser that is present and idle. An administrator who would rather
+# not spend the memory can scale it to zero knowing exactly what that costs, which is the
+# right way round: an informed opt-out beats an uninformed non-feature.
 #
-# Both steps are needed, and either one alone is inert. See
+#   kubectl -n tomekeeper scale deploy/tomekeeper-render --replicas=0   # if you want it off
+#
+# Nothing is rendered until a domain rule flags a host, so an idle browser changes no
+# behavior on its own. And if it is scaled down, flagged articles *wait* rather than fail:
+# they say "waiting for a headless browser" in the failed-fetch queue instead of
+# disappearing into a pending state nobody can see. See
 # docs/how-to/enable-headless-rendering.md.
 apiVersion: apps/v1
 kind: Deployment
@@ -23,8 +30,10 @@ metadata:
     app.kubernetes.io/name: tomekeeper
     app.kubernetes.io/component: render
 spec:
-  # Zero. Not a mistake, and not a placeholder — see the comment above.
-  replicas: 0
+  # One, not zero. See the comment above: the cost of an idle browser is ~256Mi, and the
+  # cost of a missing one is somebody ticking a box and never finding out why nothing
+  # happened.
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: tomekeeper

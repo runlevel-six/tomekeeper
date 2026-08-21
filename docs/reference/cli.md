@@ -615,7 +615,7 @@ described under [Fever API](#fever-api) below.
 | `GET /feeds` | Feed list, health, and tags. `?sort=` and `?dir=` order it, `?q=` and `?health=` filter it, `?edit=<id>` opens one subscription in the form at the top. |
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |
-| `GET /attention` | Articles that did not come through cleanly |
+| `GET /attention` | Articles that did not come through cleanly: failed, withheld by robots.txt, waiting on something an operator controls, or missing images. Each row reports how much visible text the served page carried, which is what distinguishes a JavaScript shell from a page that wants a CSS selector. |
 | `GET /settings` | Palette, reading preferences, and the export download |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |

@@ -56,7 +56,7 @@
         <tr>
           <th scope="row">
             {{.Domain}}
-            {{if .RequiresJS}}<span class="badge warn" title="Marked as needing a headless render, which does not exist yet">needs JS</span>{{end}}
+            {{if .RequiresJS}}<span class="badge warn" title="Pages from this host are fetched through a headless browser">needs JS</span>{{end}}
             {{if .Notes}}<span class="reason">{{.Notes}}</span>{{end}}
           </th>
           <td>
@@ -141,9 +141,20 @@
           <input type="checkbox" name="requires_js" value="true"{{if .Form.RequiresJS}} checked{{end}}>
           This site needs JavaScript to render
         </label>
+        {{/*
+          This hint used to say rendering did not exist. It does now — and the honest
+          replacement has to cover the case where the flag is set and nothing happens,
+          because this page cannot tell whether a browser is reachable: the endpoint is
+          configured on the worker, and this is the server. Rather than guess, it says
+          what the outcome looks like either way, and where to look.
+        */}}
         <p class="hint-inline">
-          Recorded only. Headless rendering does not exist yet, so this changes nothing
-          today beyond marking the site for when it does.
+          Pages from this host are fetched through a headless browser instead of directly,
+          which is the answer for a site that sends an empty shell and builds the article
+          in JavaScript. It needs a browser deployed — if none is reachable, articles from
+          this host wait rather than fail, and say so in
+          <a href="/attention">Attention</a>. Pages already stored are not revisited;
+          clearing them is a separate step.
         </p>
       </div>
 
