@@ -49,10 +49,36 @@ pinned=${refs[0]#"$image":}
 # example overlay is what other people copy, and it was left following `latest`
 # after the base was pinned — which an earlier version of this check did not
 # notice, because it only read the base.
+#
+# Read from the image's entry to the end of it, rather than through a fixed
+# two-line window. `grep -A 2` was the window, and a comment written between
+# `name:` and `newTag:` pushed the pin out of it — which did not fail, it
+# *skipped*: an unparsed override silently stopped being checked, and the only
+# trace was the count in the line below going from 3 to 2. Found by writing such a
+# comment while pinning an overlay off-release, where a half-finished version bump
+# would have passed just as quietly.
+#
+# awk to the next list item at the same indent, so any amount of comment or any
+# other field can sit inside the entry. A digest pin is recognized too: it is the
+# other legitimate way to name an image, and reading it as "no override" is the
+# same silence in a different place.
 mapfile -t kustomizations < <(find deploy -name kustomization.yaml | sort)
 overrides=0
 for k in "${kustomizations[@]}"; do
-  newtag=$(grep -A 2 "name: ${image}" "$k" | sed -n 's/.*newTag: *//p' | head -1)
+  entry=$(awk -v img="name: ${image}" '
+    index($0, img) { inside = 1; next }
+    inside && /^[[:space:]]*-[[:space:]]/ { inside = 0 }
+    inside { print }
+  ' "$k")
+
+  newtag=$(printf '%s\n' "$entry" | sed -n 's/^[[:space:]]*newTag:[[:space:]]*//p' | head -1)
+  digest=$(printf '%s\n' "$entry" | sed -n 's/^[[:space:]]*digest:[[:space:]]*//p' | head -1)
+
+  if [ -z "$newtag" ] && [ -n "$digest" ]; then
+    overrides=$((overrides + 1))
+    pass "${k} pins the digest ${digest}"
+    continue
+  fi
   [ -z "$newtag" ] && continue
   overrides=$((overrides + 1))
   if [ "$newtag" != "$pinned" ]; then
@@ -60,7 +86,7 @@ for k in "${kustomizations[@]}"; do
   fi
 done
 if [ "$overrides" -eq 0 ]; then
-  fail "no kustomization sets newTag for ${image}; the manifests are the only pin"
+  fail "no kustomization sets newTag or digest for ${image}; the manifests are the only pin"
 else
   pass "${overrides} kustomization(s) agree on ${pinned}"
 fi

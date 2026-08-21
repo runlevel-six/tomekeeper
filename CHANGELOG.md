@@ -32,6 +32,16 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
+### Fixed
+
+- **`scripts/check-release.sh` could silently stop checking an overlay.** It read
+  the version pin through a two-line window after the image name, so a comment
+  written in between pushed the pin out of view — and an unparsed override was
+  *skipped*, not failed. A half-finished version bump would have passed, with no
+  trace but a count in a pass message dropping from 3 to 2. It now reads the whole
+  image entry, and recognizes a `digest:` pin as the other legitimate way to name
+  an image rather than as an absence.
+
 ### Added
 
 - **A list can be marked read from its end, and on a touch screen by pulling past
