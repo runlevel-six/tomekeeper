@@ -602,3 +602,75 @@ func TestReextractCandidatesByDomain(t *testing.T) {
 		t.Errorf("an unarchived host selected %d articles, want 0", len(got))
 	}
 }
+
+// An article whose extraction produced nothing is a candidate for reprocessing.
+//
+// This is the case reprocessing could not see until 2026-08-21, and the reason it
+// mattered: the whole purpose of the command is applying an extraction improvement to the
+// archive, and an article with no body is the one an improvement is most likely to
+// rescue. On the maintainer's archive that was 343 articles, 280 of them webcomics the
+// image rung would have archived three versions earlier.
+func TestReextractCandidatesIncludeArticlesWithNoBody(t *testing.T) {
+	_, s, _ := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	// Never extracted at all: extract_attempt_version is NULL, which has to compare as
+	// out of date. `<>` would not — NULL <> '5' is NULL — and that single operator is the
+	// difference between reaching every article in the archive and reaching none of them.
+	never := newArticle(t, s, "https://example.com/never-extracted")
+	if err := s.RecordFetchSuccess(ctx, never, store.FetchedPage{
+		SHA: "sha-never", Path: "articles/2026/08/never/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+
+	// Attempted by an older extractor and produced nothing.
+	stale := newArticle(t, s, "https://example.com/failed-under-an-old-extractor")
+	if err := s.RecordFetchSuccess(ctx, stale, store.FetchedPage{
+		SHA: "sha-stale", Path: "articles/2026/08/stale/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+	if err := s.RecordExtractAttempt(ctx, stale, "3", 240); err != nil {
+		t.Fatalf("RecordExtractAttempt() = %v", err)
+	}
+
+	// Attempted by the *current* extractor and produced nothing. Already up to date, so
+	// reprocessing it would be work with a known answer — and a bare `tome reextract`
+	// that kept picking it up would never be idempotent.
+	current := newArticle(t, s, "https://example.com/failed-under-the-current-one")
+	if err := s.RecordFetchSuccess(ctx, current, store.FetchedPage{
+		SHA: "sha-current", Path: "articles/2026/08/current/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+	if err := s.RecordExtractAttempt(ctx, current, "5", 240); err != nil {
+		t.Fatalf("RecordExtractAttempt() = %v", err)
+	}
+
+	// No stored page: nothing to extract from, so not a candidate however out of date.
+	nopage := newArticle(t, s, "https://example.com/never-fetched")
+
+	got, err := s.System().ReextractCandidates(ctx, "5", "", 0, 100)
+	if err != nil {
+		t.Fatalf("ReextractCandidates() = %v", err)
+	}
+
+	selected := make(map[store.ArticleID]bool, len(got))
+	for _, c := range got {
+		selected[c.ArticleID] = true
+	}
+
+	if !selected[never] {
+		t.Error("an article that has never been extracted is not a candidate; a NULL " +
+			"attempt version has to compare as out of date")
+	}
+	if !selected[stale] {
+		t.Error("an article whose extraction failed under an older version is not a candidate")
+	}
+	if selected[current] {
+		t.Error("an article already attempted at the target version is a candidate, so a " +
+			"bare reextract would never settle")
+	}
+	if selected[nopage] {
+		t.Error("an article with no stored page is a candidate, and there is nothing to " +
+			"extract from")
+	}
+}

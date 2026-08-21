@@ -99,18 +99,34 @@ func (s *Store) RecordFetchWaiting(ctx context.Context, id ArticleID, reason str
 	return nil
 }
 
-// RecordPageMeasurement stores how much visible text the stored page carried.
+// RecordExtractAttempt notes that extraction ran, at which version, and what it found in
+// the page.
 //
-// Written by extraction, read by the failed-fetch queue, and the reason it is worth a
-// column is that it answers the question the queue exists to ask: a page with a few
-// hundred characters of visible text is a JavaScript shell and wants a browser, while one
-// with thousands is a structure problem and wants a CSS selector. Those have opposite
-// remedies and were previously indistinguishable in the interface.
-func (s *Store) RecordPageMeasurement(ctx context.Context, id ArticleID, visibleChars int) error {
-	_, err := s.pool.Exec(ctx,
-		`UPDATE articles SET page_visible_chars = $2 WHERE id = $1`, id, visibleChars)
+// Two facts from one write, because they are produced together and are both about the
+// attempt rather than about its result:
+//
+//   - **The version.** A body records the version that produced it, so a *failure* had
+//     nowhere to record one — which meant `tome reextract` could not tell a failure from
+//     an older extractor apart from a failure under the current one, and so excluded all
+//     of them. See migration 00009 for what that cost.
+//   - **The page measurement**, which is what the failed-fetch queue uses to say whether a
+//     page is a JavaScript shell wanting a browser or a structural problem wanting a CSS
+//     selector. Those have opposite remedies and were indistinguishable in the interface.
+//
+// Called on every attempt, successful or not. On success the body carries the version too
+// and this column is redundant — but "the last attempt was at version N" staying true
+// regardless of outcome is easier to reason about than a column that means something
+// different depending on whether there is a body next to it.
+func (s *Store) RecordExtractAttempt(
+	ctx context.Context, id ArticleID, version string, pageVisibleChars int,
+) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE articles
+		SET extract_attempt_version = $2,
+		    page_visible_chars      = $3
+		WHERE id = $1`, id, version, pageVisibleChars)
 	if err != nil {
-		return fmt.Errorf("recording the page measurement for article %d: %w", id, err)
+		return fmt.Errorf("recording the extraction attempt for article %d: %w", id, err)
 	}
 	return nil
 }
@@ -331,8 +347,17 @@ type ReextractCandidate struct {
 	RawBlobPath string
 }
 
-// ReextractCandidates returns articles whose current body was produced by an
+// ReextractCandidates returns articles whose stored page was last extracted by an
 // extractor version other than the given one, starting after afterID.
+//
+// **Both outcomes count.** An article with a body from an older extractor is a candidate,
+// and so is an article whose last extraction produced *nothing* under an older extractor.
+// The second half was missing until 2026-08-21, and its absence was the most expensive
+// bug in this file: reprocessing joined the current content row, so an article with no
+// body could not be selected, so every extraction improvement silently skipped exactly
+// the articles improvements are written for. Measured when it was found: 343 articles with
+// a stored page and no body, 280 of them webcomics that the image rung added three
+// versions earlier would have archived. The pages were on disk the whole time.
 //
 // This lives on SystemStore because reprocessing the archive is a maintenance
 // operation over the shared article pool, not a user's view of it.
@@ -364,6 +389,23 @@ func (s *SystemStore) ReextractCandidates(
 	// two comparisons cannot drift apart. A plain subquery rather than a CTE, so the
 	// planner is free to push the predicates down instead of materializing every
 	// candidate first.
+	// A LEFT JOIN, so an article with no current body reaches the WHERE clause at all.
+	// The two branches below are the two outcomes an extraction can have, and each needs
+	// its own version to compare against:
+	//
+	//   - A body carries the version that produced it, and `NOT c.immutable` applies only
+	//     here because immutability is a property of a body. An imported article stays
+	//     provably untouched by a bulk reprocess, which is the acceptance criterion this
+	//     clause exists for.
+	//   - A failure has no body, so it carries the version on the article instead.
+	//     **IS DISTINCT FROM, not `<>`**: the column is NULL for every article extracted
+	//     before it existed, and `NULL <> '5'` is NULL rather than true — a plain
+	//     inequality would silently exclude every article this branch was added to reach,
+	//     which is the same shape of bug it is fixing.
+	//
+	// An empty raw_blob_path is excluded rather than merely NULL-checked. There is nothing
+	// to extract from either way, and queueing those produced a job whose only outcome was
+	// to record "no stored page" against an article that already said so.
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, raw_blob_path FROM (
 			SELECT a.id AS id,
@@ -371,11 +413,13 @@ func (s *SystemStore) ReextractCandidates(
 			       -- scheme://host[:port]/path -> host
 			       split_part(split_part(split_part(a.url_canonical, '://', 2), '/', 1), ':', 1) AS host
 			FROM articles a
-			JOIN article_content c ON c.article_id = a.id AND c.is_current
-			WHERE NOT c.immutable
-			  AND c.extractor_version <> $1
-			  AND a.raw_blob_path IS NOT NULL
+			LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+			WHERE COALESCE(a.raw_blob_path, '') <> ''
 			  AND a.id > $2
+			  AND (
+			        (c.id IS NOT NULL AND NOT c.immutable AND c.extractor_version <> $1)
+			     OR (c.id IS NULL AND a.extract_attempt_version IS DISTINCT FROM $1)
+			  )
 		) candidates
 		WHERE $4 = '' OR host = $4 OR host LIKE '%.' || $4
 		ORDER BY id

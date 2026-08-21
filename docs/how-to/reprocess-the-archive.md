@@ -1,5 +1,15 @@
 # How to reprocess the archive
 
+> **Since 2026-08-21 this also reaches articles that produced *no* body.** It did not
+> before, and that was the most expensive bug in the feature: candidates were selected by
+> comparing the version that produced an article's body, so an article with no body could
+> not be selected — and every extraction improvement silently skipped exactly the articles
+> improvements exist to rescue. Found by measuring: 343 articles with a stored page and no
+> body, 280 of them webcomics from one host, which the image rung added three versions
+> earlier would have archived. A one-off catch-up run after upgrading past that release
+> will pick all of them up.
+
+
 `tome reextract` re-runs extraction over articles already stored, using the raw
 pages kept at fetch time. It makes no requests to any site.
 

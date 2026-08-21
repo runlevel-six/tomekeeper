@@ -32,7 +32,29 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **`tome reextract` could not reach an article that produced no body**, which is the most
+  expensive bug found in this project so far. Candidates were selected by comparing the
+  extractor version that produced an article's *body* — so an article with no body was
+  never a candidate, and **every extraction improvement since the second milestone
+  silently skipped exactly the articles improvements are written for.**
+
+  Measured when it was found: **343 articles with a stored page and no body, 280 of them
+  webcomics from a single host** — and the image rung added three versions earlier
+  archives them today. Their pages had been on disk since the first poll with nothing able
+  to point at them.
+
+  Failures now record the version that attempted them, so the same "other than this
+  version" comparison works for both outcomes. **A one-off `tome reextract` after taking
+  this release picks up the backlog**; it touches no origin server, as ever.
+
+### Migrations
+
+- **00009** adds `articles.extract_attempt_version`. Nullable, and compared with
+  `IS DISTINCT FROM` rather than `<>` — `NULL <> '5'` is NULL, not true, so a plain
+  inequality would have excluded every article the column was added to reach. That is the
+  same shape of silent-exclusion bug it fixes, which is why it is called out here.
 
 ## [v0.4.0] — 2026-08-21
 

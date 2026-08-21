@@ -107,13 +107,14 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 		FeedBody: feedBody,
 	})
 	// Recorded before the error is handled, because the failing case is the one that
-	// needs this number: an article with no body is exactly what somebody is looking at
-	// when they ask whether this site wants a browser or a selector. A measurement kept
-	// only for successes would be a measurement nobody needed.
-	if err := w.store.RecordPageMeasurement(ctx, id, result.PageVisibleChars); err != nil {
-		// Not fatal to the extraction. This is a diagnostic, and losing it must not cost
-		// the body that was just produced.
-		log.Warn("could not record the page measurement", "error", err)
+	// needs both of these: an article with no body is what somebody is looking at when
+	// they ask whether this site wants a browser or a selector, and it is the article
+	// `tome reextract` could not previously find at all. A version recorded only for
+	// successes is a version that cannot describe a failure.
+	if err := w.store.RecordExtractAttempt(ctx, id, extract.Version, result.PageVisibleChars); err != nil {
+		// Not fatal to the extraction. These are diagnostics, and losing them must not
+		// cost the body that was just produced.
+		log.Warn("could not record the extraction attempt", "error", err)
 	}
 
 	if err != nil {
