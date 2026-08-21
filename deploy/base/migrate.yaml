@@ -59,7 +59,7 @@ spec:
             limits: { memory: 64Mi }
       containers:
         - name: migrate
-          image: ghcr.io/runlevel-six/tomekeeper:v0.12.1
+          image: ghcr.io/runlevel-six/tomekeeper:v0.13.0
           args: ["migrate"]
           envFrom:
             - configMapRef:

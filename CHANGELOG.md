@@ -5,8 +5,8 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.12.1` is the tag
-`v0.12.1`, and `tome version` inside it says `v0.12.1`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.13.0` is the tag
+`v0.13.0`, and `tome version` inside it says `v0.13.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
@@ -33,6 +33,37 @@ happens, because it is the one change that wants a follow-up command
 ## [Unreleased]
 
 Nothing yet.
+
+## [v0.13.0] — 2026-08-21
+
+**Adds a migration.**
+
+### Added
+
+- **Fetch a page again**, from the row in the failed-fetch queue where the problem is
+  noticed. Extraction runs over stored bytes, so when the bytes themselves are wrong
+  no amount of re-extracting helps and only the origin can — two live cases: a site
+  whose images sit behind URLs that expired before a rule existed, and a page that
+  needed a browser before anybody flagged the domain. A flagged domain is handed to
+  the browser on the way through, which is what makes it the fix for the second.
+
+  Never automatic. The fetch worker still refuses a page it already has unless asked,
+  because a re-fetch is a request the origin did not need to serve, and nothing in
+  the pipeline asks. A POST rather than a link, so no crawler or prefetcher can spend
+  the request for you.
+
+  The page is **overwritten in place**, at whatever path the article already points
+  at. Recomputing it would usually agree, but a directory is named after the article's
+  title and extraction fills that in after the first fetch — so a re-fetch would put
+  the new page in one directory and leave the `index.html` and localized images in
+  another.
+
+### Migrations
+
+- **00014** drops `feeds.category`, which `00013` superseded and deliberately left
+  behind. It was kept because the schema guard treats a newer database as safe on the
+  grounds that an older binary works against a superset schema — true only while
+  migrations are additive. It is safe to drop now that no deployable binary reads it.
 
 ## [v0.12.1] — 2026-08-21
 
@@ -527,7 +558,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.13.0...HEAD
+[v0.13.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.12.1...v0.13.0
 [v0.12.1]: https://github.com/runlevel-six/tomekeeper/compare/v0.12.0...v0.12.1
 [v0.12.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.10.1...v0.11.0
