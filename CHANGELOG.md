@@ -32,7 +32,20 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The unread count no longer drifts while you read.** It is shown in four places —
+  the document title, the nav badge, the tab bar badge and the installed app's icon —
+  and every one of them was rendered at page load and then left alone, so marking
+  articles read by scrolling silently made all four wrong until the next navigation.
+  The response now carries the fresh total and the page applies it everywhere.
+
+  Fixing only the app icon was the obvious small change and would have been worse:
+  two numbers on one screen that disagree read as a broken count, where four equally
+  stale ones read as a page that needs reloading.
+
+  The count also re-asserts itself on the app icon when the app returns to the
+  foreground, since the platform may have cleared it while away.
 
 ## [v0.12.0] — 2026-08-21
 

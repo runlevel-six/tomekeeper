@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -244,5 +245,65 @@ func TestScrolledIDsAreRefusedWholeWhenTheyMakeNoSense(t *testing.T) {
 	}
 	if view.Read {
 		t.Error("a refused request still marked the article it named first")
+	}
+}
+
+// The response carries the fresh unread total, so the four places that show it stop
+// drifting while somebody reads.
+//
+// The count is shown in the document title, the nav badge, the tab bar badge and the
+// app icon, and all four were rendered at page load and then left alone. Fixing only
+// the app icon would have left two numbers on one screen disagreeing, which reads as
+// a broken count rather than as a stale page — so the server sends the number and the
+// page applies it everywhere.
+//
+// Asserted on the header because that is the part with a server in it. What the script
+// then does with it is covered by the gesture harness's sibling, not by a browser
+// nobody is running here.
+func TestAScrolledMarkReportsTheNewUnreadCount(t *testing.T) {
+	rd, tr := readingFixture(t)
+	ctx := t.Context()
+
+	if err := tr.store.SetMarkReadOnScroll(ctx, tr.alice, true); err != nil {
+		t.Fatalf("SetMarkReadOnScroll() = %v", err)
+	}
+
+	before, err := tr.store.UnreadCountsFor(ctx, tr.alice)
+	if err != nil {
+		t.Fatalf("UnreadCountsFor() = %v", err)
+	}
+	if before.Total == 0 {
+		t.Fatal("the fixture has nothing unread, so this proves nothing")
+	}
+
+	rec := rd.do(http.MethodPost, "/mark-read/scrolled", url.Values{
+		"ids": {strconv.FormatInt(int64(tr.aliceOnly), 10)},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /mark-read/scrolled = %d, want 200", rec.Code)
+	}
+
+	trigger := rec.Header().Get("HX-Trigger")
+	if trigger == "" {
+		t.Fatal("the response carries no unread count, so every display of it keeps drifting")
+	}
+
+	var payload struct {
+		Unread struct{ Count int64 } `json:"tome:unread"`
+	}
+	if err := json.Unmarshal([]byte(trigger), &payload); err != nil {
+		t.Fatalf("HX-Trigger is not the JSON htmx parses: %v\n%s", err, trigger)
+	}
+
+	after, err := tr.store.UnreadCountsFor(ctx, tr.alice)
+	if err != nil {
+		t.Fatalf("UnreadCountsFor() = %v", err)
+	}
+	if payload.Unread.Count != after.Total {
+		t.Errorf("the response reports %d unread, but the archive holds %d",
+			payload.Unread.Count, after.Total)
+	}
+	if payload.Unread.Count >= before.Total {
+		t.Errorf("the reported count did not fall: %d then %d", before.Total, payload.Unread.Count)
 	}
 }

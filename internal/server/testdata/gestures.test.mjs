@@ -91,6 +91,11 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
   const glyph = element({ tagName: "SPAN" });
   const chrome = element({ tagName: "HEADER", className: "chrome" });
 
+  // The unread badges, and a body that carries the count as an attribute.
+  const navBadge = element({ tagName: "SPAN", className: "badge count" });
+  const tabBadge = element({ tagName: "SPAN", className: "badge count" });
+
+  const badgeCalls = [];
   const document = {
     body,
     documentElement: { scrollHeight: 2000 },
@@ -108,9 +113,17 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
       if (sel === ".stream[data-mark-on-scroll]") return null;
       return null;
     },
-    querySelectorAll: () => [],
+    querySelectorAll(sel) {
+      if (sel.includes(".badge.count")) return [navBadge, tabBadge];
+      return [];
+    },
+    title: "(3) Unread — Tomekeeper",
   };
-  body.addEventListener = () => {};
+  const bodyListeners = new Map();
+  body.addEventListener = (type, fn) => {
+    if (!bodyListeners.has(type)) bodyListeners.set(type, []);
+    bodyListeners.get(type).push(fn);
+  };
 
   const window = {
     scrollY,
@@ -124,7 +137,12 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
   };
 
   const sandbox = {
-    document, window, navigator: {}, performance: { now: () => 0 },
+    document, window,
+    navigator: {
+      setAppBadge: (n) => { badgeCalls.push(n); return Promise.resolve(); },
+      clearAppBadge: () => { badgeCalls.push(0); return Promise.resolve(); },
+    },
+    performance: { now: () => 0 },
     IntersectionObserver: window.IntersectionObserver,
     Map, Set, Array, Math, String, Number, JSON, URLSearchParams,
     setTimeout: window.setTimeout, clearTimeout: window.clearTimeout,
@@ -133,6 +151,11 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
   };
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox);
+
+  // fireOn dispatches at the body, which is where the unread-count listener lives.
+  function fireOn(type, detail) {
+    (bodyListeners.get(type) || []).forEach((h) => h({ detail }));
+  }
 
   function fire(type, points, changed) {
     const handlers = listeners.get(type) || [];
@@ -146,7 +169,10 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
   }
 
   return {
-    fire, navigated, article, streamEnd, chrome,
+    fire, fireOn, navigated, article, streamEnd, chrome, navBadge, tabBadge,
+    get title() { return document.title; },
+    get bodyUnread() { return body.getAttribute("data-unread"); },
+    badged: badgeCalls,
     get href() { return window.location.href; },
     set scrollY(v) { window.scrollY = v; },
   };
@@ -390,6 +416,52 @@ function makeWorld({ page = "article", bodyScrollsSideways = false, scrollY = 10
   check("disarmed on the way back up", w.chrome.hasAttribute("data-pull-armed"), false);
   w.fire("touchend", [[202, 120]]);
   check("releasing a disarmed pull does nothing", w.navigated.length, 0);
+}
+
+// --- the unread count, applied everywhere it is shown ----------------------
+//
+// Four displays: the document title, the nav badge, the tab bar badge and the app
+// icon. All four used to be rendered at page load and then left to drift while
+// somebody read, and fixing only the app icon would have left two numbers on one
+// screen disagreeing — which reads as a broken count rather than a stale page.
+
+{
+  const w = makeWorld({ page: "list" });
+  w.fireOn("tome:unread", { count: 1 });
+  check("the body attribute is updated", w.bodyUnread, "1");
+  check("the nav badge shows the new count", w.navBadge.textContent, "1");
+  check("the tab bar badge shows it too", w.tabBadge.textContent, "1");
+  check("the title prefix is rewritten", w.title, "(1) Unread — Tomekeeper");
+  check("the app icon is set", w.badged[w.badged.length - 1], 1);
+}
+
+{
+  // Zero hides the badges rather than showing "0", which is what the markup does at
+  // page load — and clears the icon, because a badge stuck at a number after
+  // everything is read is a lie the reader cannot dismiss.
+  const w = makeWorld({ page: "list" });
+  w.fireOn("tome:unread", { count: 0 });
+  check("the badges are hidden at zero", w.navBadge.hidden, true);
+  check("the title loses its prefix", w.title, "Unread — Tomekeeper");
+  check("the app icon is cleared", w.badged[w.badged.length - 1], 0);
+}
+
+{
+  // The prefix must not accumulate. Rewritten rather than prepended, or reading
+  // through a list would leave "(3) (4) (5) Unread".
+  const w = makeWorld({ page: "list" });
+  w.fireOn("tome:unread", { count: 4 });
+  w.fireOn("tome:unread", { count: 2 });
+  check("the title carries one prefix, not two", w.title, "(2) Unread — Tomekeeper");
+}
+
+{
+  // Nonsense from a response must not blank the count.
+  const w = makeWorld({ page: "list" });
+  w.fireOn("tome:unread", { count: -1 });
+  check("a negative count is ignored", w.title, "(3) Unread — Tomekeeper");
+  w.fireOn("tome:unread", {});
+  check("a missing count is ignored", w.title, "(3) Unread — Tomekeeper");
 }
 
 // This block must stay last in the file. Cases appended after it run *after* the

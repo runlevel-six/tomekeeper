@@ -1111,6 +1111,14 @@ can reliably reproduce on a phone.
 
 ### `POST /mark-read/scrolled` — marking read on the way past
 
+Its response carries the reader's fresh unread total in `HX-Trigger`, as
+`{"tome:unread":{"count":N}}`. The count is shown in four places — the document
+title, the nav badge, the tab bar badge, and the installed app's icon — and all four
+were rendered at page load, so reading by scrolling used to leave every one of them
+wrong until the next navigation. A header rather than another swapped fragment
+because the number has four destinations and no single element to swap, and because
+`script-src` is `'self'` so nothing inline can carry it.
+
 The only place in this interface where reading state changes without anybody
 pressing anything, which is why it is off until a reader turns it on in
 [Settings](#web-interface) and why the rules around it are narrow.

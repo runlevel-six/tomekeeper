@@ -41,6 +41,51 @@
     navigator.setAppBadge(count).catch(function () {});
   }
 
+  // applyUnread puts one authoritative count everywhere it is shown.
+  //
+  // Four places: the document title, the nav badge, the tab bar badge, and the app
+  // icon. All four were rendered at page load and then left to drift while somebody
+  // read — and a badge fixed on its own would have disagreed with the numbers beside
+  // it, which reads as a broken count rather than as a stale page.
+  //
+  // The number comes from the server, in the HX-Trigger header on a scrolled-mark
+  // response, so this is not client-side arithmetic that can drift from the truth.
+  function applyUnread(count) {
+    if (typeof count !== "number" || count < 0) return;
+
+    document.body.setAttribute("data-unread", String(count));
+
+    // The two visible badges. Removed rather than shown as zero: the markup omits
+    // them entirely at zero, and a "0" beside a section name is noise.
+    document.querySelectorAll(".chrome .badge.count, .tabbar .badge.count").forEach(function (el) {
+      if (count > 0) {
+        el.textContent = String(count);
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    });
+
+    // The title carries it as a prefix, which is what an installed app shows in a
+    // task switcher. Rewritten rather than rebuilt, so the page's own title — which
+    // this script does not know — survives.
+    document.title = document.title.replace(/^\(\d+\)\s*/, "");
+    if (count > 0) document.title = "(" + count + ") " + document.title;
+
+    badge();
+  }
+
+  document.body.addEventListener("tome:unread", function (event) {
+    if (event.detail) applyUnread(event.detail.count);
+  });
+
+  // Re-asserted when the app comes back to the foreground. The platform may have
+  // cleared the icon while it was away, and nothing else would put it back until the
+  // next navigation.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") badge();
+  });
+
   badge();
 
   // Follows a link the page has already drawn, so a keyboard shortcut can never

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,6 +94,27 @@ func (s *Server) handleMarkScrolledRead(w http.ResponseWriter, r *http.Request) 
 	// log line per batch would bury everything else. The count is what would matter
 	// if this were ever suspected of marking more than it should.
 	s.log.Debug("marked scrolled articles read", "asked", len(ids), "marked", len(marked))
+
+	// The fresh total, carried in a header rather than as another swapped fragment.
+	//
+	// The count appears in four places — the document title, the nav badge, the tab
+	// bar badge, and the app icon — and every one of them was rendered at page load
+	// and then left to drift while somebody read. Sending the number and letting the
+	// page apply it everywhere keeps them from disagreeing with each other, which is
+	// worse than all four being equally stale: two numbers on one screen that do not
+	// match reads as a bug in the count rather than as a page that is out of date.
+	//
+	// HX-Trigger because htmx already parses it into an event, so this needs no new
+	// element ids and no inline script — style-src and script-src are both 'self'.
+	//
+	// A failure costs the update and not the request: the rows were marked, and the
+	// numbers correct themselves on the next page load as they always did.
+	if counts, err := s.store.UnreadCountsFor(r.Context(), userID); err != nil {
+		s.log.Warn("counting unread after a scrolled mark failed", "error", err)
+	} else {
+		w.Header().Set("HX-Trigger",
+			fmt.Sprintf(`{"tome:unread":{"count":%d}}`, counts.Total))
+	}
 
 	items := make([]any, 0, len(marked))
 	for _, m := range marked {
