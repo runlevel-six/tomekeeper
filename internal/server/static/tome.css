@@ -116,7 +116,7 @@
   --rule: #ddd8cc;
   --accent: #7a4b2a;
   --error: #8a2b20;
-  --measure: 34rem;
+  --measure: calc(34rem * var(--layout));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -149,6 +149,21 @@
    The steps are deliberately far enough apart to be seen. A setting whose effect
    a reader has to look for twice is a setting that appears broken. */
 :root { --text-scale: 1; }
+
+/* Layout widths do not move with the text size.
+   
+   Asked for after using it: the maintainer preferred the column the largest step
+   produced and wanted that width at every step. So the widths are pinned to the
+   *widest* step's value and then divided back out by whatever scale is in force —
+   `rem` already carries the scale, so dividing by it leaves a width that depends
+   on the reader's browser font size but not on their chosen text size.
+   
+   That reverses the reasoning this started with, which was to keep about 68
+   characters per line by letting the column grow with the type. It does not: at
+   the largest step the measure is nearer 52 characters. Choosing a stable layout
+   over a stable measure is a preference, and it is theirs — the point of noting it
+   is that a future change to these numbers should know it was deliberate. */
+:root { --layout: calc(1.32 / var(--text-scale, 1)); }
 :root[data-text="smaller"] { --text-scale: 0.92; }
 :root[data-text="larger"] { --text-scale: 1.15; }
 :root[data-text="largest"] { --text-scale: 1.32; }
@@ -311,7 +326,7 @@ a:focus-visible {
 h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
 h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 
-.stream, .search, .feeds, .attention, .reader { max-width: 46rem; margin: 0 auto; }
+.stream, .search, .feeds, .attention, .reader { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
 
 .badge {
   display: inline-block;
@@ -549,7 +564,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 .refresh { margin-bottom: 1rem; }
 
 /* The category index. */
-.categories { max-width: 46rem; margin: 0 auto; }
+.categories { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
 .category-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
 .category-list li {
   display: flex;
@@ -575,7 +590,7 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 }
 
 .hint {
-  max-width: 46rem;
+  max-width: calc(46rem * var(--layout));
   margin: 1.5rem auto 0;
   font-family: var(--font-ui);
   font-size: 0.8rem;
@@ -620,7 +635,7 @@ kbd {
    every viewport width and at every text-size step instead of the body growing away
    from its own captions. */
 .reader {
-  max-width: 44rem;
+  max-width: calc(44rem * var(--layout));
   --reader-body: clamp(1.0625rem, 1rem + 0.35vw, 1.3rem);
   --reader-support: calc(var(--reader-body) * 0.8);
 }
@@ -922,7 +937,7 @@ kbd {
 /* Domain rules: a table of overrides and the form that writes one. Wider than the
    reading measure because a selector is long and wrapping one mid-token makes it
    unreadable. */
-.rules { max-width: 52rem; margin: 0 auto; }
+.rules { max-width: calc(52rem * var(--layout)); margin: 0 auto; }
 .rules .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
 
 .rule-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
@@ -1004,7 +1019,7 @@ kbd {
 /* Importing a library, below the reading list it adds to. Constrained like the
    list itself rather than inheriting main's full width. */
 .import-library {
-  max-width: 46rem;
+  max-width: calc(46rem * var(--layout));
   margin: 2.5rem auto 0;
   padding-top: 1.5rem;
   border-top: 1px solid var(--rule);
@@ -1277,7 +1292,7 @@ kbd {
 }
 
 /* Settings. */
-.settings { max-width: 46rem; margin: 0 auto; }
+.settings { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
 .settings fieldset {
   border: 0;
   border-top: 1px solid var(--rule);

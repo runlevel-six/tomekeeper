@@ -47,10 +47,10 @@ Nothing yet.
 
   It scales the **root** font size as a percentage, so one number moves every view
   and it multiplies whatever font size the browser is already set to instead of
-  replacing it. Column widths are in `rem` as well, so about 68 characters per line
-  survives a size change rather than the text growing into a column that stayed put.
-  Archived standalone pages keep their own typography, as they must — they have to
-  open with none of this running.
+  replacing it. **Layout widths stay put** — they are pinned to the widest step's
+  value, so changing the text size changes the text and nothing else. Archived
+  standalone pages keep their own typography, as they must: they have to open with
+  none of this running.
 
 ### Fixed
 

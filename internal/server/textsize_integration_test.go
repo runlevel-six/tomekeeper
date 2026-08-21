@@ -184,3 +184,43 @@ func readStylesheet(t *testing.T) string {
 	}
 	return string(b)
 }
+
+// Layout widths must not move with the text size. Asserted because the failure is
+// invisible here — no browser computes CSS in this suite — and because the natural
+// thing to write is a plain rem width, which is exactly what this replaced.
+//
+// The reasoning is the maintainer's, after using it: they preferred the column the
+// largest step produced and wanted it at every step. It reverses the "keep 68
+// characters per line" reasoning the feature started with, so a later reader of
+// this stylesheet needs to know the current behavior is chosen rather than
+// accidental.
+func TestLayoutWidthsDoNotMoveWithTheTextSize(t *testing.T) {
+	css := readStylesheet(t)
+
+	if !strings.Contains(css, "--layout: calc(1.32 / var(--text-scale, 1))") {
+		t.Error("the layout factor that cancels the text scale is missing")
+	}
+
+	// Breakpoints are exempt and must be, so their conditions come out before the
+	// scan: `rem` inside a media query resolves against the browser's initial font
+	// size rather than the root element's, so a text size cannot move one. A first
+	// version of this check flagged `@media (max-width: 34rem)` and would have
+	// pushed someone into "fixing" a value that was already stable.
+	inRules := regexp.MustCompile(`@media[^{]*`).ReplaceAllString(css, "")
+
+	// Every page container, and the shared measure. A bare rem here is a width that
+	// grows with the type again.
+	bare := regexp.MustCompile(`max-width:\s*\d+(\.\d+)?rem`)
+	for _, m := range bare.FindAllString(inRules, -1) {
+		// The sign-in box is deliberately excluded: nobody is signed in there, so
+		// there is no chosen size for it to honor.
+		if strings.Contains(m, "22rem") || strings.Contains(m, "17rem") {
+			continue
+		}
+		t.Errorf("a container width is in bare rem, so it grows with the text: %s", m)
+	}
+
+	if !strings.Contains(css, "--measure: calc(34rem * var(--layout))") {
+		t.Error("the shared measure still scales with the text size")
+	}
+}

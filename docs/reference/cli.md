@@ -990,10 +990,22 @@ somebody who has already started reading it.
 It is a ratio of the **root font size**, expressed as a percentage — so it
 multiplies whatever font size the browser is already set to rather than replacing
 it. Every size in the stylesheet is in `rem`, or in `em` off something that is, so
-one number moves every view: titles, bodies, list rows, labels, and the column
-widths. The widths matter: `--measure` and the article's `max-width` are in `rem`
-too, so roughly 68 characters per line survives a size change instead of the text
-growing into a column that stayed put.
+one number moves every view: titles, bodies, list rows and labels.
+
+**Layout widths deliberately do not move.** They are pinned to the widest step's
+value and divided back out by whatever scale is in force, so a column depends on
+the reader's browser font size but not on their chosen text size — change the text
+size and the text changes, nothing else. That is a preference, chosen after using
+it, and it is worth writing down what it costs: the measure is no longer constant,
+so the largest step gives nearer 52 characters per line than 68. A stable layout
+was preferred to a stable measure.
+
+The sign-in page's box is the exception, and keeps hugging its content: nobody is
+signed in there, so there is no chosen size to honor in the first place.
+
+Breakpoints need no such treatment. `rem` inside a media query resolves against the
+browser's initial font size rather than the root element's, so a text size cannot
+move a breakpoint.
 
 Archived standalone pages are unaffected. They carry their own inline stylesheet and
 link to nothing, because they have to open on a machine with none of this running.
