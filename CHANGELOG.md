@@ -32,7 +32,35 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+Draining the extraction tail: seven domain rules, one rung that could not see short
+slugs, and a queue that would not empty when you fixed it. **Adds a migration.**
+
+### Extraction version 6
+
+A slug too short to match as a substring is now matched against an image's whole
+file name rather than discarded. The four-character floor was standing in for "is
+this claim strong enough to trust", and an exact file name is a strong claim at any
+length — so the rung written for image-only pages could not reach a strip at
+`/2025/10x` named `10x.png`. Ten of them on a real archive, on a site where the
+file name is always the slug.
+
+Run `tome reextract` once after upgrading.
+
+### Fixed
+
+- **An article rescued from a page already on disk no longer stays in the attention
+  queue forever.** An extraction that produces nothing is recorded as a *fetch*
+  failure, and nothing ever took that back once a domain rule found the body. On a
+  real archive, 409 articles with a good current body were still listed as failed,
+  314 of them extracted by a rule. A queue that does not empty when you fix things
+  is a queue people stop reading. The failure is now retired whenever an extraction
+  becomes an article's current body and a stored page proves the fetch itself
+  worked; an imported body whose page fetch genuinely failed keeps its failure,
+  because the archive really is missing that page. Migration `00010` does the same
+  correction once for everything extracted before this.
+- **`tome explain` no longer reports a rule that matched something too short as a
+  rule that matched nothing.** Those want opposite remedies — the page's markup
+  versus the length floor — and the explanation sent every rejection to the first.
 
 ## [v0.5.0] — 2026-08-21
 
