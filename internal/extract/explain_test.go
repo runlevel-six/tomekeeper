@@ -184,3 +184,50 @@ func TestExplainWithNoStoredPage(t *testing.T) {
 		t.Error("nothing in the explanation said there was no stored page")
 	}
 }
+
+// A rejected rule has two failure modes and they want opposite remedies: a
+// selector that matches nothing is wrong about the page's markup, while one that
+// matches something too short is right about the markup and wrong about the
+// floor. The explanation has to tell them apart, because it is the only thing
+// standing between the rule's author and reading the page's HTML by hand.
+//
+// Both halves are asserted together deliberately: the bug this covers was a
+// short selection being reported with the no-match wording, which is invisible
+// unless the two are compared.
+func TestExplainSeparatesAWrongSelectorFromAShortOne(t *testing.T) {
+	const page = `<html><body>
+	  <div id="real"><p>Subscribe to read.</p></div>
+	  <div id="rest"><p>` + `Text elsewhere on the page. ` + `</p></div>
+	</body></html>`
+
+	whyFor := func(selector string) string {
+		_, steps, _ := extract.New().Explain(extract.Input{
+			RawHTML: []byte(page),
+			URL:     "https://example.com/2026/post",
+			Rule:    &extract.Rule{ContentSelector: selector},
+		})
+		for _, s := range steps {
+			if s.Rung == extract.NameDomainRule {
+				return s.Why
+			}
+		}
+		t.Fatalf("no domain-rule step reported for selector %q", selector)
+		return ""
+	}
+
+	missing := whyFor("#absent")
+	if !strings.Contains(missing, "matched nothing") {
+		t.Errorf("a selector matching no element is explained as %q", missing)
+	}
+
+	short := whyFor("#real")
+	if strings.Contains(short, "matched nothing") {
+		t.Errorf("a selector that matched a short element is explained as a non-match: %q", short)
+	}
+	if !strings.Contains(short, "floor") {
+		t.Errorf("the short-selection explanation does not name the floor: %q", short)
+	}
+	if !strings.Contains(short, "18") {
+		t.Errorf("the short-selection explanation does not say how short it was: %q", short)
+	}
+}

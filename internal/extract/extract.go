@@ -54,7 +54,14 @@ import (
 // title as well as after its URL, and a thin body loses to those images unless it
 // already holds one of them. Every webcomic whose article URLs are bare numbers was
 // stored as its own footer until this — see orThePageImagesIfTextless.
-const Version = "5"
+//
+// Version 6 (2026-08-21): a slug too short to match as a substring is now matched
+// against an image's whole file name instead of being discarded. The length guard
+// was standing in for "is this claim strong enough to trust", and an exact file
+// name is a strong claim at any length — so the rung written for image-only pages
+// could not reach a strip at /2025/10x named 10x.png. Ten of them on a real
+// archive, on a site where the file name is always the slug.
+const Version = "6"
 
 // Extractor names recorded on content rows.
 const (
@@ -524,11 +531,18 @@ func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {
 	//
 	// Safe because a rule is not a heuristic: nothing selects this element
 	// except someone who chose it.
+	result := e.finish(NameDomainRule, body, text, pageURL, docMetadata(doc))
+
 	if len(text) < minChars && !hasImage(body) {
-		return Result{}, false
+		// Returned rather than discarded, so the explanation can say how short
+		// the selection was. "Your selector matched nothing" and "your selector
+		// matched something too short" send the rule's author to opposite
+		// places — the first to the page's markup, the second to the floor —
+		// and a zero result made every rejection look like the first.
+		return result, false
 	}
 
-	return e.finish(NameDomainRule, body, text, pageURL, docMetadata(doc)), true
+	return result, true
 }
 
 func (e *Extractor) viaTrafilatura(in Input, pageURL *url.URL, visible int) (Result, bool) {

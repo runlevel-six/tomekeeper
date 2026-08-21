@@ -10,10 +10,14 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// minSlugLength is the shortest article slug worth matching image URLs against.
+// minSlugLength is the shortest article slug worth matching as a *substring* of
+// an image URL.
 //
-// A two-character slug would match half the images on a page by coincidence, and
-// the precision of this whole rung rests on the match meaning something.
+// A two-character slug would appear inside half the images on a page by
+// coincidence, and the precision of this whole rung rests on the match meaning
+// something. Shorter slugs are not discarded — they are held to an exact file
+// name instead, which is a claim coincidence does not make. See
+// namesTheArticle.
 const minSlugLength = 4
 
 // maxPageImages caps how many images one page may contribute.
@@ -67,9 +71,6 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 	meta := docMetadata(doc)
 
 	slug := articleSlug(pageURL)
-	if len(slug) < minSlugLength {
-		slug = ""
-	}
 	titles := titleSlugs(meta.Title)
 	if slug == "" && len(titles) == 0 {
 		return Result{}, false
@@ -162,17 +163,32 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 // namesTheArticle reports whether an image is this article's content rather than
 // the furniture around it.
 //
-// Either signal is enough. The slug match is a substring, because a site appends a
-// hash or a panel number to the name it derived from the URL. The title match is
-// exact, because the title is not part of the address and a substring of it would
-// be a coincidence: a page called "Fifteen Years" is not evidence about an image
-// called `fifteen.png`.
+// Either signal is enough. A slug long enough to be distinctive matches as a
+// substring, because a site appends a hash or a panel number to the name it
+// derived from the URL. The title match is exact, because the title is not part
+// of the address and a substring of it would be a coincidence: a page called
+// "Fifteen Years" is not evidence about an image called `fifteen.png`.
+//
+// A short slug is held to the same exact standard rather than thrown away, which
+// it used to be. "10x" appearing somewhere inside an image's URL means nothing,
+// but an image *named* `10x.png` on the article at `/2025/10x` is not a
+// coincidence — and the strength of the claim is what the length guard was really
+// protecting, not the length itself. Ten MonkeyUser strips sat unreachable
+// because their slugs were three characters, on a site where the file name is
+// always the slug; the rung written for exactly those pages could not see them.
 func namesTheArticle(resolved, slug string, titles []string) bool {
-	if slug != "" && strings.Contains(strings.ToLower(resolved), slug) {
-		return true
+	name := imageSlug(resolved)
+
+	if slug != "" {
+		if len(slug) >= minSlugLength {
+			if strings.Contains(strings.ToLower(resolved), slug) {
+				return true
+			}
+		} else if name == slug {
+			return true
+		}
 	}
 
-	name := imageSlug(resolved)
 	if name == "" {
 		return false
 	}
@@ -197,7 +213,10 @@ func titleSlugs(title string) []string {
 	var out []string
 	add := func(s string) {
 		s = slugify(s)
-		if len(s) < minSlugLength {
+		// No length floor here: this comparison is already exact, which is the
+		// property that makes a short name safe to trust. A title of "Err" and a
+		// file called `err.png` are the same claim as a long one.
+		if s == "" {
 			return
 		}
 		for _, have := range out {

@@ -280,3 +280,53 @@ func TestADomainRuleStillNeedsTextWhenThereIsNoImage(t *testing.T) {
 		t.Errorf("a two-sentence imageless selection was accepted as an article:\n%s", r.HTML)
 	}
 }
+
+// A slug shorter than the substring floor is still evidence when it is the image's
+// whole file name. The rung exists for image-only pages, and a webcomic titled
+// "10x" is exactly such a page.
+func TestAShortSlugMatchesAWholeFileName(t *testing.T) {
+	const page = `<html><head><title>10x | Monkeyuser</title></head><body>
+	  <header><img src="/images/logo.png" alt="Site"></header>
+	  <div class="comic"><img src="/2025/10x/10x.png" alt="10x" title="Wouldn't a backup of a backup be redundant?"></div>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://www.monkeyuser.com/2025/10x",
+	})
+	if err != nil {
+		t.Fatalf("Extract() = %v", err)
+	}
+	if r.Name != extract.NamePageImages {
+		t.Fatalf("extractor = %q, want %q", r.Name, extract.NamePageImages)
+	}
+	if !strings.Contains(r.HTML, "10x.png") {
+		t.Errorf("the strip is not in the body:\n%s", r.HTML)
+	}
+	if strings.Contains(r.HTML, "logo.png") {
+		t.Errorf("the site logo was taken as content:\n%s", r.HTML)
+	}
+	// The hover text is where the joke is, and it is the reason this rung has to
+	// be the one that reaches these pages rather than a domain rule.
+	if !strings.Contains(r.HTML, "redundant") {
+		t.Errorf("the hover text did not survive as a caption:\n%s", r.HTML)
+	}
+}
+
+// The other half of relaxing the floor: a short slug must not match by appearing
+// somewhere inside an unrelated URL, which is the coincidence the floor was there
+// to prevent. Only the whole file name counts.
+func TestAShortSlugDoesNotMatchASubstring(t *testing.T) {
+	const page = `<html><head><title>Untitled</title></head><body>
+	  <div><img src="/assets/10x-sprite-sheet.png" alt="chrome"></div>
+	  <div><img src="/banners/ad-10x-wide.png" alt="ad"></div>
+	</body></html>`
+
+	r, err := extract.New().Extract(extract.Input{
+		RawHTML: []byte(page),
+		URL:     "https://example.com/2025/10x",
+	})
+	if err == nil && r.Name == extract.NamePageImages {
+		t.Errorf("a short slug pulled in images that merely contain it:\n%s", r.HTML)
+	}
+}
