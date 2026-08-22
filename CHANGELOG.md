@@ -32,7 +32,22 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- `tome refetch` reported "Queued 8 fetchs". `plural` appended a bare `-s`, which is
+  wrong after a sibilant, so the helper now takes `-es` after ch, sh, s, x and z.
+
+### Changed
+
+- **stackoverflow.blog is no longer marked as needing a headless render.** The flag was
+  true of the posts that motivated it — a direct fetch of them measures 2,432 and 2,745
+  visible characters against posts thousands of words long — but the browser cannot
+  reach them either: rendering lands on the site's cookie consent gate, so the captured
+  DOM carries the consent dialog and readability lifts *that* as the body. The result
+  was a confident 410-word article that was a cookie notice, which also took the
+  article out of the failed-fetch queue. A visibly bodyless article is the better
+  failure. The rule's notes carry the measurements and what would let it be turned back
+  on: a renderer that dismisses the consent gate, or waits for the article to hydrate.
 
 ## [v0.14.0] — 2026-08-21
 

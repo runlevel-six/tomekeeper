@@ -228,9 +228,18 @@ func printImportReport(w io.Writer, r exchange.Report, dryRun bool) {
 }
 
 // plural is a count with its noun, so a report does not say "1 images".
+//
+// The sibilant cases take -es, which is not decoration: `tome refetch` shipped saying
+// "Queued 8 fetchs" because a bare -s is wrong after ch, sh, s, x and z. Anything
+// irregular should be written out at the call site rather than guessed at here.
 func plural(n int, unit string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, unit)
+	}
+	for _, ending := range []string{"ch", "sh", "s", "x", "z"} {
+		if strings.HasSuffix(unit, ending) {
+			return fmt.Sprintf("%d %ses", n, unit)
+		}
 	}
 	return fmt.Sprintf("%d %ss", n, unit)
 }

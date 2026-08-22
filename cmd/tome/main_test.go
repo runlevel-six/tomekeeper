@@ -241,3 +241,26 @@ func TestRefetchRejectsBadInvocations(t *testing.T) {
 		})
 	}
 }
+
+// "Queued 8 fetchs" shipped in v0.14.0's refetch output, which is what this is here
+// to stop recurring: a bare -s is wrong after a sibilant.
+func TestPluralHandlesSibilants(t *testing.T) {
+	for _, tc := range []struct {
+		n    int
+		unit string
+		want string
+	}{
+		{1, "fetch", "1 fetch"},
+		{8, "fetch", "8 fetches"},
+		{2, "page", "2 pages"},
+		{1, "page", "1 page"},
+		{0, "feed", "0 feeds"},
+		{3, "dish", "3 dishes"},
+		{2, "box", "2 boxes"},
+		{5, "class", "5 classes"},
+	} {
+		if got := plural(tc.n, tc.unit); got != tc.want {
+			t.Errorf("plural(%d, %q) = %q, want %q", tc.n, tc.unit, got, tc.want)
+		}
+	}
+}
