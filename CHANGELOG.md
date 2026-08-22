@@ -32,7 +32,16 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A precision figure in v0.15.0's notes was wrong.** They said the title lens flags
+  seven bodies on this archive and "about three are real". That was inferred from word
+  counts and domains rather than read; reading all seven refuted it — not one is a body
+  extraction got wrong. Two are artifacts of the URL-title bug fixed in the same release,
+  and the rest are two podcast episode pages, a link roundup, a digest in Russian, and a
+  store homepage with no article in it. The corrected numbers argue the same conclusion
+  harder: as a rejection rung the lens would have discarded a 16,249-word body and five
+  legitimate ones to catch nothing.
 
 ## [v0.15.0] — 2026-08-22
 

@@ -17,11 +17,19 @@ import (
 // queue. Nothing in the ladder could have known: the thresholds it enforces are
 // length and share-of-page, and a consent dialog passes both comfortably.
 //
-// **None of these is a gate, and that is deliberate.** Measured against a real archive
-// of 2,211 bodies, the title lens flags 7 and about three of them are real — it would
-// reject a 16,249-word body because that article's title was percent-encoded. A check
-// with a third of the precision it needs is worse than no check when its action is to
-// throw a body away. So they report, and a person decides.
+// **None of these is a gate, and that is deliberate.** Checked item by item against a
+// real archive of 2,211 bodies, the title lens flags seven and **not one of them is a
+// body extraction got wrong**: two are artifacts of the URL-title bug, and the rest are
+// two podcast episode pages, a link roundup, a digest in Russian, and a store homepage
+// with no article in it to find. As a rejection rung it would have discarded a
+// 16,249-word body and five legitimate ones to catch nothing.
+//
+// That is not a case against the lens — the failure it exists for is real and cost a
+// day — but it is decisive about what the lens may do. It reports, and a person decides.
+//
+// (An earlier estimate here said "about three are real". That was inferred from word
+// counts and domains rather than read, and reading them refuted it. A 111-word body on
+// a domain known to serve shells turned out to be a podcast episode description.)
 //
 // Read-only. Nothing here writes.
 

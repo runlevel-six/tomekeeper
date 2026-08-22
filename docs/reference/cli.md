@@ -533,10 +533,12 @@ Three lenses:
 | One body across several articles | The same wall stored as content for more than one article | A story reposted, a page mirrored on two hosts |
 | Titles that are URLs | An import whose source had no title kept the address as one | — |
 
-**None of them is a gate, deliberately.** Measured over 2,211 bodies, the title lens
-flags seven and about three are real — it would reject a 16,249-word body because that
-article's title was percent-encoded. A check with a third of the precision it needs is
-worse than nothing when its action is to throw a body away. So it prints, and you decide.
+**None of them is a gate, deliberately.** Checked item by item over 2,211 bodies, the
+title lens flags seven and **not one is a body extraction got wrong** — two are artifacts
+of the URL-title bug, and the rest are two podcast episode pages, a link roundup, a digest
+in Russian, and a store homepage with no article in it. As a rejection rung it would have
+discarded a 16,249-word body and five legitimate ones to catch nothing. So it prints, and
+you decide.
 
 The first lens looks only at the `trafilatura` and `readability` rungs, which choose a
 block of a page and can choose the wrong one. A `domain_rule` body cannot wander, and a
