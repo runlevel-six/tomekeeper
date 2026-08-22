@@ -36,10 +36,39 @@ type settingsPage struct {
 	// Export describes the download offered here, or is nil when the archive could
 	// not be counted.
 	Export *exportSummary
+
+	// ConfirmSignOut asks before ending every session.
+	//
+	// A two-step confirmation rather than a button that acts, like the bulk mark
+	// and unsubscribe: the content security policy has no unsafe-inline, so there
+	// is no JavaScript dialog available, and this is an action whose effect is
+	// mostly on devices the reader is not looking at.
+	ConfirmSignOut bool
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	s.renderSettings(w, r, http.StatusOK, false, "")
+}
+
+// handleSignOutEverywhere revokes every session this reader has, including the one
+// making the request.
+//
+// Bumping the epoch is what does it; clearing the cookie afterwards is a courtesy
+// so this browser goes straight to the sign-in page instead of presenting a
+// credential that will now be refused.
+func (s *Server) handleSignOutEverywhere(w http.ResponseWriter, r *http.Request) {
+	userID := signedInUser(r)
+
+	if _, err := s.store.System().BumpSessionEpoch(r.Context(), userID); err != nil {
+		s.log.Error("signing out everywhere failed", "user_id", userID, "error", err)
+		s.renderSettings(w, r, http.StatusInternalServerError, false,
+			"Those sessions could not be ended. The log will say why, and nothing changed.")
+		return
+	}
+
+	s.log.Info("signed out everywhere", "user_id", userID)
+	s.sessions.Clear(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // handleSaveSettings stores a changed preference.
@@ -121,6 +150,8 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 		Problem:   problem,
 		Export:    s.exportSummaryFor(r),
 		PollFloor: s.pollFloorLabel(),
+
+		ConfirmSignOut: r.URL.Query().Get("signout") == "all",
 	}
 	page.Palette, page.Mode = store.SplitTheme(page.Theme)
 

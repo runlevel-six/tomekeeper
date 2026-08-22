@@ -1,16 +1,55 @@
 package session_test
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/hkdf"
+
 	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
+
+// sealWith encrypts an arbitrary payload the way the package does, so a test can
+// build a credential that is genuinely authentic and deliberately the wrong
+// shape. Nothing else can produce one: a hand-written cookie fails at the AEAD,
+// which would prove the tampering check rather than the property under test.
+//
+// This duplicates the key derivation on purpose. If that derivation ever changes,
+// this stops matching and the test fails loudly, which is the correct outcome for
+// a test whose whole subject is the credential format.
+func sealWith(t *testing.T, secret string, payload []byte) string {
+	t.Helper()
+
+	key := make([]byte, session.KeyLength)
+	if _, err := io.ReadFull(hkdf.New(sha256.New, []byte(secret), nil, []byte("tomekeeper session v1")), key); err != nil {
+		t.Fatalf("deriving the test key: %v", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("aes.NewCipher() = %v", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("cipher.NewGCM() = %v", err)
+	}
+
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatalf("generating a nonce: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(append(nonce, aead.Seal(nil, nonce, payload, nil)...))
+}
 
 func newCookieStore(t *testing.T, secret string, ttl time.Duration) *session.Cookie {
 	t.Helper()
@@ -28,7 +67,7 @@ func issue(t *testing.T, c *session.Cookie, userID store.UserID) *http.Request {
 	t.Helper()
 
 	rec := httptest.NewRecorder()
-	if err := c.Issue(rec, userID); err != nil {
+	if err := c.Issue(rec, session.Identity{UserID: userID}); err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
 
@@ -46,8 +85,8 @@ func TestIssueThenIdentify(t *testing.T) {
 	if !ok {
 		t.Fatal("Identify() = false for a session just issued")
 	}
-	if got != 42 {
-		t.Errorf("Identify() = %d, want 42", got)
+	if got.UserID != 42 {
+		t.Errorf("Identify() = %d, want 42", got.UserID)
 	}
 }
 
@@ -65,7 +104,7 @@ func TestCookieAttributes(t *testing.T) {
 	c := newCookieStore(t, "secret", session.DefaultTTL)
 
 	rec := httptest.NewRecorder()
-	if err := c.Issue(rec, 1); err != nil {
+	if err := c.Issue(rec, session.Identity{UserID: 1}); err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
 
@@ -108,7 +147,7 @@ func TestSecureCanBeDisabled(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	if err := c.Issue(rec, 1); err != nil {
+	if err := c.Issue(rec, session.Identity{UserID: 1}); err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
 	if rec.Result().Cookies()[0].Secure {
@@ -122,7 +161,7 @@ func TestTamperedCookieIsRejected(t *testing.T) {
 	c := newCookieStore(t, "secret", session.DefaultTTL)
 
 	rec := httptest.NewRecorder()
-	if err := c.Issue(rec, 7); err != nil {
+	if err := c.Issue(rec, session.Identity{UserID: 7}); err != nil {
 		t.Fatalf("Issue() = %v", err)
 	}
 	original := rec.Result().Cookies()[0].Value
@@ -162,7 +201,7 @@ func TestTamperedCookieIsRejected(t *testing.T) {
 			req.AddCookie(&http.Cookie{Name: session.CookieName, Value: value})
 
 			if id, ok := c.Identify(req); ok {
-				t.Errorf("Identify() accepted a %s cookie as user %d", name, id)
+				t.Errorf("Identify() accepted a %s cookie as user %d", name, id.UserID)
 			}
 		})
 	}
@@ -176,7 +215,7 @@ func TestCookieFromAnotherKeyIsRejected(t *testing.T) {
 	theirs := newCookieStore(t, "their secret", session.DefaultTTL)
 
 	if id, ok := mine.Identify(issue(t, theirs, 9)); ok {
-		t.Errorf("Identify() accepted a cookie sealed with a different key, as user %d", id)
+		t.Errorf("Identify() accepted a cookie sealed with a different key, as user %d", id.UserID)
 	}
 }
 
@@ -193,7 +232,7 @@ func TestExpiredSessionIsRejected(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 
 	if id, ok := c.Identify(req); ok {
-		t.Errorf("Identify() accepted an expired session as user %d", id)
+		t.Errorf("Identify() accepted an expired session as user %d", id.UserID)
 	}
 }
 
@@ -220,7 +259,7 @@ func TestClearRevokesTheCookie(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	req.AddCookie(ck)
 	if id, ok := c.Identify(req); ok {
-		t.Errorf("Identify() accepted a cleared cookie as user %d", id)
+		t.Errorf("Identify() accepted a cleared cookie as user %d", id.UserID)
 	}
 }
 
@@ -228,7 +267,7 @@ func TestIssueRefusesInvalidUsers(t *testing.T) {
 	c := newCookieStore(t, "secret", session.DefaultTTL)
 
 	for _, id := range []store.UserID{0, -1} {
-		if err := c.Issue(httptest.NewRecorder(), id); err == nil {
+		if err := c.Issue(httptest.NewRecorder(), session.Identity{UserID: id}); err == nil {
 			t.Errorf("Issue() accepted user id %d", id)
 		}
 	}
@@ -272,7 +311,7 @@ func TestNonceIsNotReused(t *testing.T) {
 	seen := make(map[string]bool, 32)
 	for range 32 {
 		rec := httptest.NewRecorder()
-		if err := c.Issue(rec, 1); err != nil {
+		if err := c.Issue(rec, session.Identity{UserID: 1}); err != nil {
 			t.Fatalf("Issue() = %v", err)
 		}
 		value := rec.Result().Cookies()[0].Value
@@ -280,5 +319,74 @@ func TestNonceIsNotReused(t *testing.T) {
 			t.Fatalf("Issue() produced a repeated cookie value, so the GCM nonce is being reused")
 		}
 		seen[value] = true
+	}
+}
+
+// The epoch is what makes a cookie revocable, so it has to survive the round trip
+// intact — a credential that always reported epoch 0 would be accepted forever by
+// a caller comparing it against a user who had never been revoked, and refused
+// forever after the first revocation.
+func TestTheEpochSurvivesTheRoundTrip(t *testing.T) {
+	c := newCookieStore(t, "a reasonably long random secret", session.DefaultTTL)
+
+	for _, epoch := range []int64{0, 1, 7, 1 << 40} {
+		rec := httptest.NewRecorder()
+		if err := c.Issue(rec, session.Identity{UserID: 42, Epoch: epoch}); err != nil {
+			t.Fatalf("Issue(epoch %d) = %v", epoch, err)
+		}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+		for _, ck := range rec.Result().Cookies() {
+			req.AddCookie(ck)
+		}
+
+		got, ok := c.Identify(req)
+		if !ok {
+			t.Fatalf("Identify() = false for a session just issued with epoch %d", epoch)
+		}
+		if got.Epoch != epoch {
+			t.Errorf("Identify() epoch = %d, want %d", got.Epoch, epoch)
+		}
+		if got.UserID != 42 {
+			t.Errorf("Identify() user = %d, want 42", got.UserID)
+		}
+	}
+}
+
+func TestIssueRefusesANegativeEpoch(t *testing.T) {
+	c := newCookieStore(t, "secret", session.DefaultTTL)
+
+	if err := c.Issue(httptest.NewRecorder(), session.Identity{UserID: 1, Epoch: -1}); err == nil {
+		t.Error("Issue() accepted a negative epoch, which would seal as an enormous unsigned value")
+	}
+}
+
+// A credential in the old 16-byte format carries no epoch, and there is no
+// honest value to assume for one: treating it as 0 would accept precisely the
+// credentials issued before anybody could revoke them. So it must fail to
+// authenticate rather than being read leniently.
+//
+// Built by sealing a 16-byte payload with this store's own key, which is what the
+// previous version of Issue did — a cookie that is authentic and the wrong shape,
+// rather than merely corrupt.
+//
+// Two checks in Identify defend this and **neither is load-bearing alone**:
+// removing either one leaves the other catching the case, so both had to be
+// neutered together to prove this test is not vacuous. With both gone it fails by
+// panicking on a slice bound rather than refusing — which is only reachable with a
+// credential sealed under this deployment's own key, so it is a robustness note
+// and not an exposure. Keep both.
+func TestACredentialFromBeforeTheEpochIsRefused(t *testing.T) {
+	const secret = "a reasonably long random secret"
+	c := newCookieStore(t, secret, session.DefaultTTL)
+
+	old := make([]byte, 16)
+	binary.BigEndian.PutUint64(old[0:8], 42)
+	binary.BigEndian.PutUint64(old[8:16], uint64(time.Now().Add(time.Hour).Unix()))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: session.CookieName, Value: sealWith(t, secret, old)})
+
+	if id, ok := c.Identify(req); ok {
+		t.Errorf("Identify() accepted a pre-epoch cookie as user %d", id.UserID)
 	}
 }

@@ -165,5 +165,30 @@
       <p class="note">The archive could not be counted just now; the log will say why.</p>
     {{end}}
   </section>
+
+  <section class="sessions">
+    <h2>Signed-in devices</h2>
+    {{if .ConfirmSignOut}}
+      <p>
+        This signs out <strong>every</strong> browser signed in as you, including this
+        one. Nothing in the archive changes, and your password still works.
+      </p>
+      <form method="post" action="/sign-out-everywhere">
+        <button type="submit" class="danger">Sign out everywhere</button>
+        <a class="cancel" href="/settings">Keep them signed in</a>
+      </form>
+    {{else}}
+      <p class="note">
+        Signing in leaves this browser signed in for thirty days. If you have signed in
+        somewhere you no longer control — a shared machine, a phone you no longer have —
+        this ends those sessions.
+      </p>
+      <p><a href="/settings?signout=all">Sign out everywhere&hellip;</a></p>
+      <p class="note">
+        Mobile clients using the API are unaffected: they hold a key derived from your
+        password, not a session. Changing your password is what disconnects those.
+      </p>
+    {{end}}
+  </section>
 </div>
 {{end}}

@@ -30,8 +30,9 @@ entity](../explanation/why-articles-are-the-root-entity.md).
 
 ### `users`
 
-The single v1 user, created by `tome migrate` from `TOME_USERNAME`. Multi-user
-is a later milestone; the schema is user-scoped from the start regardless.
+Readers, and the two things authentication needs to know about each: what they
+may change, and whether the credential in their browser is still good. The first
+account is created by `tome migrate` from `TOME_USERNAME`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -39,6 +40,8 @@ is a later milestone; the schema is user-scoped from the start regardless.
 | `username` | `text` | Unique. |
 | `password_hash` | `text` | An argon2id hash in PHC string form, written by `tome migrate` from `TOME_PASSWORD`. Empty means the web interface cannot be signed into, which is what a first run with no password set produces. The parameters live inside each hash, so raising the cost later is an upgrade rather than a lockout. |
 | `api_key` | `text` | Unique, nullable. MD5 of `username:password`, the credential [the Fever API](fever-api.md) authenticates against. It cannot be derived from `password_hash`, so it is written while the cleartext is in hand — which is why the column predated the API that now reads it. Null until a password is set, and rewritten on every change, so changing a password disconnects every mobile client. |
+| `role` | `text` | `admin` or `reader`, constrained by the database. Not about who may *read* what — reading is scoped per user by construction — but about who may change what everyone shares: domain rules, retention, the archive-wide audit, and other accounts. The account `tome migrate` seeds is an admin, since it is the operator and there is nobody to grant it anything. |
+| `session_epoch` | `bigint` | Bumped to invalidate every outstanding session for this reader at once. The value is sealed into the session cookie when it is issued and compared on every request, so a password change, an explicit sign-out-everywhere, or deleting the account all take effect immediately rather than when a cookie happens to expire. It buys revocation per reader, not per device — the trade taken instead of a sessions table, which the session interface still leaves available. |
 | `theme` | `text` | The reader's palette and light/dark preference, as one value such as `plum-dark` or `auto`. See [Themes](themes.md). |
 | `mark_read_on_scroll` | `boolean` | Whether the unread lists mark articles read as they are scrolled past. `false` unless the reader turned it on; automatic state changes are opted into, never inherited from an upgrade. |
 | `default_poll_interval` | `interval` | How often the reader wants their feeds checked. Nullable, and null is the default and a real value: it means the poller decides per feed. A feed with a `poll_interval_override` does not consult this. |

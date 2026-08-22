@@ -40,16 +40,36 @@ const DefaultTTL = 30 * 24 * time.Hour
 // KeyLength is the number of random bytes a session key should carry.
 const KeyLength = 32
 
+// Identity is what a credential asserts about the request carrying it.
+//
+// A struct rather than a pair of return values because this grew from one field
+// to two and would otherwise have changed every caller's signature again.
+type Identity struct {
+	UserID store.UserID
+
+	// Epoch is the user's session_epoch at the moment the credential was issued.
+	//
+	// This package does not know what the current epoch is and deliberately does
+	// not look: it reports what was sealed, and the caller — which has the user
+	// row anyway — decides whether that is still current. Keeping the comparison
+	// out of here is what keeps this package free of a database, which is the
+	// reason a cookie needs no query in the first place.
+	Epoch int64
+}
+
 // Store issues, reads, and clears session credentials.
 type Store interface {
-	// Issue writes a credential identifying userID.
-	Issue(w http.ResponseWriter, userID store.UserID) error
+	// Issue writes a credential asserting id.
+	Issue(w http.ResponseWriter, id Identity) error
 
-	// Identify returns the user the request is authenticated as. The boolean is
+	// Identify returns what the request's credential asserts. The boolean is
 	// false for anything not positively identified — absent, expired, tampered
 	// with, or encrypted under a different key — and callers must not
 	// distinguish those cases to the client.
-	Identify(r *http.Request) (store.UserID, bool)
+	//
+	// A true here means the credential is authentic, not that it is still valid:
+	// the epoch it carries may have been superseded. Callers must check.
+	Identify(r *http.Request) (Identity, bool)
 
 	// Clear revokes the credential in the client.
 	Clear(w http.ResponseWriter)
@@ -118,23 +138,36 @@ func NewCookie(secret []byte, ttl time.Duration, secure bool) (*Cookie, error) {
 	return &Cookie{aead: aead, ttl: ttl, secure: secure}, nil
 }
 
-// payloadLen is the plaintext: eight bytes of user id, eight of expiry.
+// payloadLen is the plaintext: eight bytes of user id, eight of expiry, eight of
+// session epoch.
 //
 // Fixed-width binary rather than JSON, so there is nothing to parse loosely and
 // no way for a decode to succeed on a payload of the wrong shape.
-const payloadLen = 16
+//
+// Widening this from 16 bytes invalidates every credential issued before it,
+// because a 16-byte plaintext now fails the length check. That is a one-time
+// sign-out for everybody on upgrade, and it is the safe direction: the
+// alternative — accepting the old shape and assuming an epoch — would accept
+// exactly the credentials the epoch exists to revoke.
+const payloadLen = 24
 
 // Issue implements Store.
-func (c *Cookie) Issue(w http.ResponseWriter, userID store.UserID) error {
-	if userID <= 0 {
-		return fmt.Errorf("refusing to issue a session for user id %d", userID)
+func (c *Cookie) Issue(w http.ResponseWriter, id Identity) error {
+	if id.UserID <= 0 {
+		return fmt.Errorf("refusing to issue a session for user id %d", id.UserID)
+	}
+	if id.Epoch < 0 {
+		return fmt.Errorf("refusing to issue a session with epoch %d", id.Epoch)
 	}
 
 	expires := time.Now().Add(c.ttl)
 
 	payload := make([]byte, payloadLen)
-	binary.BigEndian.PutUint64(payload[0:8], uint64(userID)) //nolint:gosec // refused above unless positive
-	binary.BigEndian.PutUint64(payload[8:16], uint64(expires.Unix()))
+	binary.BigEndian.PutUint64(payload[0:8], uint64(id.UserID)) //nolint:gosec // refused above unless positive
+	// expires is now plus a positive ttl, so this is negative only on a clock set
+	// before 1970 — at which point every session is expired anyway.
+	binary.BigEndian.PutUint64(payload[8:16], uint64(expires.Unix())) //nolint:gosec // positive for any clock this side of the epoch
+	binary.BigEndian.PutUint64(payload[16:24], uint64(id.Epoch))      //nolint:gosec // refused above unless non-negative
 
 	nonce := make([]byte, c.aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
@@ -164,47 +197,51 @@ func (c *Cookie) Issue(w http.ResponseWriter, userID store.UserID) error {
 }
 
 // Identify implements Store.
-func (c *Cookie) Identify(r *http.Request) (store.UserID, bool) {
+func (c *Cookie) Identify(r *http.Request) (Identity, bool) {
 	cookie, err := r.Cookie(CookieName)
 	if err != nil {
-		return 0, false
+		return Identity{}, false
 	}
 
 	raw, err := base64.RawURLEncoding.DecodeString(cookie.Value)
 	if err != nil {
-		return 0, false
+		return Identity{}, false
 	}
 
 	nonceSize := c.aead.NonceSize()
 	if len(raw) < nonceSize+c.aead.Overhead()+payloadLen {
-		return 0, false
+		return Identity{}, false
 	}
 
 	// Open authenticates as it decrypts, so a tampered or foreign cookie fails
 	// here rather than producing a plausible user id.
 	payload, err := c.aead.Open(nil, raw[:nonceSize], raw[nonceSize:], nil)
 	if err != nil || len(payload) != payloadLen {
-		return 0, false
+		return Identity{}, false
 	}
 
 	rawUser := binary.BigEndian.Uint64(payload[0:8])
 	rawExpires := binary.BigEndian.Uint64(payload[8:16])
+	rawEpoch := binary.BigEndian.Uint64(payload[16:24])
 
 	// Bounded before converting to signed types. These bytes are authenticated, so
 	// an out-of-range value means our own encoder wrote something impossible rather
 	// than an attacker having succeeded — but an unchecked conversion would wrap,
 	// and a wrapped user id that lands on a positive number is worth refusing
 	// outright rather than reasoning about.
-	if rawUser == 0 || rawUser > math.MaxInt64 || rawExpires > math.MaxInt64 {
-		return 0, false
+	if rawUser == 0 || rawUser > math.MaxInt64 || rawExpires > math.MaxInt64 || rawEpoch > math.MaxInt64 {
+		return Identity{}, false
 	}
 
 	// Expiry is checked here as well as being set on the cookie, because the
 	// cookie's own expiry is the client's to ignore.
 	if time.Now().Unix() >= int64(rawExpires) { //nolint:gosec // bounded above
-		return 0, false
+		return Identity{}, false
 	}
-	return store.UserID(rawUser), true //nolint:gosec // bounded above
+	return Identity{
+		UserID: store.UserID(rawUser), //nolint:gosec // bounded above
+		Epoch:  int64(rawEpoch),       //nolint:gosec // bounded above
+	}, true
 }
 
 // Clear implements Store.

@@ -85,8 +85,8 @@ func TestSignInWithCorrectPassword(t *testing.T) {
 	if !ok {
 		t.Fatal("no usable session cookie was issued on a successful sign-in")
 	}
-	if id != store.SeedUserID {
-		t.Errorf("session identifies user %d, want %d", id, store.SeedUserID)
+	if id.UserID != store.SeedUserID {
+		t.Errorf("session identifies user %d, want %d", id.UserID, store.SeedUserID)
 	}
 }
 
@@ -248,7 +248,7 @@ func TestSignOutRevokesTheSession(t *testing.T) {
 		req.AddCookie(ck)
 	}
 	if id, ok := sessions.Identify(req); ok {
-		t.Errorf("the cookie left after signing out still identifies user %d", id)
+		t.Errorf("the cookie left after signing out still identifies user %d", id.UserID)
 	}
 }
 

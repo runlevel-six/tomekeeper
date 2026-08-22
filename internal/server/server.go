@@ -190,6 +190,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /search", s.requireUser(s.handleSearch))
 	mux.HandleFunc("GET /settings", s.requireUser(s.handleSettings))
 	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))
+	mux.HandleFunc("POST /sign-out-everywhere", s.requireUser(s.handleSignOutEverywhere))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.

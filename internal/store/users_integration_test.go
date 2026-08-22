@@ -30,15 +30,23 @@ func cheapHash(t *testing.T, password string) string {
 func TestCredentialsBeforeAPasswordIsSet(t *testing.T) {
 	_, s, _ := dbtest.SetupWithUser(t)
 
-	id, hash, err := s.System().Credentials(t.Context(), "tome")
+	account, err := s.System().Credentials(t.Context(), "tome")
 	if err != nil {
 		t.Fatalf("Credentials() = %v", err)
 	}
-	if id != store.SeedUserID {
-		t.Errorf("id = %d, want %d", id, store.SeedUserID)
+	hash := account.PasswordHash
+	if account.ID != store.SeedUserID {
+		t.Errorf("id = %d, want %d", account.ID, store.SeedUserID)
 	}
 	if hash != "" {
 		t.Errorf("hash = %q for a user with no password, want empty", hash)
+	}
+
+	// The seeded user is the operator, so the migration promotes it. An archive
+	// whose only account could not reach the admin controls would be one nobody
+	// could administer.
+	if !account.IsAdmin() {
+		t.Errorf("role = %q for the seeded user, want %q", account.Role, store.RoleAdmin)
 	}
 
 	// And an empty hash must never verify, whatever is offered against it.
@@ -58,12 +66,13 @@ func TestSetPasswordRoundTrip(t *testing.T) {
 		t.Fatalf("SetPassword() = %v", err)
 	}
 
-	gotID, gotHash, err := s.System().Credentials(ctx, "tome")
+	got, err := s.System().Credentials(ctx, "tome")
 	if err != nil {
 		t.Fatalf("Credentials() = %v", err)
 	}
-	if gotID != userID {
-		t.Errorf("id = %d, want %d", gotID, userID)
+	gotHash := got.PasswordHash
+	if got.ID != userID {
+		t.Errorf("id = %d, want %d", got.ID, userID)
 	}
 
 	ok, err := auth.Verify(gotHash, "hunter2")
@@ -105,10 +114,11 @@ func TestSetPasswordRotatesTheFeverKeyToo(t *testing.T) {
 		t.Fatal("api_key is empty after setting a password")
 	}
 
-	_, firstHash, err := s.System().Credentials(ctx, "tome")
+	first, err := s.System().Credentials(ctx, "tome")
 	if err != nil {
 		t.Fatalf("Credentials() = %v", err)
 	}
+	firstHash := first.PasswordHash
 
 	if err := s.System().SetPassword(ctx, userID,
 		cheapHash(t, "second"), auth.FeverAPIKey("tome", "second")); err != nil {
@@ -116,10 +126,11 @@ func TestSetPasswordRotatesTheFeverKeyToo(t *testing.T) {
 	}
 	secondKey := storedKey()
 
-	_, secondHash, err := s.System().Credentials(ctx, "tome")
+	second, err := s.System().Credentials(ctx, "tome")
 	if err != nil {
 		t.Fatalf("Credentials() = %v", err)
 	}
+	secondHash := second.PasswordHash
 
 	if secondHash == firstHash {
 		t.Error("the password hash did not change on rotation")

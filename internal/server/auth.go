@@ -10,6 +10,7 @@ import (
 
 	"github.com/runlevel-six/tomekeeper/internal/asseturl"
 	"github.com/runlevel-six/tomekeeper/internal/auth"
+	"github.com/runlevel-six/tomekeeper/internal/session"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
 
@@ -21,18 +22,23 @@ import (
 // eventually forgetting to check the result.
 type userKey struct{}
 
-// signedInUser returns the user a request is authenticated as.
+// signedInAccount returns the account a request is authenticated as.
 //
 // It panics if there is none, which is deliberate. Every caller sits behind
 // requireUser, so a missing user is a routing mistake rather than a runtime
 // condition — and a panic in development is preferable to silently serving one
 // user's archive as though it belonged to nobody.
-func signedInUser(r *http.Request) store.UserID {
-	id, ok := r.Context().Value(userKey{}).(store.UserID)
+func signedInAccount(r *http.Request) store.Account {
+	a, ok := r.Context().Value(userKey{}).(store.Account)
 	if !ok {
 		panic("server: handler requires a signed-in user but is not behind requireUser")
 	}
-	return id
+	return a
+}
+
+// signedInUser returns the id of the user a request is authenticated as.
+func signedInUser(r *http.Request) store.UserID {
+	return signedInAccount(r).ID
 }
 
 // requireUser rejects requests without a valid session.
@@ -40,19 +46,86 @@ func signedInUser(r *http.Request) store.UserID {
 // Browsers get a redirect to the sign-in page; anything asking for JSON gets a
 // 401, because redirecting an API client to an HTML form produces a 200 full of
 // markup and a very confusing bug report.
+//
+// An authentic credential is not on its own enough to admit a request, and this
+// is the second half of that. The cookie is a claim about the moment it was
+// issued: the account may since have been deleted, or had its sessions revoked by
+// a password change or an explicit sign-out-everywhere. Neither is visible in the
+// cookie, so the account is loaded and its epoch compared on every request.
+//
+// The cost is one indexed lookup by primary key per authenticated request, which
+// is the price of revocation without a sessions table. The row is put in the
+// request context so a handler that needs the reader's role does not pay for it
+// twice.
 func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := s.sessions.Identify(r)
+		identity, ok := s.sessions.Identify(r)
 		if !ok {
-			if wantsJSON(r) {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			s.refuseAnonymous(w, r)
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, userID)))
+
+		account, err := s.store.System().SessionUser(r.Context(), identity.UserID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// The account is gone. Clearing the cookie matters as much as the
+			// refusal: without it the browser presents the same dead credential on
+			// every subsequent request, and the reader sees a sign-in page they
+			// appear to be already signed in to.
+			s.log.Info("session for a user that no longer exists", "user_id", identity.UserID)
+			s.sessions.Clear(w)
+			s.refuseAnonymous(w, r)
+			return
+		case err != nil:
+			// Refusing rather than admitting: a database that cannot answer who
+			// this is has not said the request is authorized.
+			s.log.Error("loading the signed-in user failed", "error", err)
+			http.Error(w, "the archive is not available right now", http.StatusServiceUnavailable)
+			return
+		case account.SessionEpoch != identity.Epoch:
+			s.log.Info("session revoked",
+				"user_id", identity.UserID, "presented", identity.Epoch, "current", account.SessionEpoch)
+			s.sessions.Clear(w)
+			s.refuseAnonymous(w, r)
+			return
+		}
+
+		next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, account)))
 	}
+}
+
+// refuseAnonymous turns away a request with no usable session.
+//
+// One place, because the three ways to arrive here — no cookie, a deleted
+// account, a revoked epoch — must be indistinguishable to whoever is asking.
+func (s *Server) refuseAnonymous(w http.ResponseWriter, r *http.Request) {
+	if wantsJSON(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
+// requireAdmin rejects a signed-in reader who may not change what everyone
+// shares.
+//
+// Wrapped around requireUser rather than beside it, so there is no way to route a
+// handler through the privilege check without also going through the
+// authentication one.
+//
+// 404, not 403. An admin-only page is not a resource this reader may know about,
+// and a 403 would confirm the route exists — the same reasoning that makes
+// another reader's article not-found rather than forbidden.
+func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireUser(func(w http.ResponseWriter, r *http.Request) {
+		if !signedInAccount(r).IsAdmin() {
+			s.log.Info("non-admin asked for an admin page",
+				"user_id", signedInUser(r), "path", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		next(w, r)
+	})
 }
 
 // requireUserOrSignature admits a request carrying either a valid session or a
@@ -138,16 +211,28 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, hash, err := s.store.System().Credentials(r.Context(), s.cfg.Username)
-	noPassword := err == nil && hash == ""
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		s.log.Error("reading credentials for the sign-in page", "error", err)
+	// Nothing is prefilled.
+	//
+	// This page used to fill in TOME_USERNAME, which was a kindness on a
+	// single-user first run and is a disclosure once there is more than one
+	// account: it names a reader to whoever loads the page, and it cannot know
+	// which reader is arriving.
+	//
+	// The no-password hint survives the change by asking a different question. It
+	// used to ask whether *that* account had a password, which needs a username
+	// nobody has offered yet; it now asks whether **any** account in the archive
+	// does. That is the condition it was always really about — an archive nobody
+	// can sign in to — and it tells an anonymous visitor nothing that an archive
+	// with no passwords was keeping.
+	configured, err := s.store.System().AnyPasswordSet(r.Context())
+	if err != nil {
+		// Showing the form is the safe failure: claiming no password is set would
+		// send an operator to run `tome migrate` over a working archive.
+		s.log.Error("checking whether any password is set", "error", err)
+		configured = true
 	}
 
-	s.render(w, http.StatusOK, "login", loginPage{
-		Username:   s.cfg.Username,
-		NoPassword: noPassword || errors.Is(err, pgx.ErrNoRows),
-	})
+	s.render(w, http.StatusOK, "login", loginPage{NoPassword: !configured})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +249,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// operator's log, not for whoever is typing into the form.
 	const failed = "Those credentials were not accepted."
 
-	userID, hash, err := s.store.System().Credentials(r.Context(), username)
+	account, err := s.store.System().Credentials(r.Context(), username)
+	hash := account.PasswordHash
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		s.log.Warn("sign-in attempt for an unknown user", "username", username)
@@ -200,14 +286,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.sessions.Issue(w, userID); err != nil {
+	// The epoch is sealed in as it stands now, so a credential issued here is
+	// current until something deliberately revokes it.
+	if err := s.sessions.Issue(w, session.Identity{UserID: account.ID, Epoch: account.SessionEpoch}); err != nil {
 		s.log.Error("issuing a session failed", "error", err)
 		s.render(w, http.StatusInternalServerError, "login",
 			loginPage{Username: username, Error: "Signing in failed. The log will say what."})
 		return
 	}
 
-	s.log.Info("signed in", "username", username, "user_id", userID)
+	s.log.Info("signed in", "username", username, "user_id", account.ID)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

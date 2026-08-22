@@ -32,6 +32,58 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
+### Added
+
+- **Accounts have a role, and sessions can be revoked.** The first half of
+  multi-user, and on its own it closes a hole that was live: `requireUser` trusted the
+  user id sealed in the session cookie without checking that the account still existed,
+  so deleting a reader left them signed in until their cookie expired. Nothing leaked —
+  every query is scoped to a user id with no rows — but the archive could not actually
+  turn anybody out.
+
+  `users.session_epoch` is sealed into the cookie when it is issued and compared on
+  every request, so bumping it signs that reader out everywhere at once. That is what
+  deleting an account, changing a password, and an explicit sign-out-everywhere all
+  need. It buys revocation per reader rather than per device, which is the trade taken
+  instead of a sessions table — and the session interface still allows one later.
+
+  `users.role` is `admin` or `reader`, and admin is about changing what everyone
+  shares rather than about what anybody may read. The account `tome migrate` seeds is
+  an admin, because it is the operator. **An admin-only page answers 404 rather than
+  403** to a reader, on the same reasoning that makes another reader's article
+  not-found: a 403 confirms the route is there.
+
+  **Everybody is signed out once on upgrade.** The session payload gained a field, so
+  credentials issued before it no longer parse. Accepting the old shape would have
+  meant assuming an epoch for exactly the cookies the epoch exists to revoke.
+
+- **Sign out everywhere**, under Settings. Ends every session signed in as you,
+  including the one you are using, for the case where you signed in on a machine you
+  no longer control. It asks first, like the bulk mark and unsubscribe do, because the
+  content security policy leaves no room for a JavaScript dialog and most of the effect
+  is on devices you are not looking at. Mobile clients are unaffected — they hold a key
+  derived from your password, not a session, and it says so on the page.
+
+### Changed
+
+- **Changing a password signs out existing browser sessions.** It always disconnected
+  Fever clients, because that key is derived from the cleartext; leaving browsers signed
+  in meant a password change was no change at all to whoever already had a session.
+
+  **`tome migrate` no longer rewrites a password that has not changed**, which is what
+  keeps this from signing you out on every deploy: `TOME_PASSWORD` is a Secret key, so
+  the migration Job has it in hand every time it runs, and it used to store it
+  unconditionally. It now verifies against the stored hash first and says "nothing
+  changed" — and the "mobile clients will need reconnecting" line is finally printed
+  only when that is true. Comparing hashes would not work: argon2id salts randomly, so
+  the same password never hashes to the same string twice.
+
+- **The sign-in page no longer prefills a username.** It was a kindness on a
+  single-user first run and is a disclosure once there is more than one account: it
+  names a reader to anyone who loads the page. The "no password is set" hint stayed by
+  asking a better question — whether *any* account in the archive can be signed in to,
+  rather than whether a named one can — which is the condition it was always about.
+
 ### Fixed
 
 - **A fetch that ran out of time could not record that it had.** Every job gets a

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -220,6 +222,40 @@ func newCredentials(cfg *config.Config, log *slog.Logger) (*session.Cookie, *ass
 // Migrations never run automatically at server start. They run here, as
 // their own command, so that a deployment can gate the rollout on them
 // completing and so that two replicas starting at once cannot race.
+// passwordUnchanged reports whether the configured password is already the stored
+// one.
+//
+// Its own function so it can be tested without running a migration: the branch it
+// guards is what keeps a deploy from signing the reader out, and that is not a
+// property to leave unproven because the command around it is awkward to invoke.
+//
+// Errors are split deliberately. No such user, or no password yet, is "not
+// unchanged" — there is nothing to compare and the caller should go on to write
+// one. A hash that cannot be parsed is a broken row, which is also worth
+// overwriting, but noisily. Anything else is a database that could not answer, and
+// guessing "changed" there would rewrite the password and revoke every session on
+// a transient failure.
+func passwordUnchanged(ctx context.Context, system *store.SystemStore,
+	username, password string, log *slog.Logger,
+) (bool, error) {
+	existing, err := system.Credentials(ctx, username)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, err
+	case existing.PasswordHash == "":
+		return false, nil
+	}
+
+	same, err := auth.Verify(existing.PasswordHash, password)
+	if err != nil {
+		log.Warn("the stored password hash could not be read; replacing it", "error", err)
+		return false, nil
+	}
+	return same, nil
+}
+
 func migrate(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		return usageError(stderr, "migrate", args[0])
@@ -265,6 +301,31 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
+	// An unchanged password is not a change, and this command runs on every
+	// deploy.
+	//
+	// TOME_PASSWORD is a Secret key, so it is present every time the migration Job
+	// runs. Rewriting the row unconditionally was harmless while it only replaced a
+	// hash with an equivalent one and an API key with the identical one — and
+	// stopped being harmless the moment setting a password also revoked sessions,
+	// because it would then sign the reader out of the web interface on every
+	// deployment. Verifying first is what keeps a deploy silent.
+	//
+	// The stored hash is what gets verified against, not a comparison of hashes:
+	// argon2id salts randomly, so the same password hashes differently every time
+	// and two hashes are never equal.
+	unchanged, err := passwordUnchanged(ctx, system, cfg.Username, cfg.Password, log)
+	if err != nil {
+		log.Error("checking the stored password failed", "error", err)
+		return exitFailure
+	}
+	if unchanged {
+		fmt.Fprintf(stdout, "the password for %q is already the configured one; nothing changed\n",
+			cfg.Username)
+		fmt.Fprintln(stdout, "existing sessions and mobile clients keep working")
+		return exitOK
+	}
+
 	hash, err := auth.Hash(cfg.Password)
 	if err != nil {
 		log.Error("hashing the password failed", "error", err)
@@ -276,10 +337,12 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 	}
 
 	fmt.Fprintf(stdout, "password set for %q\n", cfg.Username)
-	// Stated every time, because it is surprising and because the Fever API design makes it
-	// unavoidable: the Fever credential is derived from the cleartext, so it
-	// necessarily changes with it.
+	// Stated because both are surprising, and reached only when the password really
+	// changed. The Fever key is derived from the cleartext, so it necessarily
+	// changes with it; browser sessions are revoked because a password change that
+	// left them signed in would not be one.
 	fmt.Fprintln(stdout, "the Fever API key changed with it; mobile clients will need reconnecting")
+	fmt.Fprintln(stdout, "existing browser sessions were signed out")
 	return exitOK
 }
 
