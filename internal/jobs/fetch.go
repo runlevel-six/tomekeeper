@@ -130,28 +130,43 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 
 	resp, err := w.client.Get(ctx, article.URLCanonical, nil)
 	if err != nil {
+		if interrupted(ctx) {
+			// Ours, not the page's. Handed back for the next worker to run.
+			return err
+		}
+		recCtx, cancel := recording(ctx)
+		defer cancel()
+
 		// A site saying no through robots.txt is not a failure. It will not
 		// change on retry, and recording it as skipped keeps the failed-fetch
 		// queue meaningful.
 		if errors.Is(err, httpclient.ErrDisallowedByRobots) {
 			log.Info("article disallowed by robots.txt")
-			return w.store.RecordFetchFailure(ctx, id, store.FetchSkipped, "disallowed by robots.txt")
+			return w.store.RecordFetchFailure(recCtx, id, store.FetchSkipped, "disallowed by robots.txt")
 		}
 		log.Warn("fetch failed", "error", err)
-		return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, err.Error())
+		return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed, describe(err, "the fetch ran out of time"))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		reason := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		status := fmt.Sprintf("HTTP %d", resp.StatusCode)
 		log.Warn("fetch failed", "status", resp.StatusCode)
-		return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, reason)
+		recCtx, cancel := recording(ctx)
+		defer cancel()
+		return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed, status)
 	}
 
 	raw, err := httpclient.ReadBody(resp.Body)
 	if err != nil {
+		if interrupted(ctx) {
+			return err
+		}
 		log.Warn("reading the page failed", "error", err)
-		return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, err.Error())
+		recCtx, cancel := recording(ctx)
+		defer cancel()
+		return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed,
+			describe(err, "the page did not finish arriving in the time allowed"))
 	}
 
 	sum := sha256.Sum256(raw)

@@ -34,6 +34,25 @@ happens, because it is the one change that wants a follow-up command
 
 ### Fixed
 
+- **A fetch that ran out of time could not record that it had.** Every job gets a
+  context with a one-minute deadline, and the failure was written through that same
+  context — so the one outcome that could never be stored was the one where the time
+  ran out. The article stayed `pending` with no reason against it, which is a state the
+  attention queue does not list, and the fetch scheduler enqueues every `pending`
+  article it finds. Found on this archive as one article whose host had stopped
+  answering: four days, seventeen attempts, each one failing at the write rather than
+  at the fetch, and nothing anywhere saying so.
+
+  Outcomes are now written on a context detached from the job's own deadline. A page
+  that does not arrive in the time allowed lands in the attention queue like any other
+  failed fetch, with "the fetch ran out of time" against it rather than the name of a
+  Go value, and `tome refetch` is the way back.
+
+  **A worker shutting down mid-fetch is still not the page's failure.** That case is
+  told apart from running out of time and left alone, because River hands an
+  interrupted job to the next worker that starts — recording it would have permanently
+  failed whatever was in flight during every rolling restart.
+
 - **A precision figure in v0.15.0's notes was wrong.** They said the title lens flags
   seven bodies on this archive and "about three are real". That was inferred from word
   counts and domains rather than read; reading all seven refuted it — not one is a body

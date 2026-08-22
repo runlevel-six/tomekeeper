@@ -101,9 +101,11 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 	// fetch path uses. A browser bypasses both unless somebody asks first, and asking
 	// here rather than inside the render package keeps one implementation of the rule.
 	if err := w.client.Permit(ctx, article.URLCanonical); err != nil {
-		if errors.Is(err, httpclient.ErrDisallowedByRobots) {
+		if errors.Is(err, httpclient.ErrDisallowedByRobots) && !interrupted(ctx) {
 			log.Info("article disallowed by robots.txt, so it is not rendered either")
-			return w.store.RecordFetchFailure(ctx, id, store.FetchSkipped, "disallowed by robots.txt")
+			recCtx, cancel := recording(ctx)
+			defer cancel()
+			return w.store.RecordFetchFailure(recCtx, id, store.FetchSkipped, "disallowed by robots.txt")
 		}
 		return err
 	}
@@ -124,16 +126,24 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 			// queue ignored it and the reading list badged it "queued". A reader had no
 			// way to find out, and neither did the operator who could have fixed it.
 			const waiting = "waiting for a headless browser; none is reachable"
-			if noteErr := w.store.RecordFetchWaiting(ctx, id, waiting); noteErr != nil {
+			recCtx, cancel := recording(ctx)
+			defer cancel()
+			if noteErr := w.store.RecordFetchWaiting(recCtx, id, waiting); noteErr != nil {
 				log.Warn("could not record that this article is waiting", "error", noteErr)
 			}
 			log.Warn("no browser is available, so this article stays pending", "error", err)
 			return err
 		}
+		if interrupted(ctx) {
+			return err
+		}
 		// The page's own failure. Recorded, so it lands in the attention queue where a
 		// site that needs a rule belongs.
 		log.Warn("render failed", "error", err)
-		return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, "rendering: "+err.Error())
+		recCtx, cancel := recording(ctx)
+		defer cancel()
+		return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed,
+			"rendering: "+describe(err, "the render ran out of time"))
 	}
 
 	raw := []byte(page.HTML)

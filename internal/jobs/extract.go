@@ -158,7 +158,12 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 			}
 
 			log.Info("no extractor produced acceptable content", "reason", reason)
-			return w.store.RecordFetchFailure(ctx, id, store.FetchFailed, reason)
+			if interrupted(ctx) {
+				return ctx.Err()
+			}
+			recCtx, cancel := recording(ctx)
+			defer cancel()
+			return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed, reason)
 		}
 		return err
 	}
