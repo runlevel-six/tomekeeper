@@ -171,6 +171,20 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /login", s.handleLoginForm)
 	mux.HandleFunc("POST /login", s.handleLogin)
+
+	// Unauthenticated by necessity: somebody redeeming a setup link cannot sign in
+	// yet, which is the whole reason they were sent one. The token in the query
+	// string is the credential — 256 bits of randomness, matched against a stored
+	// hash, and spent on first use.
+	mux.HandleFunc("GET /set-password", s.handleSetPasswordForm)
+	mux.HandleFunc("POST /set-password", s.handleSetPassword)
+
+	// Accounts are administered, not read, so these are the first routes behind
+	// requireAdmin.
+	mux.HandleFunc("GET /users", s.requireAdmin(s.handleUsers))
+	mux.HandleFunc("POST /users", s.requireAdmin(s.handleCreateUser))
+	mux.HandleFunc("POST /users/{id}/link", s.requireAdmin(s.handleIssueSetupLink))
+	mux.HandleFunc("POST /users/{id}/delete", s.requireAdmin(s.handleDeleteUser))
 	mux.HandleFunc("POST /logout", s.handleLogout)
 
 	// Reading views. Every one of these goes through requireUser; that is the
@@ -191,6 +205,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("GET /settings", s.requireUser(s.handleSettings))
 	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))
 	mux.HandleFunc("POST /sign-out-everywhere", s.requireUser(s.handleSignOutEverywhere))
+	mux.HandleFunc("POST /settings/password", s.requireUser(s.handleChangePassword))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.

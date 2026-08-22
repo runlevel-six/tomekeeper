@@ -22,6 +22,11 @@ type pageData struct {
 	Username string
 	Unread   int64
 
+	// IsAdmin says whether to offer the controls that change what everyone
+	// shares. The chrome hides them; requireAdmin is what actually refuses them,
+	// and a hidden link is a courtesy rather than a boundary.
+	IsAdmin bool
+
 	// Nav marks the current section so the chrome can show where you are.
 	Nav string
 
@@ -54,9 +59,17 @@ type pageData struct {
 }
 
 func (s *Server) pageData(r *http.Request, nav string) pageData {
-	userID := signedInUser(r)
+	account := signedInAccount(r)
+	userID := account.ID
 
-	d := pageData{User: userID, Username: s.cfg.Username, Nav: nav, Path: selfPath(r)}
+	// The name and the role come from the account this request is authenticated
+	// as, not from configuration. TOME_USERNAME names the account `tome migrate`
+	// seeds and nothing else, so reading it here showed every reader the same name
+	// — invisible while there was one account and wrong the moment there were two.
+	d := pageData{
+		User: userID, Username: account.Username, IsAdmin: account.IsAdmin(),
+		Nav: nav, Path: selfPath(r),
+	}
 
 	// A failed lookup costs the reader their palette for one page, which is a
 	// far better outcome than costing them the page. Automatic marking falls back

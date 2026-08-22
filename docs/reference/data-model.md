@@ -47,6 +47,25 @@ account is created by `tome migrate` from `TOME_USERNAME`.
 | `default_poll_interval` | `interval` | How often the reader wants their feeds checked. Nullable, and null is the default and a real value: it means the poller decides per feed. A feed with a `poll_interval_override` does not consult this. |
 | `created_at` | `timestamptz` | |
 
+### `password_setup_links`
+
+Single-use links for setting a password without an administrator learning it. One
+table serves both cases that need it — a new account with no password yet, and a
+reader who has forgotten theirs — because both end in the same act.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `bigserial` | Primary key. |
+| `user_id` | `bigint` | References `users`. Cascades on delete, so removing an account takes its outstanding links with it. The account always exists first: a link that created one on redemption would mean an unauthenticated request choosing a username. |
+| `token_sha256` | `text` | Unique. SHA-256 of the token, **never the token**. It is a credential for setting a credential, so a copy of this table must not yield anything usable. SHA-256 rather than argon2id because the input is 256 bits from `crypto/rand` — there is no dictionary to slow down, and a redemption should not cost a KDF. |
+| `created_at` | `timestamptz` | |
+| `expires_at` | `timestamptz` | A week out. Days rather than hours because the link is handed over out of band — read out, messaged, written down — and there is no mail here to make it instant. |
+| `used_at` | `timestamptz` | Set on redemption. The row is kept rather than deleted so a spent link reports "no longer usable" instead of "never existed". Issuing a new link marks any earlier unused one spent in the same transaction. |
+
+Redemption is one transaction: the row is claimed by an `UPDATE` that only matches
+an unused, unexpired link, and the password is written only if that matched. Two
+people racing one link therefore produce one password change and one refusal.
+
 ### `feeds`
 
 A user's subscriptions, and everything the poller needs to know about each.

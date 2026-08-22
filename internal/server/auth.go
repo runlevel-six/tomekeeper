@@ -201,6 +201,13 @@ type loginPage struct {
 	// puts the count in the page title, and an unread tally is exactly the sort
 	// of thing a sign-in page must not be able to tell an anonymous visitor.
 	Unread int64
+
+	// IsAdmin is always false, and is the third field to arrive here by breaking
+	// this page. base.html gained an administrator-only link; nobody is signed in
+	// here, so the answer is false — but the field has to exist, because a missing
+	// one stops template execution partway and serves a truncated page with a 200
+	// already written.
+	IsAdmin bool
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {

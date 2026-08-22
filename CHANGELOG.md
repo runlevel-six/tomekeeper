@@ -57,6 +57,26 @@ happens, because it is the one change that wants a follow-up command
   credentials issued before it no longer parse. Accepting the old shape would have
   meant assuming an epoch for exactly the cookies the epoch exists to revoke.
 
+- **Accounts, for more than one reader.** An administrator can create accounts, issue
+  a link that sets a password, and delete an account — from **Accounts** in the
+  interface, or with `tome user` when nobody can sign in to reach it.
+
+  A new account has **no password and cannot be signed in to**, and there is no
+  sign-up page. The way it gets one is a **single-use link**: whoever opens it chooses
+  the password, so nobody else ever learns it. The link works once, expires after a
+  week, and issuing another supersedes it — only a hash is stored, so it is shown once
+  and cannot be looked up again. The same link is how a forgotten password is reset.
+
+  **Deleting a reader keeps the archive.** Their subscriptions, tags, highlights and
+  reading state go; every article and image stays, because nothing an article is made
+  of belongs to a reader. What is left is articles nothing references, which is what
+  `tome prune` reports. **The last administrator cannot be deleted or demoted** — an
+  archive without one cannot make another through the interface.
+
+- **Change your own password**, under Settings. It asks for the current one, then
+  signs out your *other* browsers and keeps the one you are using: a password change
+  that threw you out of your own session would be a poor way to secure an account.
+
 - **Sign out everywhere**, under Settings. Ends every session signed in as you,
   including the one you are using, for the case where you signed in on a machine you
   no longer control. It asks first, like the bulk mark and unsubscribe do, because the
@@ -77,6 +97,10 @@ happens, because it is the one change that wants a follow-up command
   changed" — and the "mobile clients will need reconnecting" line is finally printed
   only when that is true. Comparing hashes would not work: argon2id salts randomly, so
   the same password never hashes to the same string twice.
+
+- **Every page now shows the signed-in reader's own name.** It read `TOME_USERNAME`,
+  which names the account `tome migrate` seeds and nothing else — invisible while
+  there was one account and wrong the moment there were two.
 
 - **The sign-in page no longer prefills a username.** It was a kindness on a
   single-user first run and is a disclosure once there is more than one account: it

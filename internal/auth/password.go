@@ -62,6 +62,23 @@ func DefaultParams() Params {
 	}
 }
 
+// MinPasswordLength is the shortest password this archive will store.
+//
+// A floor rather than a policy. There are no character-class rules here and there
+// will not be: they push people toward predictable substitutions and away from
+// length, which is the thing that actually helps. Twelve is short enough that a
+// memorable phrase clears it easily and long enough that a single word does not.
+//
+// It is enforced where a person chooses a password — the setup-link page and the
+// change form — and deliberately not inside Hash, which also hashes passwords
+// that arrive from configuration and from `tome user passwd`. An operator setting
+// their own archive's password from a script is not the case this protects.
+const MinPasswordLength = 12
+
+// MinPasswordAdvice is how the floor is explained to whoever hit it.
+const MinPasswordAdvice = "Passwords here need at least 12 characters. " +
+	"A few words in a row is easier to remember than a short one full of symbols, and harder to guess."
+
 // Hash returns a PHC-encoded argon2id hash of password at the default cost.
 func Hash(password string) (string, error) { return HashWith(DefaultParams(), password) }
 

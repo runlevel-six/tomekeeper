@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/runlevel-six/tomekeeper/internal/auth"
@@ -291,5 +293,279 @@ func TestSettingAPasswordRevokesSessions(t *testing.T) {
 
 	if hit {
 		t.Error("a session issued before the password changed still reaches handlers")
+	}
+}
+
+// handler runs a request through the real mux, which is what proves a route is
+// actually behind the middleware it is supposed to be behind. The middleware
+// tests above prove the gate; these prove it was applied.
+func (f accessFixture) handler(t *testing.T) http.Handler {
+	t.Helper()
+	return New(&config.Config{}, slog.New(slog.DiscardHandler),
+		Deps{Store: f.store, Sessions: f.sessions}).Handler()
+}
+
+func (f accessFixture) get(t *testing.T, h http.Handler, path string, id session.Identity) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	if err := f.sessions.Issue(rec, id); err != nil {
+		t.Fatalf("Issue() = %v", err)
+	}
+	for _, ck := range rec.Result().Cookies() {
+		req.AddCookie(ck)
+	}
+	out := httptest.NewRecorder()
+	h.ServeHTTP(out, req)
+	return out
+}
+
+// Every account route has to be behind requireAdmin. Listed rather than tested
+// one by one so that adding a route without gating it fails here.
+func TestAccountRoutesAreAdminOnly(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	if _, err := f.store.Pool().Exec(t.Context(),
+		`UPDATE users SET role = $2 WHERE id = $1`, f.userID, store.RoleReader); err != nil {
+		t.Fatalf("demoting the user: %v", err)
+	}
+	reader := f.currentIdentity(t)
+
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/users"},
+		{http.MethodPost, "/users"},
+		{http.MethodPost, "/users/1/link"},
+		{http.MethodPost, "/users/1/delete"},
+	}
+	for _, route := range routes {
+		req := httptest.NewRequestWithContext(t.Context(), route.method, route.path, nil)
+		rec := httptest.NewRecorder()
+		if err := f.sessions.Issue(rec, reader); err != nil {
+			t.Fatalf("Issue() = %v", err)
+		}
+		for _, ck := range rec.Result().Cookies() {
+			req.AddCookie(ck)
+		}
+		out := httptest.NewRecorder()
+		h.ServeHTTP(out, req)
+
+		if out.Code != http.StatusNotFound {
+			t.Errorf("%s %s as a reader = %d, want %d",
+				route.method, route.path, out.Code, http.StatusNotFound)
+		}
+	}
+}
+
+// The setup-password page is the one route that must work with no session at all,
+// so it is worth proving it is not behind the gate by accident.
+func TestTheSetupPageNeedsNoSession(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	id, err := f.store.System().CreateUser(t.Context(), "jane", store.RoleReader)
+	if err != nil {
+		t.Fatalf("CreateUser() = %v", err)
+	}
+	link, err := f.store.System().IssueSetupLink(t.Context(), id)
+	if err != nil {
+		t.Fatalf("IssueSetupLink() = %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet,
+		"/set-password?token="+link.Token, nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET the setup page with no session = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "jane") {
+		t.Error("the page does not name the account it sets a password for")
+	}
+}
+
+// A bad token must not distinguish itself from a spent one, and must not offer a
+// form that cannot work.
+func TestTheSetupPageRefusesAnUnusableLink(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet,
+		"/set-password?token=nonsense", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if strings.Contains(rec.Body.String(), `type="password"`) {
+		t.Error("a password form is offered for a link that cannot be redeemed")
+	}
+}
+
+// A typo in the confirmation must not cost the invitation: the link is checked
+// before it is spent, and only spent once the password is going to be stored.
+func TestAMistypedConfirmationDoesNotSpendTheLink(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	id, err := f.store.System().CreateUser(t.Context(), "jane", store.RoleReader)
+	if err != nil {
+		t.Fatalf("CreateUser() = %v", err)
+	}
+	link, err := f.store.System().IssueSetupLink(t.Context(), id)
+	if err != nil {
+		t.Fatalf("IssueSetupLink() = %v", err)
+	}
+
+	post := func(password, again string) *httptest.ResponseRecorder {
+		form := url.Values{
+			"token":          {link.Token},
+			"password":       {password},
+			"password_again": {again},
+		}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/set-password",
+			strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := post("a long enough password", "a different one"); rec.Code != http.StatusBadRequest {
+		t.Errorf("mismatched confirmation = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	// Short is refused too, and also without spending the link.
+	if rec := post("short", "short"); rec.Code != http.StatusBadRequest {
+		t.Errorf("a short password = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+
+	// The link still works, which is the whole point of checking before spending.
+	if rec := post("a long enough password", "a long enough password"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("the corrected attempt = %d, want %d — the link was spent by a typo",
+			rec.Code, http.StatusSeeOther)
+	}
+
+	// And the password that was set is the one typed.
+	account, err := f.store.System().Credentials(t.Context(), "jane")
+	if err != nil {
+		t.Fatalf("Credentials() = %v", err)
+	}
+	if ok, err := auth.Verify(account.PasswordHash, "a long enough password"); err != nil || !ok {
+		t.Errorf("the stored password does not verify: %v, %v", ok, err)
+	}
+}
+
+// Changing your own password signs out your other devices and keeps this one —
+// otherwise the act of securing your account throws you out of it.
+func TestChangingYourPasswordKeepsThisSessionAndEndsTheOthers(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, "the current password")
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", "the current password")); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	// Two devices, both signed in with the credential as it stands now.
+	elsewhere := f.currentIdentity(t)
+
+	form := url.Values{
+		"current_password":   {"the current password"},
+		"new_password":       {"a brand new password"},
+		"new_password_again": {"a brand new password"},
+	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/settings/password",
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	issued := httptest.NewRecorder()
+	if err := f.sessions.Issue(issued, elsewhere); err != nil {
+		t.Fatalf("Issue() = %v", err)
+	}
+	for _, ck := range issued.Result().Cookies() {
+		req.AddCookie(ck)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("changing a password = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// The other device is out.
+	if out := f.get(t, h, "/settings", elsewhere); out.Code != http.StatusSeeOther {
+		t.Errorf("the other device = %d, want %d (signed out)", out.Code, http.StatusSeeOther)
+	}
+
+	// This one is not: the response carried a fresh credential.
+	var reissued *http.Cookie
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == session.CookieName && ck.MaxAge >= 0 {
+			reissued = ck
+		}
+	}
+	if reissued == nil {
+		t.Fatal("no fresh session was issued, so changing a password signs you out of your own browser")
+	}
+	follow := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/settings", nil)
+	follow.AddCookie(reissued)
+	after := httptest.NewRecorder()
+	h.ServeHTTP(after, follow)
+	if after.Code != http.StatusOK {
+		t.Errorf("this browser after the change = %d, want %d", after.Code, http.StatusOK)
+	}
+}
+
+// The current password is required, or an unattended signed-in browser is enough
+// to lock its owner out of their archive.
+func TestChangingAPasswordNeedsTheCurrentOne(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, "the current password")
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", "the current password")); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	form := url.Values{
+		"current_password":   {"not the current password"},
+		"new_password":       {"a brand new password"},
+		"new_password_again": {"a brand new password"},
+	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/settings/password",
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	issued := httptest.NewRecorder()
+	if err := f.sessions.Issue(issued, f.currentIdentity(t)); err != nil {
+		t.Fatalf("Issue() = %v", err)
+	}
+	for _, ck := range issued.Result().Cookies() {
+		req.AddCookie(ck)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	// And the old password still works, so nothing was changed on the way.
+	account, err := f.store.System().Credentials(t.Context(), "tome")
+	if err != nil {
+		t.Fatalf("Credentials() = %v", err)
+	}
+	if ok, _ := auth.Verify(account.PasswordHash, "the current password"); !ok {
+		t.Error("the password changed despite the current one being wrong")
 	}
 }

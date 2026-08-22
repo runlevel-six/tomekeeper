@@ -4,6 +4,10 @@
 <div class="settings">
   <h1>Settings</h1>
 
+  <p class="signed-in-as">
+    Signed in as <strong>{{.Username}}</strong>{{if .IsAdmin}}, an administrator{{end}}.
+  </p>
+
   {{if .Saved}}
     <p class="import-result ok"><span>Saved.</span></p>
   {{end}}
@@ -164,6 +168,33 @@
     {{else}}
       <p class="note">The archive could not be counted just now; the log will say why.</p>
     {{end}}
+  </section>
+
+  <section class="password">
+    <h2>Password</h2>
+    <p class="note">
+      Changing this signs you out of every <em>other</em> browser and disconnects
+      your mobile clients, which hold a key derived from it. This browser stays
+      signed in.
+    </p>
+    <form method="post" action="/settings/password">
+      <p>
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required
+               autocomplete="current-password">
+      </p>
+      <p>
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" required
+               autocomplete="new-password">
+      </p>
+      <p>
+        <label for="new_password_again">And again</label>
+        <input type="password" id="new_password_again" name="new_password_again" required
+               autocomplete="new-password">
+      </p>
+      <p><button type="submit">Change password</button></p>
+    </form>
   </section>
 
   <section class="sessions">

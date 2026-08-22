@@ -408,6 +408,55 @@ and it survives a restart because the queue lives in Postgres.
 
 See [Reprocess the archive](../how-to/reprocess-the-archive.md).
 
+### `tome user`
+
+Manages accounts.
+
+```
+tome user list
+tome user add <name> [--admin]
+tome user link <name> [--base-url <url>]
+tome user passwd <name> [--password <text>]
+tome user rm <name>
+```
+
+The interface does all of this too, behind an administrator's session — which is
+exactly what is missing in the case that most needs fixing. A forgotten password on
+the only administrator's account is otherwise a hand-written `UPDATE` against the
+database.
+
+An account is created with **no password** and cannot be signed in to until one is
+set. There are two ways to set one, and they are not equivalent:
+
+- **`tome user link`** prints a single-use URL. Whoever opens it chooses the
+  password, so nobody else ever learns it. The link works once, expires after a
+  week, and issuing another stops the first one working. Only a hash of it is
+  stored, so it is printed once and cannot be looked up again.
+- **`tome user passwd`** sets one directly, reading from standard input. It does
+  **not** hide what is typed — turning off terminal echo would mean another
+  dependency to buy a nicety on the path `link` already covers better.
+
+Both revoke that reader's browser sessions and disconnect their mobile clients,
+because the Fever API key is derived from the password.
+
+`--base-url` prints a complete URL rather than a path, which is what makes the
+output something to hand over as it stands:
+
+```
+$ tome user link jane --base-url https://tomekeeper.example
+https://tomekeeper.example/set-password?token=...
+usable once, until 2026-08-29T12:00:00-05:00
+```
+
+`tome user rm` removes the account, its subscriptions, tags, highlights and
+reading state. **Every article and image stays** — nothing an article is made of
+belongs to a reader. What is left behind is articles nothing references any more,
+which is what [`tome prune`](#tome-prune) reports.
+
+**The last administrator cannot be deleted or demoted.** An archive without one
+cannot make another through the interface, and the remedy would be a hand-written
+`UPDATE`.
+
 ### `tome domain-rule`
 
 Manages per-domain extraction overrides.
@@ -635,9 +684,18 @@ returns `405`. Both set `Cache-Control: no-store` and return
 ## Web interface
 
 Served by `tome serve`. Every route requires a session except `/login`, `/static/`,
-and two documented exceptions: `/fever/`, which carries its own credential, and
-`/assets/`, which additionally accepts a signature this service issued. Both are
-described under [Fever API](#fever-api) below.
+`/set-password`, and two documented exceptions: `/fever/`, which carries its own
+credential, and `/assets/`, which additionally accepts a signature this service
+issued. Both are described under [Fever API](#fever-api) below.
+
+`/set-password` is unauthenticated by necessity: somebody redeeming a setup link
+cannot sign in yet, which is the reason they were sent one. The token in the query
+string is the credential — 256 bits from `crypto/rand`, matched against a stored
+SHA-256, and spent on first use.
+
+Routes under `/users` additionally require the **administrator** role. They answer
+`404` rather than `403` to a reader, so the response does not confirm that the page
+is there — the same reasoning that makes another reader's article not-found.
 
 | Route | Page |
 |---|---|
@@ -654,6 +712,14 @@ described under [Fever API](#fever-api) below.
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly: failed, withheld by robots.txt, waiting on something an operator controls, or missing images. Each row reports how much visible text the served page carried, which is what distinguishes a JavaScript shell from a page that wants a CSS selector. |
 | `GET /settings` | Palette, reading preferences, and the export download |
+| `GET /users` | Accounts. Administrators only. `?delete=<id>` asks before removing one. |
+| `POST /users` | Creates an account with no password. |
+| `POST /users/{id}/link` | Issues a single-use setup link and shows it once. |
+| `POST /users/{id}/delete` | Deletes an account, keeping every article and image. |
+| `GET /set-password?token=` | Choose a password, from a setup link. No session. |
+| `POST /set-password` | Spends the link and stores the password. |
+| `POST /settings/password` | Change your own password. Requires the current one. |
+| `POST /sign-out-everywhere` | Ends every session for the signed-in reader, this one included. |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
 | `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |

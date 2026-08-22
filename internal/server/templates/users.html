@@ -1,0 +1,105 @@
+{{define "title"}}Accounts — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="page users">
+  <h1>Accounts</h1>
+
+  {{if .Problem}}<p class="error" role="alert">{{.Problem}}</p>{{end}}
+  {{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}
+
+  {{if .Issued}}
+    <section class="issued">
+      <h2>A link for {{.IssuedFor}}</h2>
+      <p>
+        Hand this over however you like. Whoever opens it chooses the password, so
+        it never passes through you.
+      </p>
+      <p><code class="setup-link">{{.Issued}}</code></p>
+      <p class="note">
+        <strong>This is the only time it is shown.</strong> Only a hash of it is
+        stored, so it cannot be looked up again — issue another if it goes astray,
+        which stops this one working. It can be used once, and expires
+        {{.IssuedTil.Format "2 January 2006"}}.
+      </p>
+    </section>
+  {{end}}
+
+  {{if .Confirm}}
+    <section class="confirm">
+      <h2>Delete {{.Confirm.Username}}?</h2>
+      <p>
+        This removes their {{plural .Confirm.Feeds "subscription"}}, their tags,
+        highlights, and everything they had read or saved.
+      </p>
+      <p>
+        <strong>Every article and image is kept.</strong> The archive belongs to the
+        household, not to one reader — anything nothing references afterwards is what
+        <code>tome prune</code> reports.
+      </p>
+      <form method="post" action="/users/{{.Confirm.ID}}/delete">
+        <button type="submit" class="danger">Delete {{.Confirm.Username}}</button>
+        <a class="cancel" href="/users">Keep this account</a>
+      </form>
+    </section>
+  {{end}}
+
+  <table class="accounts">
+    <thead>
+      <tr><th>Name</th><th>Role</th><th>Sign-in</th><th>Feeds</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Accounts}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td>{{if .IsAdmin}}Administrator{{else}}Reader{{end}}</td>
+          <td>
+            {{if .HasPassword}}
+              Password set
+            {{else if .PendingLink}}
+              <span class="waiting">Link waiting, until {{.PendingLink.Format "2 January"}}</span>
+            {{else}}
+              <span class="waiting">No password yet</span>
+            {{end}}
+          </td>
+          <td>{{.Feeds}}</td>
+          <td class="actions">
+            <form method="post" action="/users/{{.ID}}/link">
+              <button type="submit">{{if .HasPassword}}Reset password{{else}}Issue link{{end}}</button>
+            </form>
+            <a href="/users?delete={{.ID}}">Delete</a>
+          </td>
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <section class="add">
+    <h2>Add someone</h2>
+    <p class="note">
+      A new account starts with no password and cannot be signed in to. Issue a link
+      afterwards and hand it over; they choose their own.
+    </p>
+    <form method="post" action="/users">
+      <p>
+        <label for="username">Name</label>
+        <input type="text" id="username" name="username" required autocomplete="off"
+               maxlength="64" placeholder="no spaces">
+      </p>
+      <fieldset>
+        <legend>Role</legend>
+        {{range $.Roles}}
+          <p>
+            <label>
+              <input type="radio" name="role" value="{{.Value}}"
+                     {{if eq .Value "reader"}}checked{{end}}>
+              {{.Name}}
+              <span class="note">{{.Blurb}}</span>
+            </label>
+          </p>
+        {{end}}
+      </fieldset>
+      <p><button type="submit">Create account</button></p>
+    </form>
+  </section>
+</div>
+{{end}}

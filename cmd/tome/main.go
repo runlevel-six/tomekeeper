@@ -68,6 +68,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "reextract":
 		return reextract(args[1:], stdout, stderr)
 
+	case "user":
+		return user(args[1:], stdout, stderr)
 	case "domain-rule":
 		return domainRule(args[1:], stdout, stderr)
 
@@ -115,6 +117,7 @@ Subcommands:
   import        Import a reading library exported from another system
   export        Write the archive as a file the import command reads back
   reextract     Re-extract stored pages at the current extractor version
+  user          Manage accounts: add, list, delete, set a password
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds
   audit         Report stored bodies that may not be what they claim

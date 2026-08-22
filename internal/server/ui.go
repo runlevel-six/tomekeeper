@@ -33,7 +33,7 @@ type ui struct {
 // startup instead of on the request that needed it.
 var pageNames = []string{
 	"login", "stream", "article", "search", "feeds", "categories",
-	"attention", "saved", "settings", "domainrules",
+	"attention", "saved", "settings", "domainrules", "users", "setpassword",
 }
 
 // newUI parses every page template.

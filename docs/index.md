@@ -39,6 +39,8 @@ doing.
 
 - [Add a domain rule](how-to/add-a-domain-rule.md) — fixing a site that
   extracts badly
+- [Add a reader](how-to/add-a-reader.md) — an account for somebody else, without
+  learning their password
 - [Back up and restore](how-to/back-up-and-restore.md) — the database and the
   files are two backups, and one of them is not automatic
 - [Change how often feeds are checked](how-to/change-how-often-feeds-are-checked.md)
@@ -118,6 +120,8 @@ rejected. Design rationale lives here and nowhere else.
 
 | I want to… | Go to |
 |---|---|
+| Give somebody else an account | [Add a reader](how-to/add-a-reader.md) |
+| Reset a forgotten password, or change my own | [Add a reader](how-to/add-a-reader.md#resetting-a-forgotten-password) |
 | Work out why a feed stopped producing articles | [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md) |
 | Correct a feed's address, re-file it, or stop polling it | **Edit** on its row on the Feeds page — see [CLI](reference/cli.md#post-feedsidedit--change-one-subscription) |
 | Get rid of a subscription, or one an import listed twice | **Edit → Unsubscribe** — see [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md#when-the-same-feed-is-subscribed-to-twice) |
