@@ -189,7 +189,24 @@ jobs:
               # A branch's first push has no previous tip to compare against.
               range=$GITHUB_SHA ;;
             *)
-              range=$BASE..$GITHUB_SHA ;;
+              # A force-push leaves `github.event.before` naming a commit that was
+              # rewritten away, so a fresh clone does not contain it and the range
+              # cannot be resolved. That failed the check on a commit that was
+              # correctly signed — amending one is not a missing sign-off — and the
+              # message pointed at the sign-off rather than at the range, which sent
+              # the maintainer looking for a mistake he had not made.
+              #
+              # Falling back to the pushed tip alone, which is what a branch's first
+              # push already does. Under-covers a force-push that rewrote several
+              # commits at once, so it says which commit it settled for rather than
+              # reporting a pass that sounds wider than it is.
+              if git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+                range=$BASE..$GITHUB_SHA
+              else
+                echo "the previous tip $BASE is not in this clone, which is what a" \
+                     "force-push looks like; checking $GITHUB_SHA on its own"
+                range=$GITHUB_SHA
+              fi ;;
           esac
           ./scripts/check-dco.sh "$range"
 

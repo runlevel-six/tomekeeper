@@ -34,6 +34,14 @@ happens, because it is the one change that wants a follow-up command
 
 ### Fixed
 
+- **CI failed the DCO check on a commit that was correctly signed.** The check compares
+  against `github.event.before`, which a force-push leaves naming a commit that was
+  rewritten away — absent from a fresh clone, so the range would not resolve and the
+  step failed. Amending a signed commit is not a missing sign-off, and the message
+  pointed at the sign-off rather than at the range, sending the maintainer looking for a
+  mistake he had not made. An unresolvable base now falls back to the pushed tip, the
+  same way a branch's first push already did, and says which commit it settled for.
+
 - `tome refetch` reported "Queued 8 fetchs". `plural` appended a bare `-s`, which is
   wrong after a sibilant, so the helper now takes `-es` after ch, sh, s, x and z.
 
