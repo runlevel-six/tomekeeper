@@ -97,9 +97,12 @@ func (s *Store) SaveArticle(ctx context.Context, userID UserID, rawURL string) (
 		return Saved{}, fmt.Errorf("saving the article for the reader: %w", err)
 	}
 
+	// Asked as this reader, not of the archive: "is there a body" has to mean the
+	// body they would be shown, or a reader whose own extraction produced nothing
+	// would be told the household's copy is theirs.
 	if err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM article_content WHERE article_id = $1 AND is_current)`,
-		articleID).Scan(&result.HasBody); err != nil {
+		`SELECT `+ownedBodyExists+` FROM articles a WHERE a.id = $2`,
+		userID, articleID).Scan(&result.HasBody); err != nil {
 		return Saved{}, fmt.Errorf("checking for an existing body: %w", err)
 	}
 

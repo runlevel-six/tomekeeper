@@ -555,7 +555,7 @@ func (s *Server) serveArticle(w http.ResponseWriter, r *http.Request, id store.A
 	// article read, which is one indexed query against a table that holds one row
 	// for most articles — cheaper than the alternative of hiding the control behind
 	// a second page nobody would find.
-	if bodies, err := s.store.BodiesForArticle(r.Context(), view.Article.ID); err != nil {
+	if bodies, err := s.store.BodiesForArticle(r.Context(), userID, view.Article.ID); err != nil {
 		// A failed lookup costs the choice, not the article.
 		s.log.Warn("listing the stored bodies failed", "article_id", view.Article.ID, "error", err)
 	} else if len(bodies) > 1 {

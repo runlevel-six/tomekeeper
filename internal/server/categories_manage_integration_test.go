@@ -165,7 +165,7 @@ func TestNoAnswerToTheDeletePromptLosesAnArticle(t *testing.T) {
 			if _, err := tr.store.GetArticle(ctx, tr.aliceOnly); err != nil {
 				t.Errorf("the article is gone after %q: %v", tc.disposition, err)
 			}
-			if _, err := tr.store.CurrentContent(ctx, tr.aliceOnly); err != nil {
+			if _, err := tr.store.CurrentContent(ctx, tr.aliceOnly, store.Household()); err != nil {
 				t.Errorf("the article's body is gone after %q: %v", tc.disposition, err)
 			}
 

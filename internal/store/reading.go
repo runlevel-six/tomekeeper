@@ -448,7 +448,7 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
 		       COALESCE(feed.title, '')
 		FROM articles a
-		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		` + ownedBody + `
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		-- One feed title per article, chosen deterministically. A syndicated story
 		-- reaches the reader through whichever of their feeds saw it first, and
@@ -598,7 +598,7 @@ func (s *Store) ArticleForUser(ctx context.Context, userID UserID, id ArticleID)
 		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
 		       a.content_expired_at
 		FROM articles a
-		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		`+ownedBody+`
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		WHERE a.id = $2 AND `+visibleArticles,
 		userID, id,

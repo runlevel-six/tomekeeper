@@ -131,7 +131,7 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 			// ClearExtractionFailure was written for, arriving from the other
 			// direction: a queue that lists work nobody can do is a queue that
 			// stops being read.
-			if current, err := w.store.CurrentContent(ctx, id); err == nil && current.HTML != "" {
+			if current, err := w.store.CurrentContent(ctx, id, store.Household()); err == nil && current.HTML != "" {
 				log.Info("reprocessing produced nothing; keeping the existing body",
 					"extractor", current.ExtractorName,
 					"version", current.ExtractorVersion)
@@ -174,7 +174,11 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 	}
 
 	madeCurrent, err := w.store.InsertContent(ctx, store.ContentParams{
-		ArticleID:        id,
+		ArticleID: id,
+		// The household's slot. Extraction runs once per article against the
+		// household's rules; a reader whose own rules diverge gets their own run,
+		// and that is what fills in a different owner here.
+		Owner:            store.Household(),
 		ExtractorName:    result.Name,
 		ExtractorVersion: extract.Version,
 		ContentOrigin:    origin,
@@ -235,7 +239,7 @@ func (w *ExtractArticleWorker) Work(ctx context.Context, job *river.Job[ExtractA
 // alreadyCurrent reports whether this article already has a body from the
 // current extractor version.
 func (w *ExtractArticleWorker) alreadyCurrent(ctx context.Context, id store.ArticleID) bool {
-	current, err := w.store.CurrentContent(ctx, id)
+	current, err := w.store.CurrentContent(ctx, id, store.Household())
 	if err != nil {
 		return false
 	}

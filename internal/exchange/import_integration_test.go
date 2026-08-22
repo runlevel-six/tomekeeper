@@ -109,7 +109,7 @@ func TestImportWritesALibrary(t *testing.T) {
 		t.Error("the imported article has no body")
 	}
 
-	content, err := s.CurrentContent(ctx, first)
+	content, err := s.CurrentContent(ctx, first, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -191,7 +191,7 @@ func TestImportSanitizesWhatItStores(t *testing.T) {
 	apply(t, s, userID)
 
 	id := articleAt(t, s, userID, "https://example.com/posts/markup-from-2011")
-	content, err := s.CurrentContent(ctx, id)
+	content, err := s.CurrentContent(ctx, id, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -399,7 +399,7 @@ func TestImportDeduplicatesAgainstAnArticleAFeedCarried(t *testing.T) {
 	if got := articleAt(t, s, userID, canonical); got != existing {
 		t.Errorf("the import created article %d instead of using the feed's %d", got, existing)
 	}
-	content, err := s.CurrentContent(ctx, existing)
+	content, err := s.CurrentContent(ctx, existing, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}

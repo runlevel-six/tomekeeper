@@ -31,7 +31,7 @@ func twoBodies(t *testing.T, tr twoReadersHTTP) (imported, fetched store.Content
 		t.Fatalf("ImportArticle() = %v", err)
 	}
 
-	bodies, err := tr.store.BodiesForArticle(ctx, tr.aliceOnly)
+	bodies, err := tr.store.BodiesForArticle(ctx, tr.alice, tr.aliceOnly)
 	if err != nil {
 		t.Fatalf("BodiesForArticle() = %v", err)
 	}
@@ -93,16 +93,26 @@ func TestPromoteBodyLetsAReaderChoose(t *testing.T) {
 		t.Errorf("the promoted body is not the one rendered:\n%s", after)
 	}
 
-	// And it stuck.
-	current, err := tr.store.CurrentContent(ctx, tr.aliceOnly)
+	// And it stuck — in *this reader's* slot.
+	current, err := tr.store.CurrentContent(ctx, tr.aliceOnly, store.Owned(tr.alice))
 	if err != nil {
-		t.Fatalf("CurrentContent() = %v", err)
+		t.Fatalf("CurrentContent(alice) = %v", err)
 	}
 	if current.Immutable {
 		t.Error("the imported body is still current after promoting the fetched one")
 	}
 	if current.ContentOrigin != store.OriginFetched {
 		t.Errorf("current origin = %q, want the fetched body", current.ContentOrigin)
+	}
+
+	// The household's copy is untouched, which is what makes this a choice rather
+	// than an edit: promoting decides for the reader who asked and for nobody else.
+	household, err := tr.store.CurrentContent(ctx, tr.aliceOnly, store.Household())
+	if err != nil {
+		t.Fatalf("CurrentContent(household) = %v", err)
+	}
+	if !household.Immutable {
+		t.Error("promoting changed the household's body as well as the reader's")
 	}
 }
 
@@ -122,20 +132,37 @@ func TestPromoteBodyIsReversible(t *testing.T) {
 		}
 	}
 
-	bodies, err := tr.store.BodiesForArticle(ctx, tr.aliceOnly)
+	// Promotion copies into the reader's slot rather than moving the row, so the
+	// count grows by the copies made — two here, one per promotion. What must not
+	// grow is the number of bodies the reader is *choosing between*, and what must
+	// not change at all is the pair the household holds.
+	bodies, err := tr.store.BodiesForArticle(ctx, tr.alice, tr.aliceOnly)
 	if err != nil {
 		t.Fatalf("BodiesForArticle() = %v", err)
 	}
-	if len(bodies) != 2 {
-		t.Fatalf("promoting changed the number of bodies: %d", len(bodies))
+
+	var household, mine int
+	for _, b := range bodies {
+		if b.Owner == nil {
+			household++
+		} else {
+			mine++
+		}
+	}
+	if household != 2 {
+		t.Errorf("the household holds %d bodies, want the original 2 untouched", household)
+	}
+	if mine == 0 {
+		t.Fatal("promoting left the reader no body of their own")
 	}
 
 	var current int
 	for _, b := range bodies {
-		if b.Current {
+		if b.Current && b.Owner != nil {
 			current++
-			if b.ID != imported {
-				t.Errorf("current body is %d, want the imported one back at %d", b.ID, imported)
+			// The copy carries the origin of what was promoted, not its id.
+			if b.ContentOrigin != store.OriginImport("wallabag") {
+				t.Errorf("current body origin is %q, want the imported one back", b.ContentOrigin)
 			}
 		}
 		// A demoted immutable body is still immutable: still never regenerated, and
@@ -157,7 +184,7 @@ func TestPromoteBodyRefusesAnotherArticlesBody(t *testing.T) {
 	twoBodies(t, tr)
 
 	// Bob's article has its own body, which is not Alice's to show.
-	bobsBodies, err := tr.store.BodiesForArticle(ctx, tr.bobOnly)
+	bobsBodies, err := tr.store.BodiesForArticle(ctx, tr.bob, tr.bobOnly)
 	if err != nil {
 		t.Fatalf("BodiesForArticle(bob) = %v", err)
 	}
@@ -165,7 +192,7 @@ func TestPromoteBodyRefusesAnotherArticlesBody(t *testing.T) {
 		t.Fatal("the fixture gave Bob's article no body")
 	}
 
-	before, err := tr.store.CurrentContent(ctx, tr.aliceOnly)
+	before, err := tr.store.CurrentContent(ctx, tr.aliceOnly, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -177,7 +204,7 @@ func TestPromoteBodyRefusesAnotherArticlesBody(t *testing.T) {
 		t.Errorf("promoting another article's body = %d, want 404", rec.Code)
 	}
 
-	after, err := tr.store.CurrentContent(ctx, tr.aliceOnly)
+	after, err := tr.store.CurrentContent(ctx, tr.aliceOnly, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -188,14 +215,16 @@ func TestPromoteBodyRefusesAnotherArticlesBody(t *testing.T) {
 
 // A reader cannot promote a body on an article they cannot see.
 //
-// Bodies carry no user scoping of their own — they belong to the article, which the
-// archive keeps one copy of for everyone — so the visibility check in the handler is
-// the only thing standing between a hand-crafted form and somebody else's archive.
+// There are now two things standing in the way rather than one: the handler checks
+// that the reader may see the article, and the store checks that the body is one
+// they may choose between — their own or the household's. Both refuse by
+// not-found. The comment this replaces said bodies carry no user scoping of their
+// own, which was true of the single-user design and is what tenancy changed.
 func TestPromoteBodyRefusesAnInvisibleArticle(t *testing.T) {
 	rd, tr := readingFixture(t)
 	ctx := t.Context()
 
-	bobsBodies, err := tr.store.BodiesForArticle(ctx, tr.bobOnly)
+	bobsBodies, err := tr.store.BodiesForArticle(ctx, tr.bob, tr.bobOnly)
 	if err != nil {
 		t.Fatalf("BodiesForArticle(bob) = %v", err)
 	}
@@ -218,8 +247,8 @@ func TestArticleWithOneBodyOffersNoChoice(t *testing.T) {
 	}
 }
 
-// After promoting a mutable body over an immutable one, the article is back in the
-// ordinary extraction lifecycle.
+// Promoting does not drag the household's extraction back into the re-extraction
+// lifecycle.
 //
 // Worth asserting because it is a consequence rather than a feature: re-extraction
 // selects on the *current* body being mutable, so promoting changes whether the
@@ -253,12 +282,26 @@ func TestPromotingAMutableBodyRestoresReextraction(t *testing.T) {
 		t.Fatalf("promote = %d, want 200", rec.Code)
 	}
 
+	// Still excluded, and that is the tenancy answer rather than a regression.
+	//
+	// Promotion copies into the reader's slot; the household's body is still the
+	// immutable imported one, and a bare `tome reextract` brings the *household's*
+	// extraction forward. One reader's choice must not put the archive's shared
+	// lineage back into a lifecycle it had left, or promoting would be a way to
+	// make work for everybody.
+	//
+	// The reader is not stranded, but what un-strands them is reader-scoped
+	// re-extraction — reprocessing their own archive against their own rules —
+	// which is a milestone item and not this control's job. Until it lands, a
+	// reader who has promoted keeps the copy they chose and does not receive
+	// extraction improvements on it. Worth stating out loud, because it is the one
+	// thing this change costs somebody.
 	candidates, err = tr.store.System().ReextractCandidates(ctx, "0", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}
-	if !containsArticle(candidates, tr.aliceOnly) {
-		t.Error("after promoting a mutable body the article is still excluded from re-extraction")
+	if containsArticle(candidates, tr.aliceOnly) {
+		t.Error("one reader's promotion put the household's extraction back into the re-extraction lifecycle")
 	}
 }
 

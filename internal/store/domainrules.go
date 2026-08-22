@@ -164,7 +164,11 @@ func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error 
 		-- useful ones, since 0.5 is one request every two seconds — were silently
 		-- discarded while whole numbers worked, which is why it went unnoticed.
 		VALUES ($1, NULLIF($2, ''), $3, $4, NULLIF($5, ''), NULLIF($6::numeric, 0), NULLIF($7, ''))
-		ON CONFLICT (domain) DO UPDATE SET
+		-- The conflict target names the index expression, not just the column:
+		-- uniqueness is now one rule per domain *per owner*, with the household's
+		-- default in the COALESCE(user_id, 0) slot. Naming the column alone stopped
+		-- matching any constraint the moment rules gained an owner.
+		ON CONFLICT (domain, COALESCE(user_id, 0)) DO UPDATE SET
 			content_selector = EXCLUDED.content_selector,
 			strip_selectors  = EXCLUDED.strip_selectors,
 			requires_js      = EXCLUDED.requires_js,

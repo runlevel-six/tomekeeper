@@ -81,7 +81,7 @@ func (s *Store) ExportArticles(ctx context.Context, userID UserID, after Article
 		       COALESCE(c.immutable, false),
 		       COALESCE(ir.source_name, ''), COALESCE(ir.source_id, '')
 		FROM articles a
-		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		`+ownedBody+`
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		LEFT JOIN import_records ir ON ir.article_id = a.id AND ir.user_id = $1
 		WHERE a.id > $2 AND `+visibleArticles+`

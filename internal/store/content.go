@@ -270,6 +270,14 @@ type ContentParams struct {
 	Text             string
 	WordCount        int
 	FSPath           string
+
+	// Owner is the reader this body belongs to, or nil for the household's.
+	//
+	// Explicit rather than defaulting, because the default would be the slot every
+	// reader reads: a write that quietly chose it would overwrite what everybody
+	// sees. Extraction fills this in from the rules that produced the body — nil
+	// when they are the household's, the reader when they are not.
+	Owner *UserID
 }
 
 // InsertContent stores a new body and makes it current.
@@ -289,33 +297,44 @@ func (s *Store) InsertContent(ctx context.Context, p ContentParams) (bool, error
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Every statement below is scoped to one owner's slot. The immutability check,
+	// the demotion and the insert all have to agree about whose body is being
+	// replaced, or a reader's extraction would demote the household's — and every
+	// other reader would lose their body to somebody else's domain rule.
+	//
+	// IS NOT DISTINCT FROM rather than =, because the household's slot is NULL and
+	// `user_id = NULL` is NULL rather than true. That is the same operator this
+	// project already needed for the nullable extractor version, and the same
+	// silent-exclusion bug if it is forgotten.
 	var currentIsImmutable bool
 	err = tx.QueryRow(ctx, `
 		SELECT immutable FROM article_content
-		WHERE article_id = $1 AND is_current`, p.ArticleID).Scan(&currentIsImmutable)
+		WHERE article_id = $1 AND is_current
+		  AND user_id IS NOT DISTINCT FROM $2`, p.ArticleID, p.Owner).Scan(&currentIsImmutable)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("checking the current body of article %d: %w", p.ArticleID, err)
 	}
 
 	makeCurrent := !currentIsImmutable
 	if makeCurrent {
-		// The partial unique index permits one current row per article, so the
-		// old one has to be demoted before the new one is inserted.
+		// The partial unique index permits one current row per article per owner, so
+		// the old one has to be demoted before the new one is inserted.
 		if _, err := tx.Exec(ctx, `
 			UPDATE article_content SET is_current = false
-			WHERE article_id = $1 AND is_current`, p.ArticleID); err != nil {
+			WHERE article_id = $1 AND is_current
+			  AND user_id IS NOT DISTINCT FROM $2`, p.ArticleID, p.Owner); err != nil {
 			return false, fmt.Errorf("demoting the previous body: %w", err)
 		}
 	}
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO article_content (
-			article_id, extractor_name, extractor_version, content_origin,
+			article_id, user_id, extractor_name, extractor_version, content_origin,
 			immutable, content_html, content_text, word_count, is_current, fs_path
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''))`,
+		VALUES ($1, $11, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''))`,
 		p.ArticleID, p.ExtractorName, p.ExtractorVersion, p.ContentOrigin,
-		p.Immutable, p.HTML, p.Text, p.WordCount, makeCurrent, p.FSPath,
+		p.Immutable, p.HTML, p.Text, p.WordCount, makeCurrent, p.FSPath, p.Owner,
 	); err != nil {
 		return false, fmt.Errorf("inserting the body of article %d: %w", p.ArticleID, err)
 	}
@@ -339,14 +358,21 @@ type Content struct {
 	ExtractedAt      time.Time
 }
 
-// CurrentContent returns the body currently shown for an article.
-func (s *Store) CurrentContent(ctx context.Context, id ArticleID) (Content, error) {
+// CurrentContent returns the body in one owner's slot — nil for the household's.
+//
+// Owner-explicit rather than reader-facing: every caller is in the pipeline, where
+// what matters is which extraction is being replaced or localized. What a *reader*
+// sees is ownedBody, which falls back to the household's when they have none, and
+// this deliberately does not: a pipeline step that silently read somebody else's
+// body would then write over it.
+func (s *Store) CurrentContent(ctx context.Context, id ArticleID, owner *UserID) (Content, error) {
 	var c Content
 	err := s.pool.QueryRow(ctx, `
 		SELECT article_id, extractor_name, extractor_version, content_origin,
 		       immutable, content_html, content_text, COALESCE(word_count, 0), extracted_at
 		FROM article_content
-		WHERE article_id = $1 AND is_current`, id,
+		WHERE article_id = $1 AND is_current
+		  AND user_id IS NOT DISTINCT FROM $2`, id, owner,
 	).Scan(&c.ArticleID, &c.ExtractorName, &c.ExtractorVersion, &c.ContentOrigin,
 		&c.Immutable, &c.HTML, &c.Text, &c.WordCount, &c.ExtractedAt)
 	if err != nil {
@@ -466,7 +492,16 @@ func (s *SystemStore) ReextractCandidates(
 			       -- scheme://host[:port]/path -> host
 			       split_part(split_part(split_part(a.url_canonical, '://', 2), '/', 1), ':', 1) AS host
 			FROM articles a
-			LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+			-- The household's body, not whichever slot happens to match.
+			--
+			-- A bare reextract brings the household's extraction to the current
+			-- version; a reader's fork is re-extracted when that reader asks, against
+			-- their own rules. Joining any current row would compare a reader's
+			-- version here and then decide the household's fate from it — selecting
+			-- the wrong articles in both directions, and silently, which is the shape
+			-- this project has repeatedly paid for.
+			LEFT JOIN article_content c
+			       ON c.article_id = a.id AND c.is_current AND c.user_id IS NULL
 			WHERE COALESCE(a.raw_blob_path, '') <> ''
 			  AND a.id > $2
 			  AND (

@@ -187,7 +187,7 @@ func (p *PostgresSearch) statement(userID UserID, q SearchQuery) (string, []any)
 		       COALESCE(st.read, false), COALESCE(st.starred, false)
 		FROM websearch_to_tsquery($3, $2) AS tsq
 		CROSS JOIN articles a
-		JOIN article_content c ON c.article_id = a.id AND c.is_current
+		` + ownedBodyInner + `
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		LEFT JOIN LATERAL (
 			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id

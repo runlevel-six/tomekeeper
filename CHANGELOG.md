@@ -34,6 +34,23 @@ happens, because it is the one change that wants a follow-up command
 
 ### Added
 
+- **A body belongs to a reader.** The first half of tenancy: `article_content` and
+  `domain_rules` gained an owner, so two readers can extract one shared page
+  differently. Copy-on-write — `NULL` is the household's extraction, which is what
+  everybody reads until their own diverges, so a household where nobody writes a
+  domain rule stores exactly one body per article as before.
+
+  **The expensive half stays shared.** One poll, one raw page, and one copy of each
+  image however many readers hold it — images are 63% of this archive and are
+  content-addressed, so they dedupe regardless of who extracted what. Every current
+  body is about 10% of the bytes, which is what a reader forking the entire archive
+  would cost.
+
+  This is the schema and the read path: the stream, the article, search, the Fever
+  API, the export, the saved list and the body chooser all now show a reader their
+  own body, falling back to the household's. What *creates* a reader's body is the
+  next piece of work; today only promoting does.
+
 - **Accounts have a role, and sessions can be revoked.** The first half of
   multi-user, and on its own it closes a hole that was live: `requireUser` trusted the
   user id sealed in the session cookie without checking that the account still existed,
@@ -85,6 +102,21 @@ happens, because it is the one change that wants a follow-up command
   derived from your password, not a session, and it says so on the page.
 
 ### Changed
+
+- **Promoting a stored copy is now your choice alone.** It copies the body you picked
+  into your own slot instead of changing the shared one, so it decides what you read
+  and nothing about what anybody else does.
+
+  Two concrete reasons rather than a preference: an imported body has an importer, so
+  one reader's library should not become another reader's article text — possibly of
+  a paywalled page they never had access to; and highlights anchor by quoted text
+  rather than by body id, so changing a body under somebody could silently strand
+  their annotations.
+
+  A promoted copy **stops receiving extraction improvements** until reader-scoped
+  reprocessing exists: `tome reextract` brings the household's extraction forward and
+  a promoted copy has left that lineage. That is right — one reader's choice should
+  not make work for everybody — and it is the one thing the change costs.
 
 - **Changing a password signs out existing browser sessions.** It always disconnected
   Fever clients, because that key is derived from the cleartext; leaving browsers signed

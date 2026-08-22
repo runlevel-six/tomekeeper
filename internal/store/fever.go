@@ -173,7 +173,7 @@ func (s *Store) FeverItems(ctx context.Context, userID UserID, q FeverItemQuery)
 		       COALESCE(st.read, false), COALESCE(st.starred, false),
 		       COALESCE(a.published_at, a.first_seen_at)
 		FROM articles a
-		LEFT JOIN article_content c ON c.article_id = a.id AND c.is_current
+		`+ownedBody+`
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		LEFT JOIN LATERAL (
 			SELECT f3.id

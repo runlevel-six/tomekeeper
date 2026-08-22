@@ -119,7 +119,7 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 		return err
 	}
 
-	content, err := w.store.CurrentContent(ctx, id)
+	content, err := w.store.CurrentContent(ctx, id, store.Household())
 	if err != nil {
 		if store.IsNotFound(err) {
 			// Nothing extracted, so there is no body to localize. Extraction
@@ -135,7 +135,10 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 	localized, outcome := asset.Localize(content.HTML, w.resolver(ctx, id, article.URLCanonical, log))
 
 	if outcome.Found > 0 {
-		if err := w.store.UpdateContentHTML(ctx, id, localized); err != nil {
+		// The same slot the body was read from just above. Localization rewrites
+		// image URLs inside a body it already has in hand, so writing anywhere else
+		// would put one reader's rewritten HTML over another's extraction.
+		if err := w.store.UpdateContentHTML(ctx, id, store.Household(), localized); err != nil {
 			return err
 		}
 	}

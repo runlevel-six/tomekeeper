@@ -156,7 +156,7 @@ func seedFiled(t *testing.T, s *store.Store, userID store.UserID, category store
 
 func bodyStillThere(t *testing.T, s *store.Store, id store.ArticleID) bool {
 	t.Helper()
-	c, err := s.CurrentContent(t.Context(), id)
+	c, err := s.CurrentContent(t.Context(), id, store.Household())
 	return err == nil && c.HTML != ""
 }
 

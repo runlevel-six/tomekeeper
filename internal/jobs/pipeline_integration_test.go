@@ -200,7 +200,7 @@ func TestFetchAndExtractPipeline(t *testing.T) {
 		// nothing needs to be enqueued by hand — which also proves the
 		// scheduler works.
 		waitFor(t, "the article to be fetched and extracted", func() bool {
-			_, err := s.CurrentContent(ctx, articleID)
+			_, err := s.CurrentContent(ctx, articleID, store.Household())
 			return err == nil
 		})
 	})
@@ -233,7 +233,7 @@ func TestFetchAndExtractPipeline(t *testing.T) {
 		t.Errorf("raw blob path = %q, want it under articles/", article.RawBlobPath)
 	}
 
-	content, err := s.CurrentContent(ctx, articleID)
+	content, err := s.CurrentContent(ctx, articleID, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -307,7 +307,7 @@ func TestFetchFailureIsRecorded(t *testing.T) {
 	}
 
 	// Nothing was extracted, and that is the correct outcome.
-	if _, err := s.CurrentContent(t.Context(), articleID); err == nil {
+	if _, err := s.CurrentContent(t.Context(), articleID, store.Household()); err == nil {
 		t.Error("a body was stored for an article that could not be fetched")
 	}
 }
@@ -403,7 +403,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 
 	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
 		waitFor(t, "the first extraction", func() bool {
-			_, err := s.CurrentContent(ctx, articleID)
+			_, err := s.CurrentContent(ctx, articleID, store.Household())
 			return err == nil
 		})
 
@@ -434,7 +434,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 		}
 
 		waitFor(t, "the re-extraction to use the rule", func() bool {
-			c, err := s.CurrentContent(ctx, articleID)
+			c, err := s.CurrentContent(ctx, articleID, store.Household())
 			return err == nil && c.ExtractorName == extract.NameDomainRule
 		})
 
@@ -444,7 +444,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 		}
 	})
 
-	content, err := s.CurrentContent(t.Context(), articleID)
+	content, err := s.CurrentContent(t.Context(), articleID, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -813,7 +813,7 @@ func TestAPageIsFetchedAgainOnlyWhenAsked(t *testing.T) {
 		}
 
 		waitFor(t, "the first fetch and extraction", func() bool {
-			_, err := s.CurrentContent(ctx, articleID)
+			_, err := s.CurrentContent(ctx, articleID, store.Household())
 			return err == nil
 		}, func() string {
 			a, _ := s.GetArticle(ctx, articleID)
@@ -853,10 +853,10 @@ func TestAPageIsFetchedAgainOnlyWhenAsked(t *testing.T) {
 		}
 
 		waitFor(t, "the body to come from the second version", func() bool {
-			c, err := s.CurrentContent(ctx, articleID)
+			c, err := s.CurrentContent(ctx, articleID, store.Household())
 			return err == nil && strings.Contains(c.Text, "second version")
 		}, func() string {
-			c, _ := s.CurrentContent(ctx, articleID)
+			c, _ := s.CurrentContent(ctx, articleID, store.Household())
 			return fmt.Sprintf("body is %q, fetches=%d", c.Text, fetches)
 		})
 

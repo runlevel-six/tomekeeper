@@ -40,12 +40,29 @@ account is created by `tome migrate` from `TOME_USERNAME`.
 | `username` | `text` | Unique. |
 | `password_hash` | `text` | An argon2id hash in PHC string form, written by `tome migrate` from `TOME_PASSWORD`. Empty means the web interface cannot be signed into, which is what a first run with no password set produces. The parameters live inside each hash, so raising the cost later is an upgrade rather than a lockout. |
 | `api_key` | `text` | Unique, nullable. MD5 of `username:password`, the credential [the Fever API](fever-api.md) authenticates against. It cannot be derived from `password_hash`, so it is written while the cleartext is in hand — which is why the column predated the API that now reads it. Null until a password is set, and rewritten on every change, so changing a password disconnects every mobile client. |
+| `retain_after_read` | `interval` | How long this reader keeps a read article listed. Nullable, meaning "follow `TOME_RETAIN_AFTER_READ`"; zero is a real value meaning keep everything. It expires *this reader's view* — their state, and their own body if they have one. It cannot reclaim the shared page or the shared images, because another reader may still hold them; that is [`tome prune`](cli.md#tome-prune), which operates on what nothing references at all. |
 | `role` | `text` | `admin` or `reader`, constrained by the database. Not about who may *read* what — reading is scoped per user by construction — but about who may change what everyone shares: domain rules, retention, the archive-wide audit, and other accounts. The account `tome migrate` seeds is an admin, since it is the operator and there is nobody to grant it anything. |
 | `session_epoch` | `bigint` | Bumped to invalidate every outstanding session for this reader at once. The value is sealed into the session cookie when it is issued and compared on every request, so a password change, an explicit sign-out-everywhere, or deleting the account all take effect immediately rather than when a cookie happens to expire. It buys revocation per reader, not per device — the trade taken instead of a sessions table, which the session interface still leaves available. |
 | `theme` | `text` | The reader's palette and light/dark preference, as one value such as `plum-dark` or `auto`. See [Themes](themes.md). |
 | `mark_read_on_scroll` | `boolean` | Whether the unread lists mark articles read as they are scrolled past. `false` unless the reader turned it on; automatic state changes are opted into, never inherited from an upgrade. |
 | `default_poll_interval` | `interval` | How often the reader wants their feeds checked. Nullable, and null is the default and a real value: it means the poller decides per feed. A feed with a `poll_interval_override` does not consult this. |
 | `created_at` | `timestamptz` | |
+
+**Bodies and rules have an owner.** `article_content.user_id` and
+`domain_rules.user_id` are nullable, and `NULL` is the household's — the extraction
+and the rules everybody gets until their own diverge. A reader gets a row of their
+own only when it does, so a household of readers who never write a rule stores one
+body per article, exactly as a single-user archive does.
+
+The line that draws: **the household owns what costs bandwidth or disk** — the
+fetched page and the content-addressed images, which are 63% of this archive and
+are shared however many readers hold them. **The reader owns what is derived from
+it** — the body, the rules that produced it, and which stored copy they see.
+
+One current body per article *per owner*, held by a unique index on
+`(article_id, COALESCE(user_id, 0)) WHERE is_current`. The `COALESCE` matters:
+`NULL` is not distinct from `NULL` in a unique index, so without it an article could
+accumulate any number of current household bodies.
 
 ### `password_setup_links`
 

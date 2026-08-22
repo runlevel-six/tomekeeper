@@ -143,10 +143,11 @@ func (s *Store) SetAssetsStatus(ctx context.Context, id ArticleID, status string
 // archive paths. Only the current row is touched: superseded bodies are kept
 // as a record of what an earlier extractor produced, and rewriting them would
 // destroy that.
-func (s *Store) UpdateContentHTML(ctx context.Context, id ArticleID, html string) error {
+func (s *Store) UpdateContentHTML(ctx context.Context, id ArticleID, owner *UserID, html string) error {
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE article_content SET content_html = $2
-		WHERE article_id = $1 AND is_current`, id, html); err != nil {
+		WHERE article_id = $1 AND is_current
+		  AND user_id IS NOT DISTINCT FROM $3`, id, html, owner); err != nil {
 		return fmt.Errorf("updating the body of article %d: %w", id, err)
 	}
 	return nil

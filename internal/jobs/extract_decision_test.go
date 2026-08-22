@@ -117,7 +117,7 @@ func TestWhatAnEmptyExtractionRecords(t *testing.T) {
 			t.Errorf("fetch_error = %q, want nothing recorded", a.FetchError)
 		}
 
-		body, err := s.CurrentContent(ctx, id)
+		body, err := s.CurrentContent(ctx, id, store.Household())
 		if err != nil {
 			t.Fatalf("CurrentContent() = %v", err)
 		}

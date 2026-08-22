@@ -934,19 +934,29 @@ immutable and wins automatically, because it may be the only surviving copy of a
 page that is gone, so nothing automatic may overrule it. That leaves exactly one
 mechanism: somebody looks at both and says which is better.
 
-Two consequences worth knowing:
+**The choice is yours alone.** Promoting copies the body you picked into your own
+slot rather than changing the shared one, so it decides what *you* read and nothing
+about what anybody else does. The household's copy is left exactly as it was.
+
+That is a change from how this worked when there was one reader, and it was made
+for two concrete reasons: an imported body has an importer, so one reader's library
+should not become another reader's article text; and highlights anchor by quoted
+text rather than by body id, so changing the body under somebody could silently
+strand their annotations.
+
+Three consequences worth knowing:
 
 - **Promoting is reversible.** Nothing is deleted, a demoted immutable body is still
-  immutable, and it can be promoted back.
-- **Promoting a mutable body puts the article back in the extraction lifecycle.**
-  Re-extraction selects on the *current* body being replaceable, so an article
-  showing an imported copy is excluded and the same article showing a fetched copy is
-  not. That is the right behavior and it is not obvious.
-
-**The choice is global**, like the body it chooses: the archive keeps one copy of a
-page for everyone, so promoting changes what every reader sees in a way starring or
-tagging never does. Correct while there is one reader; a multi-user build has to
-decide whether it stays shared or becomes a per-reader preference.
+  immutable, and the household's copy stays promotable — putting it back is the same
+  operation in the other direction.
+- **You can only choose between your own copies and the household's.** Another
+  reader's extraction is not offered and cannot be promoted; asking for one answers
+  the same way as asking for a body that does not exist.
+- **A promoted copy stops receiving extraction improvements**, until reader-scoped
+  reprocessing exists. `tome reextract` brings the *household's* extraction forward,
+  and your copy is no longer part of that lineage — which is right, since one
+  reader's choice should not make work for everybody, and is the one thing this
+  costs you.
 
 ### The domain rules page
 

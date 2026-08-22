@@ -51,7 +51,7 @@ func (s *Server) handlePromoteBody(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.PromoteBody(r.Context(), articleID, store.ContentID(bodyID)); err != nil {
+	if err := s.store.PromoteBody(r.Context(), signedInUser(r), articleID, store.ContentID(bodyID)); err != nil {
 		if errors.Is(err, store.ErrNoSuchBody) {
 			// The body is not this article's. Not found rather than a complaint: the
 			// same answer as an article that does not exist, for the same reason.

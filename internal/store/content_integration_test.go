@@ -59,7 +59,7 @@ func TestInsertContentDemotesRatherThanDeletes(t *testing.T) {
 		ExtractorName: "trafilatura", ExtractorVersion: "2", Text: "second extraction",
 	})
 
-	current, err := s.CurrentContent(t.Context(), id)
+	current, err := s.CurrentContent(t.Context(), id, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
@@ -107,7 +107,7 @@ func TestImmutableContentIsNeverReplaced(t *testing.T) {
 		t.Error("a fetched body replaced an immutable one")
 	}
 
-	current, err := s.CurrentContent(t.Context(), id)
+	current, err := s.CurrentContent(t.Context(), id, store.Household())
 	if err != nil {
 		t.Fatalf("CurrentContent() = %v", err)
 	}
