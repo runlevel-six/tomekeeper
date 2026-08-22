@@ -32,7 +32,36 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
+### Added
+
+- **`tome audit`** reports stored bodies that may not be what they claim to be. The
+  failed-fetch queue answers *what did not arrive*; this answers *what arrived and is
+  wrong*, which nothing asked until a re-fetch stored a site's cookie consent dialog as
+  a 410-word article and, by succeeding, removed it from the queue.
+
+  Three lenses: bodies sharing no distinctive word with their title, bodies that more
+  than one article shares, and titles that are URLs.
+
+  **None of them is a gate, deliberately.** Measured over this archive's 2,211 bodies,
+  the title lens flags seven and about three are real — as a rejection rung it would
+  have thrown away a 16,249-word body because that article's title was percent-encoded.
+  A check with a third of the precision it needs is worse than no check when its action
+  is to discard an article. So it prints and changes nothing.
+
+  It looks only at the `trafilatura` and `readability` rungs, which choose a block of a
+  page and can therefore choose the wrong one. A `domain_rule` body was 217 for 217
+  here — a hand-written selector cannot wander — and a `page_images` body is a picture
+  with no prose to match, so flagging comics would bury the list.
+
 ### Fixed
+
+- **Titles that are URLs are no longer permanent.** `UpdateArticleMetadata` fills gaps
+  only, which is right — a feed's title is a choice somebody made — but a URL is not a
+  choice anybody made, and treating it as one left twelve articles titled with their own
+  address, one of them 16,249 words under `eBPF%20and%20the%20Cilium%20Datapath.pdf`. A
+  placeholder title now counts as a gap, so the page gets to replace it and a
+  `tome reextract` repairs the existing ones with no new command. The importer also
+  decodes an escaped filename rather than storing the escapes.
 
 - **CI failed the DCO check on a commit that was correctly signed.** The check compares
   against `github.event.before`, which a force-push leaves naming a commit that was

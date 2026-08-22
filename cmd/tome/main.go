@@ -56,6 +56,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "export":
 		return exportArchive(args[1:], stdout, stderr)
 
+	case "audit":
+		return audit(args[1:], stdout, stderr)
+
 	case "refetch":
 		return refetch(args[1:], stdout, stderr)
 
@@ -114,6 +117,7 @@ Subcommands:
   reextract     Re-extract stored pages at the current extractor version
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds
+  audit         Report stored bodies that may not be what they claim
   corpus        Capture a real page into the private extraction corpus
   explain       Say what the extraction ladder did to one article, and why
   await-schema  Wait until the database carries this build's migrations

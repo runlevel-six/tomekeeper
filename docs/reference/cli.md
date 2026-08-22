@@ -512,7 +512,42 @@ See the README in `internal/extract/testdata/pages/` for the file format, and
 [Reprocess the archive](../how-to/reprocess-the-archive.md) for applying an
 extraction change once it is made.
 
-### `tome explain`
+### `tome audit`
+
+```
+tome audit [--limit N]
+```
+
+Reports stored bodies that may not be what they claim to be. Read-only.
+
+The failed-fetch queue answers *what did not arrive*. This answers the harder question
+underneath it — *what arrived and is wrong* — which nothing asked until a re-fetch stored
+a site's cookie consent dialog as a 410-word article and, by succeeding, took it out of
+the queue.
+
+Three lenses:
+
+| Lens | Finds | Ordinary false alarms |
+|---|---|---|
+| No title word in the body | Extraction chose the wrong block of the page: a consent gate, a sign-in wall, a related-articles rail | A link roundup, a podcast page, a title in another language |
+| One body across several articles | The same wall stored as content for more than one article | A story reposted, a page mirrored on two hosts |
+| Titles that are URLs | An import whose source had no title kept the address as one | — |
+
+**None of them is a gate, deliberately.** Measured over 2,211 bodies, the title lens
+flags seven and about three are real — it would reject a 16,249-word body because that
+article's title was percent-encoded. A check with a third of the precision it needs is
+worse than nothing when its action is to throw a body away. So it prints, and you decide.
+
+The first lens looks only at the `trafilatura` and `readability` rungs, which choose a
+block of a page and can choose the wrong one. A `domain_rule` body cannot wander, and a
+`page_images` body is a picture with no prose to match — flagging comics would bury the
+list.
+
+A URL-titled article with a body gets a real title from the next `tome reextract`; one
+without has no page to take a title from and needs a fetch first, which the report says
+per row.
+
+## `tome explain`
 
 Reports what each rung of the extraction ladder produced for one article, and
 which threshold accepted or rejected it.

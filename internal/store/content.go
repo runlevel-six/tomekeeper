@@ -365,7 +365,23 @@ func (s *Store) CurrentContent(ctx context.Context, id ArticleID) (Content, erro
 func (s *Store) UpdateArticleMetadata(ctx context.Context, id ArticleID, p ArticleParams) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE articles SET
-			title        = COALESCE(title, NULLIF($2, '')),
+			-- Gaps only, with one exception: a title that is a URL or an encoded
+			-- filename counts as a gap.
+			--
+			-- Without that, an import whose source had no title for a bookmark kept the
+			-- URL as one and nothing ever replaced it, because a URL is not NULL. Twelve
+			-- articles here, one of them 16,249 words under the title
+			-- `+"`eBPF%20and%20the%20Cilium%20Datapath.pdf`"+`. The page knows better in
+			-- every one of those cases, and this is where it gets to say so — a
+			-- `+"`tome reextract`"+` now repairs them with no new command.
+			--
+			-- Still never overwrites a real title, however plain: a feed's title is a
+			-- choice somebody made, and the page's is not automatically an improvement.
+			title        = CASE
+			                 WHEN title IS NULL OR title = '' OR `+placeholderTitleSQL+`
+			                 THEN COALESCE(NULLIF($2, ''), title)
+			                 ELSE title
+			               END,
 			author       = COALESCE(author, NULLIF($3, '')),
 			site_name    = COALESCE(site_name, NULLIF($4, '')),
 			language     = COALESCE(NULLIF($5, ''), language),

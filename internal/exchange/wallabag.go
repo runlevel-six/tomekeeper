@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -350,7 +351,7 @@ func (w Wallabag) mapEntry(e wallabagEntry, index int) (*Article, error) {
 		SourceID:      strings.TrimSpace(e.ID.String()),
 		URL:           original,
 		ResolvedURL:   resolved,
-		Title:         strings.TrimSpace(e.Title),
+		Title:         decodeTitle(e.Title),
 		SiteName:      strings.TrimSpace(e.DomainName),
 		Language:      normalizeLanguage(e.Language),
 		PublishedAt:   e.PublishedAt.Time,
@@ -410,4 +411,34 @@ func (w Wallabag) mapEntry(e wallabagEntry, index int) (*Article, error) {
 // attribute — which is where this value ends up.
 func normalizeLanguage(raw string) string {
 	return strings.ReplaceAll(strings.TrimSpace(raw), "_", "-")
+}
+
+// decodeTitle turns an encoded filename back into something readable.
+//
+// Wallabag keeps the URL as the title when it could not find one, and for a link
+// straight to a document that URL is the filename — so an archive ends up with
+// `eBPF%20and%20the%20Cilium%20Datapath.pdf` over a 16,249-word body. The escapes are
+// the only part of that worth undoing here.
+//
+// A title that is a whole URL is deliberately left alone rather than guessed at from
+// its path: "home" is not a better title than the address it came from, and extraction
+// replaces a URL-shaped title from the page itself, which actually knows. Only the ones
+// with no page to consult keep it, where it is at least informative.
+//
+// The extension stays. The document really is a PDF, and trimming it would be this
+// function deciding it knows what the thing is called.
+func decodeTitle(title string) string {
+	t := strings.TrimSpace(title)
+	if !strings.Contains(t, "%") {
+		return t
+	}
+	// PathUnescape rather than QueryUnescape: the latter reads "+" as a space, and a
+	// "+" in a filename is a plus.
+	decoded, err := url.PathUnescape(t)
+	if err != nil {
+		// A stray percent that is not an escape. Leaving it be is the honest answer —
+		// it may be a title that genuinely contains one.
+		return t
+	}
+	return strings.TrimSpace(decoded)
 }
