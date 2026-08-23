@@ -764,7 +764,7 @@ is there — the same reasoning that makes another reader's article not-found.
 | `GET /categories` | The categories the feeds are filed under |
 | `GET /categories?name=` | One category's articles. Present-but-empty selects the feeds with no category. |
 | `GET /articles/{id}` | The reader. Opening an article marks it read. |
-| `GET /search?q=` | Search results |
+| `GET /search?q=` | Search results. Matches **titles and bodies**; a title match ranks above any body-only match, and an article that failed extraction is still findable by its title. `websearch_to_tsquery` syntax: bare words, "quoted phrases", `OR`, and a leading `-` to exclude. |
 | `GET /feeds` | Feed list, health, and tags. `?sort=` and `?dir=` order it, `?q=` and `?health=` filter it, `?edit=<id>` opens one subscription in the form at the top. |
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |

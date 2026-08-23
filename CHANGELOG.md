@@ -32,7 +32,28 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Search finds titles**, not only bodies. An article whose distinctive words appear
+  only in its title was unfindable — discovered while running the multi-user
+  acceptance drill, where searching "Desktop" for an article titled *An Atari Desktop
+  On A Sega* returned nothing, which looked for a moment like a scoping failure. A
+  title is the string a reader actually saw in a list, and a body legitimately need
+  not repeat it.
+
+  **An article that failed extraction is now findable too**, by the title it does
+  have. The body join was an inner join, so the pages this archive could not read were
+  also the pages it could not find — and those are exactly the ones somebody goes
+  looking for by name.
+
+  A title match ranks above every body-only match. Body ranks are normalized into
+  `[0,1)` and a title match adds 1, which is a statement rather than a weighting: if
+  the words are in the title, that is the article you meant. Found while writing the
+  test — bare `ts_rank_cd` is unbounded, so a body repeating a word forty times had
+  been beating the article named after it.
+
+  Migration `00022` adds `articles.title_tsv` and its index. Titles are short, so it
+  is a fraction of the size of the index over the bodies.
 
 ## [v0.16.0] — 2026-08-23
 

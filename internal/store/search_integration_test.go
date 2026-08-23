@@ -293,6 +293,18 @@ func TestSearchPerformanceAt10kArticles(t *testing.T) {
 	if strings.Contains(plan, "Seq Scan on article_content") {
 		t.Errorf("the search plan sequentially scans article_content:\n%s", plan)
 	}
+	// The title index, and the reason this assertion exists: written as one WHERE
+	// clause with `c.tsv @@ tsq OR a.title_tsv @@ tsq`, PostgreSQL cannot bitmap two
+	// indexes on *different relations* and falls back to scanning both tables — a cost
+	// estimate of 93,645 here, against a plan that had been using the GIN. The query
+	// gathers the two kinds of hit in separate branches for exactly this reason, and
+	// that is invisible in a correctness test.
+	if !strings.Contains(plan, "articles_title_tsv_idx") {
+		t.Errorf("the search plan does not use the title index, so titles are being scanned:\n%s", plan)
+	}
+	if strings.Contains(plan, "Seq Scan on articles") {
+		t.Errorf("the search plan sequentially scans articles:\n%s", plan)
+	}
 
 	// --- the measurement, reported always ---
 	queries := []string{
@@ -401,5 +413,125 @@ func seedBulk(t *testing.T, pool *pgxpool.Pool, feedID store.FeedID, n int) {
 	}
 	if rare != 1 {
 		t.Fatalf("the %q fixture matches %d articles, want exactly 1", "needle", rare)
+	}
+}
+
+// A title is searchable, which it was not until 00022.
+//
+// Found by running the multi-user drill: searching "Desktop" for an article titled
+// "An Atari Desktop On A Sega" returned nothing, because only bodies were indexed and
+// that article's prose never used the word. A title is the string a reader actually
+// saw in a list, so it is the string they search for.
+func TestSearchFindsATitleTheBodyNeverMentions(t *testing.T) {
+	s, userID, feedID := searchFixture(t)
+	ctx := t.Context()
+
+	// The word appears in the title and nowhere in the body, which is the case that
+	// was unfindable.
+	id := searchable(t, s, userID, feedID, "atari-desktop", "An Atari Desktop On A Sega",
+		"A video walkthrough of the build, with parts listed in the description below.")
+
+	got, err := s.Search().Query(ctx, userID, store.SearchQuery{Text: "Atari"})
+	if err != nil {
+		t.Fatalf("Query() = %v", err)
+	}
+	if len(got) != 1 || got[0].ArticleID != id {
+		t.Fatalf("searching a title-only word returned %+v, want the article", got)
+	}
+	// The snippet is empty rather than a lie: nothing in the body matched. The title
+	// is rendered above it, so the row still says what it is.
+	if strings.Contains(got[0].Snippet, store.HighlightStart) {
+		t.Errorf("the snippet claims a body match that did not happen: %q", got[0].Snippet)
+	}
+}
+
+// An article that failed extraction is findable by the title it does have.
+//
+// The join to the body used to be an inner join, so the pages this archive could not
+// read were also the pages it could not find — and those are exactly the ones somebody
+// goes looking for by name.
+func TestSearchFindsAnArticleWithNoBody(t *testing.T) {
+	s, userID, feedID := searchFixture(t)
+	ctx := t.Context()
+
+	id, _, err := s.UpsertArticle(ctx, store.ArticleParams{
+		URLCanonical: "https://example.com/paywalled",
+		Title:        "The Peculiar Economics of Lighthouses",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+	if _, err := s.InsertFeedItem(ctx, userID, store.FeedItemParams{
+		FeedID: feedID, ArticleID: id, GUID: "guid-paywalled",
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+
+	got, err := s.Search().Query(ctx, userID, store.SearchQuery{Text: "lighthouses"})
+	if err != nil {
+		t.Fatalf("Query() = %v", err)
+	}
+	if len(got) != 1 || got[0].ArticleID != id {
+		t.Fatalf("a bodyless article was not findable by its title: %+v", got)
+	}
+}
+
+// A title match outranks an article that merely mentions the word.
+func TestSearchRanksTitleMatchesFirst(t *testing.T) {
+	s, userID, feedID := searchFixture(t)
+	ctx := t.Context()
+
+	// Mentioned many times in the body, which is what ts_rank_cd rewards.
+	mentions := searchable(t, s, userID, feedID, "mentions", "A Miscellany",
+		strings.Repeat("The lighthouse keeper wrote about the lighthouse again. ", 40))
+	// Named in the title, mentioned once.
+	titled := searchable(t, s, userID, feedID, "titled", "The Lighthouse at Dawn",
+		"A short account of one morning, and what the keeper saw.")
+
+	got, err := s.Search().Query(ctx, userID, store.SearchQuery{Text: "lighthouse"})
+	if err != nil {
+		t.Fatalf("Query() = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("found %d articles, want both", len(got))
+	}
+	if got[0].ArticleID != titled {
+		t.Errorf("the article named after the word did not come first: got %v (rank %v) then "+
+			"%v (rank %v). A body that repeats a word forty times must not outrank the title.",
+			got[0].ArticleID, got[0].Rank, got[1].ArticleID, got[1].Rank)
+	}
+	if got[1].ArticleID != mentions {
+		t.Errorf("unexpected second result: %+v", got[1])
+	}
+}
+
+// Titles live on the shared `articles` row, so scoping has to hold there too.
+//
+// This is the one that matters most about indexing titles: `article_content` is
+// per-reader and `articles` is not, so a query that reached the new column without the
+// visibility predicate would let one reader confirm what another has saved by typing a
+// guess. Written on a title the other reader alone can see.
+func TestSearchByTitleIsScopedToTheReader(t *testing.T) {
+	tr := setupTwoReaders(t)
+	ctx := t.Context()
+
+	id := auditArticle(t, tr, "https://example.com/bobs-lighthouse", "Bob's Lighthouse Notes")
+	auditVisible(t, tr, id, tr.bob)
+	// No body at all, so the only thing that can match is the title.
+
+	bob, err := tr.store.Search().Query(ctx, tr.bob, store.SearchQuery{Text: "lighthouse"})
+	if err != nil {
+		t.Fatalf("Query(bob) = %v", err)
+	}
+	if len(bob) != 1 || bob[0].ArticleID != id {
+		t.Fatalf("Bob cannot find his own article by title, so this test proves nothing: %+v", bob)
+	}
+
+	alice, err := tr.store.Search().Query(ctx, tr.alice, store.SearchQuery{Text: "lighthouse"})
+	if err != nil {
+		t.Fatalf("Query(alice) = %v", err)
+	}
+	if len(alice) != 0 {
+		t.Errorf("Alice found an article she cannot see by searching its title: %+v", alice)
 	}
 }

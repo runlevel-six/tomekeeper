@@ -53,12 +53,11 @@ const ownedBody = `
 	LEFT JOIN article_content c
 	    ON c.article_id = a.id AND c.is_current AND ` + preferredBody
 
-// ownedBodyInner is the same join for queries where an article without a body is
-// not a result at all — search being the case: there is nothing to match against
-// and nothing to show.
-const ownedBodyInner = `
-	JOIN article_content c
-	    ON c.article_id = a.id AND c.is_current AND ` + preferredBody
+// There is deliberately no inner-join form of this any more. Search had one, on the
+// grounds that an article with no body has nothing to match against — which stopped
+// being true when titles were indexed in 00022, and had always made the articles this
+// archive could not read the articles it could not find either. A const kept here for
+// a case that no longer exists is an invitation to reintroduce that.
 
 // ownedBodyExists is the same rule as a predicate, for queries that only need to
 // know whether this reader has a body rather than what is in it.

@@ -197,7 +197,7 @@ itself. Extraction quality only improves, so bodies are regenerable.
 | `word_count` | `int` | |
 | `is_current` | `boolean` | At most one current row per article, enforced by a partial unique index. |
 | `extracted_at` | `timestamptz` | |
-| `tsv` | `tsvector` | Generated from `content_text`. |
+| `tsv` | `tsvector` | Generated from `content_text`. Bodies only — a title has its own column on `articles`, since a generated column may read no other table. |
 
 Indexes: `article_content_current_idx`, a unique index on
 `(article_id, COALESCE(user_id, 0)) WHERE is_current`, for the reason given above;
@@ -206,6 +206,20 @@ Indexes: `article_content_current_idx`, a unique index on
 `article_content_version_idx` on `(extractor_version) WHERE is_current AND NOT
 immutable`, which is what keeps `tome reextract` from scanning
 the whole archive.
+
+#### Search covers titles and bodies
+
+Two indexed vectors, not one: `article_content.tsv` over the body and
+`articles.title_tsv` over the title. A generated column may only read its own row and
+the two live on different tables — which is also the right split, because a title
+belongs to the household while a body may be forked per reader, so one combined vector
+would have to be maintained once per fork to carry an identical string.
+
+The query gathers the two kinds of hit in **separate branches** and unions them.
+PostgreSQL cannot combine index scans on different relations into one bitmap, so the
+obvious `c.tsv @@ tsq OR a.title_tsv @@ tsq` abandons both indexes and scans the
+archive. A title match scores above every body-only match: body ranks are normalized
+into `[0,1)` with `ts_rank_cd`'s flag 32 and a title match adds 1.
 
 #### Search language
 

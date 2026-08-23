@@ -167,7 +167,20 @@ func (p *PostgresSearch) statement(userID UserID, q SearchQuery) (string, []any)
 		limit = MaxStreamLimit
 	}
 
-	where := []string{visibleArticles, `c.tsv @@ tsq`}
+	// A hit is a match in the body **or** in the title, and the two are gathered by
+	// separate branches rather than by an OR in one WHERE clause. That is not a
+	// stylistic choice: the body's index is on `article_content` and the title's is on
+	// `articles`, and PostgreSQL cannot combine index scans on *different relations*
+	// into one bitmap. Written as `c.tsv @@ tsq OR a.title_tsv @@ tsq` the planner
+	// abandons both indexes and sequentially scans the archive — measured at 10,000
+	// articles, a cost estimate of 93,645 against a plan that had been using the GIN.
+	// The performance test explains the real statement for exactly this reason.
+	//
+	// Each branch is scoped as tightly as the final query. The body branch carries
+	// preferredBody, because `article_content` holds other readers' forks and matching
+	// their text would leak the existence of a body that is not yours. Visibility is
+	// applied once, at the end, over the union.
+	where := []string{visibleArticles}
 	if q.UnreadOnly {
 		where = append(where, `NOT COALESCE(st.read, false)`)
 	}
@@ -175,26 +188,63 @@ func (p *PostgresSearch) statement(userID UserID, q SearchQuery) (string, []any)
 		where = append(where, `COALESCE(st.starred, false)`)
 	}
 
-	// The tsquery is computed once in a CROSS JOIN rather than repeated in the
-	// WHERE, the ranking, and the headline. Repeating it parses the same string
-	// three times per row and, worse, invites the three copies to drift apart.
+	// MATERIALIZED, so the query text is parsed into a tsquery once rather than per
+	// branch — and so the two branches provably search for the same thing.
 	sql := `
+		WITH q AS MATERIALIZED (SELECT websearch_to_tsquery($3, $2) AS tsq),
+		body_hits AS (
+			SELECT c.article_id, ts_rank_cd(c.tsv, q.tsq, 32) AS body_rank
+			FROM q, article_content c
+			JOIN articles a ON a.id = c.article_id
+			WHERE c.is_current AND c.tsv @@ q.tsq AND ` + preferredBody + `
+		),
+		title_hits AS (
+			SELECT a.id AS article_id FROM q, articles a WHERE a.title_tsv @@ q.tsq
+		),
+		hits AS (
+			SELECT article_id, max(body_rank) AS body_rank, bool_or(is_title) AS title_hit
+			FROM (
+				SELECT article_id, body_rank, false AS is_title FROM body_hits
+				UNION ALL
+				SELECT article_id, 0::float4, true FROM title_hits
+			-- Aliased "matches" rather than "both": BOTH is a reserved word in
+			-- PostgreSQL, and the syntax error it produces points at the alias rather
+			-- than at the reason. (No backticks in here either — they end the Go raw
+			-- string this query lives in, which this file has now paid for twice.)
+			) matches
+			GROUP BY article_id
+		)
 		SELECT a.id, COALESCE(a.title, ''), COALESCE(a.site_name, ''), a.url_canonical,
 		       COALESCE(feed.title, ''),
-		       ts_rank_cd(c.tsv, tsq) AS rank,
-		       ts_headline($3, c.content_text, tsq,
-		           'StartSel=[[hl]], StopSel=[[/hl]], MaxWords=40, MinWords=20, MaxFragments=2, FragmentDelimiter=" … "'),
+		       -- A title match outranks every body-only match, and normalization is
+		       -- what makes that true rather than usually true. Bare ts_rank_cd is
+		       -- unbounded and grows with how often a term occurs — a body repeating a
+		       -- word forty times scored above 1 and beat the article named after it,
+		       -- which is how this was found. Flag 32 is rank/(rank+1), so a body
+		       -- scores in [0,1), the flat +1 for a title always wins, and the order
+		       -- among body matches is unchanged because the transform is monotonic.
+		       --
+		       -- If the words are in the title, that is the article somebody meant.
+		       COALESCE(h.body_rank, 0) + CASE WHEN h.title_hit THEN 1 ELSE 0 END AS rank,
+		       -- Empty for an article matched on its title alone, or one with no body
+		       -- at all: an article that failed extraction is exactly the one somebody
+		       -- looks for by the title they remember, so it has to be findable, and
+		       -- there is nothing to quote from. The title is rendered above the
+		       -- snippet either way.
+		       COALESCE(ts_headline($3, c.content_text, q.tsq,
+		           'StartSel=[[hl]], StopSel=[[/hl]], MaxWords=40, MinWords=20, MaxFragments=2, FragmentDelimiter=" … "'), ''),
 		       COALESCE(st.read, false), COALESCE(st.starred, false)
-		FROM websearch_to_tsquery($3, $2) AS tsq
-		CROSS JOIN articles a
-		` + ownedBodyInner + `
+		FROM hits h
+		CROSS JOIN q
+		JOIN articles a ON a.id = h.article_id
+		` + ownedBody + `
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		LEFT JOIN LATERAL (
 			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id
 			WHERE fi3.article_id = a.id AND f3.user_id = $1
 			ORDER BY fi3.seen_at, fi3.id LIMIT 1
 		) feed ON true
-		WHERE ` + strings.Join(where, "\n		  AND ") + `
+		WHERE ` + strings.Join(where, "\n\t\t  AND ") + `
 		ORDER BY rank DESC, a.id DESC
 		LIMIT $4`
 
