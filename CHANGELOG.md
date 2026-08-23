@@ -51,6 +51,17 @@ happens, because it is the one change that wants a follow-up command
   own body, falling back to the household's. What *creates* a reader's body is the
   next piece of work; today only promoting does.
 
+  **A domain rule's two halves have different owners.** The content and strip
+  selectors decide how a stored page becomes a body, so a reader may hold their own
+  and get their own extraction. Whether a page needs a browser, what user agent
+  fetches it, and how fast — those decide how it is *retrieved*, and it is retrieved
+  once, so they stay the household's. A reader can decide what their copy of a page
+  says; not that the archive fetches it twice.
+
+  A reader's rule wins over the household's for that reader **even when the
+  household's names a more specific domain**, because specificity orders your own
+  rules against each other rather than against somebody else's.
+
 - **Accounts have a role, and sessions can be revoked.** The first half of
   multi-user, and on its own it closes a hole that was live: `requireUser` trusted the
   user id sealed in the session cookie without checking that the account still existed,

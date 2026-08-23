@@ -144,6 +144,7 @@ The root entity. A feed item, a manual save, and an imported entry are all
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `bigserial` | Primary key. |
+| `host` | `text` | Generated and stored from `url_canonical`, indexed. Every query that needed a host recomputed it with `split_part` over an unindexed scan; a rule change has to find the articles it affects, and this is the difference between an index lookup and a full scan. |
 | `url_canonical` | `text` | Unique. Produced by `internal/urlcanon`. This constraint is what makes deduplication work. |
 | `url_original` | `text` | As first seen, tracking parameters intact. |
 | `title`, `author`, `site_name`, `language` | `text` | Nullable. Filled from whichever reference first supplied each; existing values are never overwritten. |
@@ -188,6 +189,7 @@ itself. Extraction quality only improves, so bodies are regenerable.
 | `article_id` | `bigint` | References `articles`, cascading. |
 | `extractor_name`, `extractor_version` | `text` | `tome reextract` selects on these. |
 | `content_origin` | `text` | `fetched`, `feed_body`, `import:wallabag`, … Provenance of *this body*. |
+| `ruleset_key` | `text` | Identifies the extraction rules that produced this body, hashed from the content and strip selectors alone. Beside `extractor_version` it answers "is this body stale", which is what lets a sweep re-derive outstanding re-extraction — and that matters because the server and the worker are separate Deployments, so a rule can be changed while the worker is down and eagerly queued work simply lost. Empty means no rule applied, which is distinct from a rule that selects nothing. Changing a *fetch* setting does not change it, so tweaking a rate limit reprocesses nothing. |
 | `immutable` | `boolean` | True for imported bodies, which may be the only surviving copy of a dead URL. The re-extract pass skips them and they are never overwritten. |
 | `content_html` | `text` | Sanitized, with image sources rewritten to blob paths. |
 | `content_text` | `text` | Plain text, for search. |
@@ -279,16 +281,32 @@ Per-domain extraction overrides.
 
 | Column | Type | Notes |
 |---|---|---|
-| `domain` | `text` | Unique. Lowercased on write. A rule applies to subdomains unless a more specific rule exists. |
+| `domain` | `text` | Lowercased on write. A rule applies to subdomains unless a more specific rule exists. Unique per owner — `(domain, COALESCE(user_id, 0))`. |
+| `user_id` | `bigint` | The reader whose rule this is, or `NULL` for the household's. Cascades on delete. |
 | `content_selector` | `text` | CSS selector for the article body. Overrides the heuristics and the ratio check. |
 | `strip_selectors` | `text[]` | Removed before extraction. |
-| `requires_js` | `boolean` | Needs a headless render. No effect until headless rendering exists. |
-| `user_agent` | `text` | Reserved; not yet read. |
-| `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. |
+| `requires_js` | `boolean` | Needs a headless render. **Household only.** |
+| `user_agent` | `text` | Reserved; not yet read. **Household only.** |
+| `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. **Household only.** |
 | `notes` | `text` | Why the rule exists. |
 
-Global and admin-only: how to extract a site's articles is a technical fact
-about that site, identical for every reader. Managed with
+**The two halves of a rule have different owners**, and a check constraint holds the
+line: a row with a `user_id` may set the content and strip selectors only.
+
+- **Extraction** — `content_selector`, `strip_selectors` — decides how a stored page
+  becomes a body, and a body is per-reader. Two readers may hold different
+  selectors for one host and each get their own extraction.
+- **Fetching** — `requires_js`, `user_agent`, `rate_limit_rps` — decides how the page
+  is *retrieved*, and it is retrieved once. A reader cannot ask for a browser render
+  of a page already fetched without one, because there is nothing per-reader for the
+  setting to act on.
+
+A reader's rule wins over the household's for that reader, **even when the
+household's names a more specific domain**: specificity orders a reader's own rules
+against each other, not against somebody else's. Deleting your rule is how you go
+back to what everybody else gets.
+
+The household's rules are managed with
 [`tome domain-rule`](cli.md#tome-domain-rule).
 
 ### `tags`, `article_tags`, `highlights`
