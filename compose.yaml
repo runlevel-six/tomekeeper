@@ -39,7 +39,7 @@ services:
   # Runs to completion and stops. Re-running it is correct and idempotent, which is
   # why `docker compose up` after an upgrade does the right thing.
   migrate:
-    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.1}
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.2}
     command: ["migrate"]
     restart: "no"
     depends_on:
@@ -54,7 +54,7 @@ services:
       TOME_LOG_FORMAT: ${TOME_LOG_FORMAT:-text}
 
   server:
-    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.1}
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.2}
     command: ["serve"]
     restart: unless-stopped
     depends_on:
@@ -89,7 +89,7 @@ services:
       start_period: 10s
 
   worker:
-    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.1}
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.2}
     command: ["worker"]
     restart: unless-stopped
     depends_on:
