@@ -72,7 +72,7 @@ spec:
         #
         # It migrates nothing. That stays a deliberate step: see migrate.yaml.
         - name: await-schema
-          image: ghcr.io/runlevel-six/tomekeeper:v0.15.0
+          image: ghcr.io/runlevel-six/tomekeeper:v0.16.0
           args: ["await-schema"]
           envFrom:
             - configMapRef:
@@ -92,7 +92,7 @@ spec:
             capabilities: { drop: ["ALL"] }
       containers:
         - name: server
-          image: ghcr.io/runlevel-six/tomekeeper:v0.15.0
+          image: ghcr.io/runlevel-six/tomekeeper:v0.16.0
           args: ["serve"]
           envFrom:
             - configMapRef:
@@ -196,7 +196,7 @@ spec:
         # minutes and keeps the queue stopped long after the migration lands. A
         # pod waiting in Init recovers the moment the schema arrives.
         - name: await-schema
-          image: ghcr.io/runlevel-six/tomekeeper:v0.15.0
+          image: ghcr.io/runlevel-six/tomekeeper:v0.16.0
           args: ["await-schema"]
           envFrom:
             - configMapRef:
@@ -216,7 +216,7 @@ spec:
             capabilities: { drop: ["ALL"] }
       containers:
         - name: worker
-          image: ghcr.io/runlevel-six/tomekeeper:v0.15.0
+          image: ghcr.io/runlevel-six/tomekeeper:v0.16.0
           args: ["worker"]
           envFrom:
             - configMapRef:
