@@ -55,6 +55,27 @@ happens, because it is the one change that wants a follow-up command
   Migration `00022` adds `articles.title_tsv` and its index. Titles are short, so it
   is a fraction of the size of the index over the bodies.
 
+### Fixed
+
+- **Four pages were unstyled, Accounts most visibly.** `class="page"` was written into
+  the markup of Accounts, the extraction explanation, the audit, the reprocess page and
+  the set-a-password page — and there was no rule behind it, so they rendered
+  full-width with body-font headings and no separation between sections, while Settings
+  looked like the rest of the application because it spelled the same intentions out
+  under its own class. The pattern now exists once and those pages share it, along with
+  the account list's table, the setup link, and the row controls.
+
+  The extraction ladder was worse: its table had no rule at all, and `.won` — the
+  class marking the rung that produced the stored body — drew nothing. The winning
+  rung is now marked.
+
+  **A test now fails when a template uses a class the stylesheet does not define**,
+  with an allowlist naming the classes that are deliberately unstyled and why. Section
+  names are hooks that take their appearance from the page; the point of the list is
+  that the question gets answered in writing rather than discovered by somebody
+  looking at a page that seems unfinished.
+
+
 ## [v0.16.0] — 2026-08-23
 
 ### Added

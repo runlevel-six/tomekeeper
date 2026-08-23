@@ -45,12 +45,24 @@
 
   <table class="accounts">
     <thead>
-      <tr><th>Name</th><th>Role</th><th>Sign-in</th><th>Feeds</th><th></th></tr>
+      {{/*
+        scope on every heading, and the name as the row's own heading, exactly as the
+        feed list and the attention queue do it. A table of records read by a screen
+        reader announces the row's subject before each cell only if it is marked as
+        that row's heading.
+      */}}
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Role</th>
+        <th scope="col">Sign-in</th>
+        <th scope="col" class="num">Feeds</th>
+        <th scope="col">Actions</th>
+      </tr>
     </thead>
     <tbody>
       {{range .Accounts}}
         <tr>
-          <td>{{.Username}}</td>
+          <th scope="row">{{.Username}}</th>
           <td>{{if .IsAdmin}}Administrator{{else}}Reader{{end}}</td>
           <td>
             {{if .HasPassword}}
@@ -61,7 +73,7 @@
               <span class="waiting">No password yet</span>
             {{end}}
           </td>
-          <td>{{.Feeds}}</td>
+          <td class="num">{{.Feeds}}</td>
           <td class="actions">
             <form method="post" action="/users/{{.ID}}/link">
               <button type="submit">{{if .HasPassword}}Reset password{{else}}Issue link{{end}}</button>

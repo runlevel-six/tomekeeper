@@ -762,8 +762,9 @@ kbd {
 .snippet mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--ink); }
 .count { font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-soft); }
 
-/* Tables: feeds and the attention queue. Both scroll rather than squeezing. */
-.feed-table, .attention-table {
+/* Tables: feeds, the attention queue, the audit and the account list. All scroll
+   rather than squeezing. */
+.feed-table, .attention-table, .accounts {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
@@ -771,13 +772,14 @@ kbd {
   overflow-x: auto;
 }
 .feed-table th, .feed-table td,
-.attention-table th, .attention-table td {
+.attention-table th, .attention-table td,
+.accounts th, .accounts td {
   text-align: left;
   vertical-align: top;
   padding: 0.55rem 0.7rem 0.55rem 0;
   border-bottom: 1px solid var(--rule);
 }
-.feed-table thead th, .attention-table thead th {
+.feed-table thead th, .attention-table thead th, .accounts thead th {
   font-family: var(--font-ui);
   font-size: 0.74rem;
   letter-spacing: 0.05em;
@@ -787,7 +789,7 @@ kbd {
 /* Tabular figures, as the domain-rule table already asks for. Both shipped
    families default to proportional ones, so a column of unread counts does not
    line up between rows without this — the one place the difference is obvious. */
-.feed-table .num, .attention-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.feed-table .num, .attention-table .num, .accounts .num { text-align: right; font-variant-numeric: tabular-nums; }
 .feed-table tr.is-disabled th a { color: var(--ink-soft); text-decoration: line-through; }
 
 /* Sortable headings. The whole heading is the link, and the arrow marks the column
@@ -859,6 +861,87 @@ kbd {
 .tag-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tag-list .count { font-size: 0.75rem; }
 
+/* The explanation of one extraction. The ladder is the page's whole point — which
+   rung produced what, and which one won — and it had no rule at all, so it rendered
+   as a bare table and the winning row was marked only by the word "chosen". */
+.ladder { width: 100%; border-collapse: collapse; font-size: 0.9rem; display: block; overflow-x: auto; }
+.ladder th, .ladder td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.7rem 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.ladder thead th {
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.ladder .num { text-align: right; font-variant-numeric: tabular-nums; }
+/* The rung that produced the stored body. Marked by a bar rather than a fill: the row
+   is already the only one with strong text in its outcome cell, and this has to read
+   at a glance without competing with it. */
+.ladder tr.won { box-shadow: inset 3px 0 0 0 var(--accent); }
+.ladder tr.won th[scope="row"] { padding-left: 0.6rem; }
+
+/* A feed with failures behind it that has not yet been disabled. The disabled state
+   is struck through; this one is only tinted, because it is still being polled and
+   may well come back on its own. */
+.feed-table tr.is-failing th a { color: var(--accent); }
+
+/* The measured length of the page a fetch actually received, in the attention queue.
+   A number, so it lines up like every other number in a table here. */
+.attention-table .measure { font-variant-numeric: tabular-nums; }
+
+/* Controls that sit inside a table row: a link to the rule form, the explanation, and
+   the form that spends a request on somebody else's server. One rule for the three,
+   because they appear side by side in one cell on two pages and looked like three
+   different kinds of thing. */
+.attention-table .rule-link,
+.attention-table .explain-link,
+.audit .rule-link,
+.audit .explain-link {
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.attention-table .refetch, .audit .refetch { display: inline-block; margin: 0.2rem 0 0; }
+.attention-table .refetch button, .audit .refetch button { font-size: 0.78rem; padding: 0.2rem 0.5rem; }
+
+/* A way out of a form, beside the button that commits it. Quiet, because it is the
+   choice that changes nothing. */
+.cancel { margin-left: 0.75rem; font-size: 0.9rem; color: var(--ink-soft); }
+
+/* Accounts. The setup link is the one string on any page that must be copied exactly,
+   so it wraps at any character rather than overflowing, and it is given room. */
+.setup-link {
+  display: block;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+/* An account nobody can sign in to yet. Quiet rather than alarming: it is the normal
+   state of a new account, and the row already offers the link that resolves it. */
+.accounts .waiting { color: var(--ink-soft); font-style: italic; }
+/* The per-row controls: a form and a link that should sit on one line and stay on it
+   when the table scrolls. */
+.accounts .actions {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+.accounts .actions form { margin: 0; }
+.accounts .actions button { font-size: 0.85rem; padding: 0.25rem 0.6rem; }
+.accounts .actions a { font-size: 0.85rem; color: var(--ink-soft); }
+.accounts .actions a:hover { color: var(--error); }
+
 /* The way from the attention queue to the audit. A rule above it, because it is a
    different question from the list it follows rather than a footnote to it. */
 .audit-link {
@@ -868,16 +951,8 @@ kbd {
 }
 .audit-link .reason { max-width: var(--measure); margin-top: 0.25rem; }
 
-/* Both pages that are a sequence of independent sections: the audit's three lenses
-   and the two scopes a reprocess can have. Separated by space and a rule, because in
-   each case the reader has to be able to tell where one thing ends — a finding under
-   the wrong lens, or a button under the wrong heading, is the whole risk on both
-   pages. */
-.audit-lens, .reprocess-scope { margin: 2rem 0; }
-.audit-lens + .audit-lens, .reprocess-scope + .reprocess-scope {
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--rule);
-}
+/* The sections themselves come from `.page` above; this is only the spacing between
+   a lens's explanation and its findings. */
 .audit-lens .hint, .reprocess-scope .hint { margin-bottom: 0.9rem; }
 
 /* A button and the sentence that says what it will do, which belongs beside it rather
@@ -1358,15 +1433,42 @@ kbd {
   .stream .entry:last-of-type { border-bottom: 0; }
 }
 
-/* Settings. */
-.settings { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
-.settings fieldset {
+/* Pages that are a document with sections rather than a list of articles:
+   Settings, Accounts, the explanation of one extraction, the audit, the reprocess
+   page, and the one-off set-a-password page.
+
+   This is `.page` and it exists because it did not. Every such page carried
+   `class="page …"` in its markup and there was no rule behind it, so four of them
+   rendered full-width with body-font headings and no separation between sections
+   while Settings — which spelled the same intentions out under `.settings` — looked
+   like the rest of the application. Accounts was the visible symptom; the cause was
+   a shared pattern that only one page had ever expressed. Anything genuinely specific
+   to one of them stays with that page below. */
+.settings, .page { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
+
+/* Sections, and the rule between adjacent ones. Space alone is not enough on a page
+   whose sections are each a heading over a control: the reader has to be able to see
+   where one ends, because pressing the wrong button is the risk on all of these. */
+.page > section { margin: 2rem 0; }
+.page > section + section { padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+
+/* Headings in the interface font, which is what makes these pages look like the rest
+   of the application rather than like an article. Sized between the reading `h2` and
+   a legend, since a section heading here labels a control and is not prose. */
+.page > section > h2, .page > h2 {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.5rem;
+}
+
+.settings fieldset, .page fieldset {
   border: 0;
   border-top: 1px solid var(--rule);
   padding: 1.25rem 0 0;
   margin: 0 0 2rem;
 }
-.settings legend {
+.settings legend, .page legend {
   padding: 0 0.6rem 0 0;
   font-family: var(--font-ui);
   font-size: 0.74rem;
@@ -1374,7 +1476,31 @@ kbd {
   text-transform: uppercase;
   color: var(--ink-soft);
 }
-.settings .note { max-width: var(--measure); color: var(--ink-soft); font-size: 0.9rem; }
+.settings .note, .page .note, .page .hint {
+  max-width: var(--measure);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+/* A label above its field, the same way the feed form and the cadence picker do it,
+   so a form on one of these pages is the same shape as a form anywhere else. */
+.page label[for] {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.92rem;
+  margin-bottom: 0.3rem;
+}
+.page input[type="text"], .page input[type="password"] {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink);
+  min-width: min(22rem, 100%);
+}
+.page input[type="text"]:focus-visible,
+.page input[type="password"]:focus-visible { border-color: var(--accent); outline: none; }
 /* The cadence picker. A label above rather than beside, like the feed form's
    fields, so the two places this control appears look like the same control. */
 .settings label[for="poll-every"] {
@@ -1383,7 +1509,7 @@ kbd {
   font-size: 0.92rem;
   margin-bottom: 0.3rem;
 }
-.settings select {
+.settings select, .page select {
   font: inherit;
   font-size: 0.9rem;
   padding: 0.35rem 0.5rem;
@@ -1393,8 +1519,9 @@ kbd {
   background: var(--surface);
   color: var(--ink);
 }
-.settings select:focus-visible { border-color: var(--accent); outline: none; }
-.settings .radio {
+.settings select:focus-visible,
+.page select:focus-visible { border-color: var(--accent); outline: none; }
+.settings .radio, .page .radio {
   display: block;
   margin: 0.4rem 0;
   font-family: var(--font-ui);
@@ -1402,7 +1529,7 @@ kbd {
 }
 /* Same type as the radios above it, laid out so a wrapped label lines up under
    itself rather than under its own checkbox. */
-.settings .checkbox {
+.settings .checkbox, .page .checkbox {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;

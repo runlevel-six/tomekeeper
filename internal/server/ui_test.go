@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"io/fs"
 	"path"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -177,6 +178,106 @@ func TestPageNamesMatchTheTemplateFiles(t *testing.T) {
 	for name := range onDisk {
 		if !listed[name] {
 			t.Errorf("templates/%s.html exists but is not in pageNames, so it is never served", name)
+		}
+	}
+}
+
+// Every class a template uses is either styled or listed here as deliberately not.
+//
+// This test exists because four pages shipped unstyled and nothing noticed. `.page`
+// was written into the markup of Accounts, the explanation, the audit, the reprocess
+// page and the set-a-password page, and there was no rule behind it — so they
+// rendered full-width with body-font headings and no separation between sections,
+// while Settings, which spelled the same intentions out under its own class, looked
+// like the rest of the application. The explanation's ladder table was worse: `.won`
+// marks the rung that produced the stored body and drew nothing at all.
+//
+// A class with no rule is not a bug by itself. Section names are hooks that exist to
+// say what a section *is*, and they inherit their appearance from `.page`. So the
+// allowlist below is the point of this test: it forces the question "did I mean to
+// leave this unstyled" to be answered once, in writing, rather than discovered by
+// somebody looking at a page that seems unfinished.
+func TestEveryTemplateClassIsStyledOrExempt(t *testing.T) {
+	// Section and page names. Each of these labels a block whose appearance comes
+	// from `.page` or from the element it wraps; a rule of its own would be one more
+	// place for the same look to drift.
+	exempt := map[string]string{
+		"audit":           "page name; framed by .page",
+		"explain":         "page name; framed by .page",
+		"reprocess":       "page name; framed by .page",
+		"setpassword":     "page name; framed by .page",
+		"users":           "page name; framed by .page",
+		"add":             "section name on Accounts",
+		"confirm":         "section name on Accounts",
+		"issued":          "section name on Accounts",
+		"explain-ladder":  "section name on the explanation",
+		"explain-rule":    "section name on the explanation",
+		"explain-stored":  "section name on the explanation",
+		"explain-subject": "section name on the explanation",
+		"extractions":     "section name in Settings",
+		"leaving":         "section name in Settings",
+		"palettes":        "section name in Settings",
+		"password":        "section name in Settings",
+		"retention":       "section name in Settings",
+		"sessions":        "section name in Settings",
+		"username":        "section name in Settings",
+		// Inline metadata that inherits the type around it on purpose: a byline and a
+		// reading time are part of the same line as the date beside them.
+		"byline":       "inline article metadata",
+		"length":       "inline article metadata",
+		"tags":         "inline article metadata",
+		"signed-in-as": "inline chrome text",
+		"signout":      "a form that is one button in the chrome",
+		"secondary":    "a navigation link that takes the nav's own styling",
+		"starred":      "names which search filter is in force; no appearance of its own",
+	}
+
+	css, err := assets.ReadFile("static/tome.css")
+	if err != nil {
+		t.Fatalf("reading the stylesheet: %v", err)
+	}
+	styled := make(map[string]bool)
+	for _, m := range regexp.MustCompile(`\.([A-Za-z][A-Za-z0-9_-]*)`).FindAllStringSubmatch(string(css), -1) {
+		styled[m[1]] = true
+	}
+
+	files, err := fs.Glob(assets, "templates/*.html")
+	if err != nil {
+		t.Fatalf("globbing the templates: %v", err)
+	}
+
+	classAttr := regexp.MustCompile(`class="([^"{}]+)"`)
+	for _, f := range files {
+		body, err := assets.ReadFile(f)
+		if err != nil {
+			t.Fatalf("reading %s: %v", f, err)
+		}
+		for _, m := range classAttr.FindAllStringSubmatch(string(body), -1) {
+			for _, class := range strings.Fields(m[1]) {
+				if styled[class] || exempt[class] != "" {
+					continue
+				}
+				t.Errorf("%s uses class %q with no rule in tome.css and no reason listed:\n"+
+					"    style it, or add it to the allowlist in this test saying why it needs none",
+					path.Base(f), class)
+			}
+		}
+	}
+
+	// And the allowlist itself has to stay honest: an entry for a class no template
+	// uses any more is a claim about markup that is gone.
+	used := make(map[string]bool)
+	for _, f := range files {
+		body, _ := assets.ReadFile(f)
+		for _, m := range classAttr.FindAllStringSubmatch(string(body), -1) {
+			for _, class := range strings.Fields(m[1]) {
+				used[class] = true
+			}
+		}
+	}
+	for class := range exempt {
+		if !used[class] {
+			t.Errorf("the allowlist exempts %q, which no template uses; remove the entry", class)
 		}
 	}
 }
