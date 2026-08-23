@@ -720,7 +720,7 @@ longer describes the extraction is worse than none because it is believed.
 Prints the build identity to stdout and exits `0`.
 
 ```
-tomekeeper v0.17.0 (a1b2c3d) built 2026-08-16T23:00:03Z go1.26.5 linux/amd64
+tomekeeper v0.17.1 (a1b2c3d) built 2026-08-16T23:00:03Z go1.26.5 linux/amd64
 ```
 
 Version, commit, and build date are injected at link time. When they are not —
@@ -729,8 +729,8 @@ info embedded from the git work tree, and a build with uncommitted changes is
 reported with a `-dirty` suffix.
 
 The version is `git describe --tags --match 'v[0-9]*'`, which makes it the same
-string as the git tag and the image tag for a release (`v0.17.0`), and a description
-of the distance from the last one otherwise (`v0.17.0-12-gfccf5ba`). The publish
+string as the git tag and the image tag for a release (`v0.17.1`), and a description
+of the distance from the last one otherwise (`v0.17.1-12-gfccf5ba`). The publish
 workflow runs this command inside the image it just pushed and fails the release if
 the two disagree, so a version reported by a running pod can be trusted to name the
 build it came from. See [Cut a release](../how-to/cut-a-release.md).
