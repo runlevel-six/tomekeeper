@@ -33,16 +33,16 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 	// --target-version, because the flag names the version you want everything to
 	// be at, and the selection is "not this one".
 	//
-	// It was called --since-version, which reads as an ordering — "everything
-	// from version 2 onwards" — and is not one. The predicate is `<>`. Passing
-	// the *old* version, which is the natural reading, selects nothing and
-	// reports that everything is already up to date, which is both true and
-	// exactly the wrong thing to hear. The old name still works so that written-
-	// down commands do not break.
+	// It was called --since-version, which reads as an ordering — "everything from
+	// version 2 onwards" — and is not one. The predicate is `<>`, so passing the
+	// *old* version, which is the natural reading of that name, selects nothing and
+	// reports that everything is already up to date: true, and exactly the wrong
+	// thing to hear. The alias was kept working while the flag was young. It is gone
+	// at 1.0 rather than frozen into the CLI, because keeping a name whose reading
+	// costs somebody an hour is a worse promise than breaking a written-down command
+	// that now says what it does.
 	targetVersion := fs.String("target-version", extract.Version,
 		"reprocess articles whose body came from an extractor version other than this")
-	fs.StringVar(targetVersion, "since-version", extract.Version,
-		"deprecated alias for --target-version")
 	domain := fs.String("domain", "",
 		"only reprocess articles from this host and its subdomains (default: every host)")
 	limit := fs.Int("limit", 0, "stop after queueing this many articles (0 means no limit)")

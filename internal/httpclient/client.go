@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/temoto/robotstxt"
@@ -76,6 +77,15 @@ type Options struct {
 	DefaultRPS  float64
 	Concurrency int
 	MaxAttempts int
+
+	// AllowPrivate names the non-public destinations this client may reach. The
+	// zero value allows none, which is the default and the safe direction — see
+	// private.go for what is refused and why.
+	//
+	// A test serving fixtures on loopback is the honest instance of the case this
+	// exists for, so those tests pass LoopbackAllowance() rather than the guard
+	// carrying an exemption that would also hold in production.
+	AllowPrivate PrivateAllowance
 }
 
 // Client is a configured, rate-limited HTTP client. It is safe for concurrent
@@ -131,11 +141,29 @@ func New(opts Options) *Client {
 		opts.MaxAttempts = DefaultMaxAttempts
 	}
 
+	// Two dialers over one set of timeouts: the guarded one refuses an address that
+	// is not public, and the permissive one is reached only by a host name the
+	// operator named in TOME_FETCH_ALLOW_PRIVATE. A name allowance has to be
+	// honored here rather than in the hook, because the hook sees addresses and a
+	// LAN name's address is a DHCP lease.
+	timeouts := net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	permissive := timeouts
+	guarded := timeouts
+	allow := opts.AllowPrivate
+	guarded.Control = func(_, address string, _ syscall.RawConn) error {
+		return guardAddress(allow, address)
+	}
+
 	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			if host, _, err := net.SplitHostPort(address); err == nil && allow.allowsHost(host) {
+				return permissive.DialContext(ctx, network, address)
+			}
+			return guarded.DialContext(ctx, network, address)
+		},
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 20 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
@@ -152,6 +180,16 @@ func New(opts Options) *Client {
 			Transport: transport,
 			// Total budget for one attempt, including redirects and body.
 			Timeout: 30 * time.Second,
+			// The explanation half of the guard above: the dial hook would refuse
+			// this hop anyway, and refusing it here is what makes the reason name the
+			// redirect instead of an address nobody typed. Go's own limit of ten
+			// hops still applies underneath.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				return checkRedirect(allow, req.URL)
+			},
 		},
 		userAgent:   opts.UserAgent,
 		maxAttempts: opts.MaxAttempts,
@@ -287,6 +325,14 @@ func (c *Client) Do(ctx context.Context, req Request) (*http.Response, error) {
 		observe(host, resp, err)
 		if err != nil {
 			lastErr = err
+			// Not transient, and not the network's doing: the destination is inside
+			// this machine's own neighborhood and will still be in twenty minutes.
+			// Returned at once for the same reason robots.txt is — three attempts at
+			// a refusal is three times the log lines for one answer, which is what
+			// the live incident produced before this guard existed.
+			if errors.Is(err, ErrPrivateAddress) {
+				return nil, err
+			}
 			// A transport error is usually transient: a dropped connection, a
 			// DNS blip, a TLS handshake that timed out.
 			if attempt == c.maxAttempts {

@@ -393,10 +393,13 @@ tome reextract [--target-version V] [--domain HOST] [--limit N] [--dry-run]
 | Flag | Default | Description |
 |---|---|---|
 | `--target-version` | the compiled-in version | Select articles whose current body came from a version **other than** this — that is, the version you want everything brought *to*, not the version it is at now. The default is almost always what you want: after upgrading, a bare `tome reextract` reprocesses everything the new build would extract differently. Pass `0` to select everything, which is what you want after adding a domain rule. |
-| `--since-version` | — | Deprecated alias for `--target-version`. The name reads as an ordering and is not one; passing the version your bodies are already at selects nothing and reports success. |
 | `--domain` | every host | Restrict to one host and its subdomains. `example.com` covers `blog.example.com`, matching how a domain rule applies. |
 | `--limit` | `0` (no limit) | Stop after queueing this many articles. |
 | `--dry-run` | off | Count without queueing. |
+
+`--since-version` was a deprecated alias for `--target-version` and was **removed in
+1.0**. The name read as an ordering and was not one: passing the version your bodies
+were already at selected nothing and reported success.
 
 Two kinds of article are never selected: bodies flagged `immutable`, which are
 excluded by the query rather than skipped in a loop, and articles with no
@@ -486,9 +489,14 @@ only the household's carry the fetch settings.
 ```
 tome domain-rule list
 tome domain-rule show <domain>
+tome domain-rule set <domain> [flags]
 tome domain-rule set [flags] <domain>
 tome domain-rule rm <domain>
 ```
+
+Both orders of `set` are accepted. Go's flag parsing stops at the first non-flag
+word, so flags after the domain were once silently dropped and the command printed
+usage; the domain is now taken from wherever it appears.
 
 Flags for `set`:
 

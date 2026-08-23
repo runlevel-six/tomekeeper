@@ -114,7 +114,7 @@ func userAdd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("user add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	admin := fs.Bool("admin", false, "make this account an administrator")
-	name, ok := parseWithName(fs, args, stderr)
+	name, ok := parsePositional(fs, args, "username", stderr)
 	if !ok {
 		return exitUsage
 	}
@@ -145,7 +145,7 @@ func userLink(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("user link", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	base := fs.String("base-url", "", "the archive's public URL, for printing a complete link")
-	name, ok := parseWithName(fs, args, stderr)
+	name, ok := parsePositional(fs, args, "username", stderr)
 	if !ok {
 		return exitUsage
 	}
@@ -180,7 +180,7 @@ func userPasswd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("user passwd", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	password := fs.String("password", "", "the new password, rather than being prompted")
-	name, ok := parseWithName(fs, args, stderr)
+	name, ok := parsePositional(fs, args, "username", stderr)
 	if !ok {
 		return exitUsage
 	}
@@ -255,35 +255,6 @@ func userRemove(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "every article and image is kept; `tome prune` reports what nothing references now")
 		return exitOK
 	})
-}
-
-// parseWithName reads a subcommand's flags and its one positional argument, in
-// either order.
-//
-// Go's flag package stops at the first non-flag argument, so `tome user link jane
-// --base-url https://…` silently ignores the flag and then complains about the
-// argument count. That trap already costs attempts on `tome domain-rule set`,
-// where the answer was to document flags-first; documenting it again is what this
-// avoids. Parse once to take whatever came before the name, then parse the rest.
-func parseWithName(fs *flag.FlagSet, args []string, stderr io.Writer) (string, bool) {
-	if err := fs.Parse(args); err != nil {
-		return "", false
-	}
-	rest := fs.Args()
-	if len(rest) == 0 {
-		fmt.Fprintf(stderr, "tome %s: a username is required\n", fs.Name())
-		return "", false
-	}
-
-	name := rest[0]
-	if err := fs.Parse(rest[1:]); err != nil {
-		return "", false
-	}
-	if fs.NArg() != 0 {
-		fmt.Fprintf(stderr, "tome %s: expected one username, got %q as well\n", fs.Name(), fs.Arg(0))
-		return "", false
-	}
-	return name, true
 }
 
 // readPassword takes one line from standard input.

@@ -20,6 +20,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	// The one internal dependency this package has, and it buys the thing the
+	// package comment promises: TOME_FETCH_ALLOW_PRIVATE is parsed by the code that
+	// enforces it, once, at startup, alongside every other setting's complaint —
+	// rather than by a second parser here that could disagree with the first.
+	"github.com/runlevel-six/tomekeeper/internal/httpclient"
 )
 
 // Prefix is prepended to every environment variable name.
@@ -111,6 +117,13 @@ type Config struct {
 
 	// FetchConcurrency caps outbound requests in flight across all hosts.
 	FetchConcurrency int
+
+	// FetchAllowPrivate names the non-public destinations the fetcher may reach.
+	//
+	// Empty by default, which refuses every one of them: loopback, RFC1918, the
+	// link-local metadata address, and the rest. An operator archiving something on
+	// their own network opens that network and nothing else.
+	FetchAllowPrivate httpclient.PrivateAllowance
 
 	// ImageConcurrency caps how many images are transcoded at once.
 	//
@@ -414,6 +427,22 @@ func Load(lookup LookupFunc) (*Config, error) {
 		cfg.FetchRPS = rps
 	}
 
+	// TOME_FETCH_ALLOW_PRIVATE — the destinations inside this machine's own
+	// neighborhood that may nevertheless be fetched. Empty by default, which
+	// refuses all of them.
+	//
+	// Validated at startup rather than at the first fetch, because the failure it
+	// prevents is silent: a misspelled network is a setting that appears to be in
+	// force and never matches, and the symptom is a site that cannot be archived
+	// for reasons nothing explains.
+	rawAllow := get("FETCH_ALLOW_PRIVATE", "")
+	allow, err := httpclient.ParsePrivateAllowance(rawAllow)
+	if err != nil {
+		problems = append(problems, fmt.Errorf("%sFETCH_ALLOW_PRIVATE: %w", Prefix, err))
+	} else {
+		cfg.FetchAllowPrivate = allow
+	}
+
 	// TOME_BLOB_ROOT — an absolute path, because a relative one would resolve
 	// against whatever directory the process happened to start in, and the
 	// archive would end up somewhere different on every deployment.
@@ -484,6 +513,10 @@ func (c *Config) LogValue() slog.Value {
 		slog.Int("worker_concurrency", c.WorkerConcurrency),
 		slog.Float64("fetch_rps", c.FetchRPS),
 		slog.Int("fetch_concurrency", c.FetchConcurrency),
+		// Said at startup because its default is a refusal: an operator wondering why
+		// their LAN wiki will not archive should find the answer in the first log
+		// lines rather than in a fetch error an hour later.
+		slog.String("fetch_allow_private", c.FetchAllowPrivate.String()),
 		slog.Int("image_concurrency", c.ImageConcurrency),
 		// The endpoint, not a secret: it is a hostname on the cluster network, and
 		// knowing whether rendering is configured at all is the first question when an

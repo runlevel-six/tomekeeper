@@ -82,6 +82,10 @@ func serve(args []string, stderr io.Writer) int {
 		UserAgent:   httpclient.UserAgent(version.Short(), cfg.ContactURL),
 		DefaultRPS:  cfg.FetchRPS,
 		Concurrency: 2,
+		// The same allowance the worker gets. This client tests a feed URL a reader
+		// typed, which is exactly one of the paths the guard exists for: without it,
+		// **Add a feed** would fetch anything this pod can reach on request.
+		AllowPrivate: cfg.FetchAllowPrivate,
 	})
 
 	// A blob root that cannot be opened costs the reader images, not the whole

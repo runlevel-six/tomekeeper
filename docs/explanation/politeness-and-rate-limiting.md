@@ -104,6 +104,49 @@ difference between a bot someone can contact and a bot someone can only block.
   parser produces a confusing failure much further along.
 - Two idle connections per host, deliberately low.
 
+## The other direction: what the fetcher may reach
+
+Everything above is about being welcome on servers this archive does not own. The
+mirror image is that a request made on somebody else's instruction must not become a
+way to read what only this machine can reach.
+
+That is not hypothetical. On 2026-08-23 a subscribed feed redirected a poll to
+`http://127.0.0.1`, and the fetcher dialed it — five times over an hour and three
+quarters, with the failure backoff working perfectly around a destination it should
+never have tried. That one hit a closed port. On this deployment the worker can also
+reach the Kubernetes API and the archive's own Postgres, and a body fetched from
+either would have been stored as an article and rendered in the reading interface.
+
+**Nothing outside the public internet is fetched**, unless an operator names it in
+`TOME_FETCH_ALLOW_PRIVATE`: loopback, RFC1918 and IPv6 unique-local, link-local
+(which is where the cloud metadata service lives), carrier-grade NAT, the
+unspecified and broadcast addresses, NAT64, and the reserved ranges. Refusals are
+returned immediately rather than retried, because the address will still be internal
+in twenty minutes.
+
+Two layers enforce it, and they see different things:
+
+- The **redirect check** sees the hop, so the error can say a redirect caused it.
+  That is what makes a misconfigured feed diagnosable from the attention queue
+  instead of reading as "connection refused" against an address nobody typed. It
+  cannot be the guard: it sees a host name it has not resolved.
+- The **dial hook** sees every address the resolver returned, whoever asked and
+  however they got there — a redirect, a reader pasting an address into **Save a
+  page**, or a perfectly public host name that resolves to `10.43.0.1`. That last
+  case is DNS rebinding, and no amount of URL checking finds it, because the URL is
+  honest.
+
+The escape hatch is deliberately narrow. Somebody archiving their own wiki names
+that network, or that host, and everything else stays refused — the alternative, a
+single switch, means opening the metadata address to open a NAS.
+
+**What this does not cover: the headless browser.** A page that needs JavaScript is
+fetched by Chrome, in its own Deployment, over CDP — not through this client, and so
+not through this guard. Restricting where that can reach is a NetworkPolicy on the
+render Deployment, which is a deployment concern rather than something this code can
+express. It is written here rather than assumed because the omission is exactly the
+kind that reads as covered.
+
 ## What this does not do
 
 Datacenter addresses get blocked by some content delivery networks regardless

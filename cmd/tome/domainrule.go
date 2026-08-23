@@ -149,15 +149,15 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 	var strip stripList
 	fs.Var(&strip, "strip", "selector to remove before extraction (repeatable)")
 
-	if err := fs.Parse(args); err != nil {
-		return exitUsage
-	}
-	if fs.NArg() != 1 {
+	// Flags may come before or after the domain. Requiring them first was the
+	// documented workaround for two releases, and a rule written the natural way
+	// printed usage as though the command were wrong.
+	domain, ok := parsePositional(fs, args, "domain", stderr)
+	if !ok {
 		fmt.Fprintln(stderr, "Usage: tome domain-rule set <domain> [flags]")
 		fs.PrintDefaults()
 		return exitUsage
 	}
-	domain := fs.Arg(0)
 
 	return withStore(stderr, func(s *store.Store) int {
 		ctx, stop := signalContext()

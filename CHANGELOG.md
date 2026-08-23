@@ -224,6 +224,25 @@ happens, because it is the one change that wants a follow-up command
   is on devices you are not looking at. Mobile clients are unaffected — they hold a key
   derived from your password, not a session, and it says so on the page.
 
+### Removed
+
+- **`tome reextract --since-version`**, the deprecated alias for
+  `--target-version`. The name read as an ordering — "everything from version 2
+  onwards" — and the selection is "any version other than this", so passing the
+  version your bodies were already at selected nothing and reported success. That
+  cost an hour once. It goes before 1.0 freezes the CLI rather than being kept
+  permanently: a name whose natural reading is a trap is a worse promise to keep than
+  a written-down command is to break.
+
+- **`article_content.fs_path`** (migration `00021`), a column nothing ever wrote and
+  nothing read. It was meant to record where a body's standalone page went in the
+  archive tree; on the live archive it was `NULL` on all 10,161 rows, because the path
+  is derived from the article identically at each call site. Dropped rather than
+  populated for what 1.0 means: the schema is part of the interface, and a documented
+  column that always lies by omission is the same shape as `assets_status = 'pending'`
+  being a terminal state wearing a transient label. `assets.fs_path` is a different
+  column on a different table and stays.
+
 ### Changed
 
 - **Promoting a stored copy is now your choice alone.** It copies the body you picked
@@ -264,6 +283,44 @@ happens, because it is the one change that wants a follow-up command
   rather than whether a named one can — which is the condition it was always about.
 
 ### Fixed
+
+- **The fetcher followed redirects into this machine's own network, and no longer
+  reaches it at all.** A subscribed feed redirected a poll to `http://127.0.0.1` and
+  the fetcher dialed it — found live on 2026-08-23, five attempts over an hour and
+  three quarters, with the failure backoff working perfectly around a destination it
+  should never have tried. That one hit a closed port. The same path could have
+  reached this deployment's Kubernetes API or its Postgres, and a body fetched from
+  either would have been stored as an article and rendered in the reading interface.
+
+  **Nothing outside the public internet is fetched now**: loopback, RFC1918 and IPv6
+  unique-local, link-local — which is where the `169.254.169.254` metadata address
+  lives — carrier-grade NAT, NAT64, the unspecified and broadcast addresses, and the
+  reserved ranges. A refusal is not retried, because the address will still be
+  internal in twenty minutes.
+
+  Two layers, because they see different things. The redirect check names the hop, so
+  a misconfigured feed is diagnosable from the attention queue instead of reading as
+  "connection refused" against an address nobody typed. The dial hook judges every
+  address the resolver returned, whoever asked and however they got there — which is
+  what also closes a reader pasting an internal address into **Save a page** or
+  **Add a feed**, and DNS rebinding, where the URL is honest and the answer is not.
+
+  `TOME_FETCH_ALLOW_PRIVATE` opens named networks, addresses or host names, for
+  somebody archiving something on their own network, and is empty by default. A
+  misspelled entry fails at startup rather than silently matching nothing.
+
+  **The headless browser is not covered**, and that is stated rather than assumed: a
+  rendered page is fetched by Chrome in its own Deployment, so restricting where
+  *that* can reach is a NetworkPolicy rather than anything this code can express.
+
+- **`tome domain-rule set example.com --selector .post` now saves the rule** instead
+  of printing usage. Go's flag parsing stops at the first non-flag word, so anything
+  after the domain was a stray argument — and the same trap silently dropped
+  `--base-url` from `tome user link jane --base-url …`. Both take their argument from
+  wherever it appears now. It was documented as "flags first" for two releases, which
+  is a way of asking every reader to remember something the program can simply
+  accept.
+
 
 - **A fetch that ran out of time could not record that it had.** Every job gets a
   context with a one-minute deadline, and the failure was written through that same

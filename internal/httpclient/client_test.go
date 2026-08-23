@@ -22,6 +22,15 @@ func newTestClient(t *testing.T, opts Options) (*Client, *[]time.Duration) {
 	if opts.UserAgent == "" {
 		opts.UserAgent = "tomekeeper/test"
 	}
+	// Every case here serves its fixtures from an httptest server on loopback, which
+	// is the honest instance of the case TOME_FETCH_ALLOW_PRIVATE exists for: a
+	// destination somebody deliberately pointed this client at. Said here rather than
+	// exempted in the guard, so the guard that runs in these tests is the one that
+	// runs in production. A case testing the refusal builds its client with New
+	// directly, since the default here would otherwise hand it the exemption.
+	if opts.AllowPrivate.Empty() {
+		opts.AllowPrivate = LoopbackAllowance()
+	}
 	c := New(opts)
 
 	var (

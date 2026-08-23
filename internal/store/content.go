@@ -269,7 +269,6 @@ type ContentParams struct {
 	HTML             string
 	Text             string
 	WordCount        int
-	FSPath           string
 
 	// RulesetKey identifies the extraction rules that produced this body. Empty
 	// means none applied — see EffectiveRule.RulesetKey.
@@ -334,12 +333,12 @@ func (s *Store) InsertContent(ctx context.Context, p ContentParams) (bool, error
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO article_content (
 			article_id, user_id, extractor_name, extractor_version, content_origin,
-			immutable, content_html, content_text, word_count, is_current, fs_path,
+			immutable, content_html, content_text, word_count, is_current,
 			ruleset_key
 		)
-		VALUES ($1, $11, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $12)`,
+		VALUES ($1, $10, $2, $3, $4, $5, $6, $7, $8, $9, $11)`,
 		p.ArticleID, p.ExtractorName, p.ExtractorVersion, p.ContentOrigin,
-		p.Immutable, p.HTML, p.Text, p.WordCount, makeCurrent, p.FSPath, p.Owner,
+		p.Immutable, p.HTML, p.Text, p.WordCount, makeCurrent, p.Owner,
 		p.RulesetKey,
 	); err != nil {
 		return false, fmt.Errorf("inserting the body of article %d: %w", p.ArticleID, err)

@@ -155,7 +155,7 @@ func TestAFetchThatRunsOutOfTimeRecordsTheFailure(t *testing.T) {
 
 	worker := &FetchArticleWorker{
 		store:  s,
-		client: httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100}),
+		client: httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100}),
 		blobs:  blobs,
 		log:    slog.New(slog.DiscardHandler),
 	}
@@ -232,7 +232,7 @@ func TestAFetchInterruptedByAShutdownIsLeftAlone(t *testing.T) {
 
 	worker := &FetchArticleWorker{
 		store:  s,
-		client: httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100}),
+		client: httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100}),
 		blobs:  blobs,
 		log:    slog.New(slog.DiscardHandler),
 	}

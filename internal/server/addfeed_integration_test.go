@@ -75,7 +75,7 @@ func fetchingFixture(t *testing.T) (*reader, twoReadersHTTP) {
 		Store:    tr.store,
 		Sessions: sessions,
 		// The whole point of this fixture: the web interface may fetch.
-		Fetch: httpclient.New(httpclient.Options{UserAgent: "tomekeeper-test", Concurrency: 2}),
+		Fetch: httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper-test", Concurrency: 2}),
 	})
 
 	rd := &reader{t: t, h: srv.Handler(), user: tr.alice}

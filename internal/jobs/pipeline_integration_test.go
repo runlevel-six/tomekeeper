@@ -191,7 +191,7 @@ func TestFetchAndExtractPipeline(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 
@@ -287,7 +287,7 @@ func TestFetchFailureIsRecorded(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 
@@ -338,7 +338,7 @@ func TestRobotsDisallowedArticleIsSkipped(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 
@@ -397,7 +397,7 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 
@@ -522,7 +522,7 @@ func TestSameImageAcrossArticlesStoresOnce(t *testing.T) {
 		ids = append(ids, id)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 
@@ -714,7 +714,7 @@ func TestExtractionWithNothingToExtractFromSaysSo(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1})
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper/test", MaxAttempts: 1})
 
 	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
 		if err := jobs.EnqueueExtraction(ctx, riverClient, id, store.Household(), true); err != nil {
@@ -800,7 +800,7 @@ func TestAPageIsFetchedAgainOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("UpsertArticle() = %v", err)
 	}
 
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 

@@ -129,9 +129,10 @@ func worker(args []string, stderr io.Writer) int {
 // newHTTPClient builds the single outbound client from configuration.
 func newHTTPClient(cfg *config.Config) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		UserAgent:   httpclient.UserAgent(version.Short(), cfg.ContactURL),
-		DefaultRPS:  cfg.FetchRPS,
-		Concurrency: cfg.FetchConcurrency,
+		UserAgent:    httpclient.UserAgent(version.Short(), cfg.ContactURL),
+		DefaultRPS:   cfg.FetchRPS,
+		Concurrency:  cfg.FetchConcurrency,
+		AllowPrivate: cfg.FetchAllowPrivate,
 	})
 }
 

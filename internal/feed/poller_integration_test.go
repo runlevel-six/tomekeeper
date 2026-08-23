@@ -45,7 +45,7 @@ func TestPollPipelineAgainstDatabase(t *testing.T) {
 		t.Fatalf("UpsertFeed() = %v", err)
 	}
 
-	poller := feed.NewPoller(s, httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1}),
+	poller := feed.NewPoller(s, httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper/test", MaxAttempts: 1}),
 		feed.DefaultIntervalPolicy(), 20, discardLogger())
 
 	first, err := poller.Poll(ctx, userID, feedID)
@@ -154,7 +154,7 @@ func TestSyndicatedStoryCollapsesInDatabase(t *testing.T) {
 	}))
 	defer srvB.Close()
 
-	poller := feed.NewPoller(s, httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1}),
+	poller := feed.NewPoller(s, httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(), UserAgent: "tomekeeper/test", MaxAttempts: 1}),
 		feed.DefaultIntervalPolicy(), 20, discardLogger())
 
 	for _, url := range []string{srvA.URL, srvB.URL} {

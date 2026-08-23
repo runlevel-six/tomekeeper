@@ -48,6 +48,8 @@ silently: the error survives even after the feed is disabled.
 | `parsing feed: …` | The response is not a feed this parser recognizes. | Fetch the URL yourself — it is usually an HTML error page, a login wall, or a feed URL that now redirects to a homepage. |
 | `response exceeds the … byte limit` | The feed is larger than 10MB. | Usually a feed with no item limit. There is nothing to configure; report it to the publisher. |
 | `dial tcp … connection refused`, `no such host` | DNS or network. | Check from the same host the worker runs on. |
+| `refused: not a public address: redirected to …` | The feed redirected the poll somewhere inside your own network — loopback, a LAN address, or the cloud metadata address. Seen for real from a live feed. | Nothing, usually: the site is misconfigured or has been taken over, and the refusal is the archive protecting itself. If the destination really is yours to archive, name it in `TOME_FETCH_ALLOW_PRIVATE`. |
+| `refused: not a public address: … is private` | The feed's own host resolves to an internal address. | Same answer. This is also what a public name pointed at your network looks like, so check what it resolves to before opening anything. |
 
 ## Confirm whether it is really quiet
 

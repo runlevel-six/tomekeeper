@@ -247,7 +247,7 @@ func runPipelineWithRenderer(t *testing.T, s *store.Store, browserURL string,
 	if err != nil {
 		t.Fatalf("NewFilesystem() = %v", err)
 	}
-	client := httpclient.New(httpclient.Options{
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
 		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
 	})
 

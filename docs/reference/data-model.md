@@ -187,6 +187,7 @@ itself. Extraction quality only improves, so bodies are regenerable.
 |---|---|---|
 | `id` | `bigserial` | Primary key. |
 | `article_id` | `bigint` | References `articles`, cascading. |
+| `user_id` | `bigint` | Whose extraction this is. `NULL` is the household's — see **Bodies and rules have an owner** above. |
 | `extractor_name`, `extractor_version` | `text` | `tome reextract` selects on these. |
 | `content_origin` | `text` | `fetched`, `feed_body`, `import:wallabag`, … Provenance of *this body*. |
 | `ruleset_key` | `text` | Identifies the extraction rules that produced this body, hashed from the content and strip selectors alone. Beside `extractor_version` it answers "is this body stale", which is what lets a sweep re-derive outstanding re-extraction — and that matters because the server and the worker are separate Deployments, so a rule can be changed while the worker is down and eagerly queued work simply lost. Empty means no rule applied, which is distinct from a rule that selects nothing. Changing a *fetch* setting does not change it, so tweaking a rate limit reprocesses nothing. |
@@ -196,11 +197,12 @@ itself. Extraction quality only improves, so bodies are regenerable.
 | `word_count` | `int` | |
 | `is_current` | `boolean` | At most one current row per article, enforced by a partial unique index. |
 | `extracted_at` | `timestamptz` | |
-| `fs_path` | `text` | Location in the blob tree. |
 | `tsv` | `tsvector` | Generated from `content_text`. |
 
-Indexes: `article_content_current_idx`, a unique index on `(article_id) WHERE
-is_current`; `article_content_tsv_idx`, a GIN index on `tsv`;
+Indexes: `article_content_current_idx`, a unique index on
+`(article_id, COALESCE(user_id, 0)) WHERE is_current`, for the reason given above;
+`article_content_owner_idx`, which serves the "mine, or the household's" lookup;
+`article_content_tsv_idx`, a GIN index on `tsv`;
 `article_content_version_idx` on `(extractor_version) WHERE is_current AND NOT
 immutable`, which is what keeps `tome reextract` from scanning
 the whole archive.

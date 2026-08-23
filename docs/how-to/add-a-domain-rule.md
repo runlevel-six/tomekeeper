@@ -168,9 +168,11 @@ tome domain-rule set \
   example.com
 ```
 
-**The flags come before the domain.** Argument parsing stops at the first
-non-flag word, so `set example.com --selector ...` treats the selector as a
-stray argument and prints the usage text instead of saving anything.
+**Either order works.** `set example.com --selector ...` and
+`set --selector ... example.com` both save the same rule. Flags used to have to come
+first, because argument parsing stopped at the first non-flag word and the natural
+order printed the usage text instead of saving anything — that is fixed rather than
+documented now.
 
 | Flag | What it does |
 |---|---|
