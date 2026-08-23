@@ -46,6 +46,8 @@ doing.
 - [Change how often feeds are checked](how-to/change-how-often-feeds-are-checked.md)
   — a cadence for everything, an override for one feed, and the floor neither can
   cross
+- [Choose what is forgotten](how-to/choose-what-is-forgotten.md) — your reading
+  history's own expiry, the archive's default, and what protects an article from both
 - [Cut a release](how-to/cut-a-release.md) — the tag is the release, and what the
   version number promises an operator
 - [Export everything](how-to/export-everything.md) — a portable copy of the whole
@@ -132,7 +134,8 @@ rejected. Design rationale lives here and nowhere else.
 | Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) — **/reprocess**, or `tome reextract` |
 | Find an article that arrived and is *wrong* — a consent gate stored as prose | **Bodies worth a look**, at the foot of the attention queue — see [CLI](reference/cli.md#tome-audit) |
 | Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
-| Stop the archive growing forever | [Retention](reference/retention.md) |
+| Stop the archive growing forever | [Choose what is forgotten](how-to/choose-what-is-forgotten.md), and [Retention](reference/retention.md) for the mechanism |
+| Decide how long my own reading stays mine | **Forgetting**, under Settings — see [Choose what is forgotten](how-to/choose-what-is-forgotten.md) |
 | Scrape it with Prometheus | [Metrics](reference/metrics.md) |
 | Know what `tome` can be told to do | [CLI](reference/cli.md) |
 
