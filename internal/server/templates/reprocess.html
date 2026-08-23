@@ -1,0 +1,187 @@
+{{define "title"}}Reprocess your archive — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="page reprocess">
+  <h1>Reprocess your archive</h1>
+
+  <p class="hint">
+    Extraction runs again over the pages already stored, and produces whatever it
+    would produce today: this build's extraction, at version {{.Version}}, and
+    <a href="/domain-rules">your own rules</a> as they now stand. Nothing is fetched.
+    Every input is already on disk, which is the whole point of keeping the page — an
+    improvement reaches a decade of archive, including sites that no longer exist,
+    without asking anybody's server for anything.
+  </p>
+
+  {{with .Outcome}}
+    {{if .Problem}}
+      <p class="error" role="alert">{{.Problem}}</p>
+    {{else}}
+      <p class="notice" role="status">
+        {{/*
+          The count and whose it was, in one sentence. "Queued 40 articles" reads
+          identically whether it moved one reader's private copies or what the whole
+          household reads, and only one of those is somebody else's business.
+        */}}
+        Queued {{plural .Queued "article"}} for re-extraction, from {{.Whose}}{{if .StaleOnly}} — the ones not at version {{$.Version}}{{end}}.
+        {{if .Everyone}}
+          <strong>This changes what every reader sees</strong> on any article where
+          they hold no extraction of their own.
+        {{end}}
+      </p>
+      <p class="hint">
+        The worker picks these up at its own pace and its own rate limits, so nothing
+        waits on this page. Re-running it is harmless. The counts below do not move
+        until the work is actually done — they describe what is stored, not what is
+        queued.
+      </p>
+    {{end}}
+  {{end}}
+
+  {{if not .Available}}
+    <p class="warn-banner">
+      This instance has no job queue configured, so nothing can be queued from here.
+      The counts below are still accurate, and <code>tome reextract</code> does the
+      same work.
+    </p>
+  {{end}}
+
+  <section class="reprocess-scope">
+    <h2>Your own extractions</h2>
+
+    {{if .Mine}}
+      <p>
+        You hold your own body for {{plural .Mine "article"}} — the ones where your
+        rules produced something different from the household's.
+        {{if .MineStale}}
+          {{.MineStale}} of those came from an extraction other than version
+          {{.Version}}.
+        {{else}}
+          All of them are at version {{.Version}}.
+        {{end}}
+      </p>
+
+      <div class="reprocess-actions">
+        {{if .MineStale}}
+          <form method="post" action="/reprocess">
+            <input type="hidden" name="whose" value="mine">
+            <input type="hidden" name="scope" value="stale">
+            <button type="submit"{{if not $.Available}} disabled{{end}}>
+              Bring {{plural .MineStale "article"}} up to date
+            </button>
+            <span class="reason">
+              Only the ones from an older extraction. This is the follow-up to an
+              upgrade that changed how extraction works.
+            </span>
+          </form>
+        {{end}}
+
+        <form method="post" action="/reprocess">
+          <input type="hidden" name="whose" value="mine">
+          <input type="hidden" name="scope" value="all">
+          <button type="submit"{{if not $.Available}} disabled{{end}}>
+            Re-extract all {{plural .Mine "article"}} again
+          </button>
+          <span class="reason">
+            Every body of yours, whatever version it came from. This is the one to
+            press after editing rules: a rule is data rather than a version, so a body
+            it would now change is not "out of date" by any number.
+          </span>
+        </form>
+      </div>
+    {{else}}
+      {{/*
+        The ordinary state, and it is not a gap. Copy-on-write means a reader holds a
+        body only where their own extraction diverged; with no rules of their own they
+        read the household's, which is exactly what the design intends. Reporting "0"
+        and offering a button would present that as something missing.
+      */}}
+      <p class="placeholder">
+        You hold no bodies of your own, so there is nothing here to redo. You read the
+        household's extraction, and you get a copy of your own only where
+        <a href="/domain-rules">a rule of yours</a> produces something different from
+        it.
+      </p>
+    {{end}}
+  </section>
+
+  {{if .CanHousehold}}
+    <section class="reprocess-scope">
+      <h2>What everybody reads</h2>
+
+      {{if .Household}}
+        <p>
+          The household's extraction — one body per article, which every reader sees
+          unless they hold their own. {{plural .Household "article"}} in all,
+          {{if .HouseholdStale}}
+            {{.HouseholdStale}} of them from an extraction other than version
+            {{.Version}}.
+          {{else}}
+            all at version {{.Version}}.
+          {{end}}
+        </p>
+      {{else}}
+        {{/*
+          Nothing to redo, which on a new archive is simply "nothing has been fetched
+          and extracted yet" — and on an old one means everything stored is imported,
+          which no bulk reprocess may touch. Either way a button over a count of zero
+          is a button that does nothing.
+        */}}
+        <p class="placeholder">
+          The archive holds no re-extractable bodies: nothing has been fetched and
+          extracted yet, or everything stored was imported — and an imported body is
+          never regenerated, because it may be the only surviving copy of its page.
+        </p>
+      {{end}}
+
+      <p class="hint">
+        {{/*
+          Stated before the buttons rather than in a confirmation after them. The
+          household's bodies are the one thing on this page whose reprocessing is felt
+          by somebody who pressed nothing — and a reader who holds their own
+          extraction of an article will not see this move at all, which is the
+          confusing half worth saying out loud.
+        */}}
+        This is the archive's own extraction rather than yours. Redoing it changes what
+        every other reader sees on any article where they have no body of their own.
+        Imported bodies are never touched: one of those may be the only surviving copy
+        of a page that is gone.
+      </p>
+
+      {{if .Household}}
+      <div class="reprocess-actions">
+        {{if .HouseholdStale}}
+          <form method="post" action="/reprocess">
+            <input type="hidden" name="whose" value="household">
+            <input type="hidden" name="scope" value="stale">
+            <button type="submit"{{if not $.Available}} disabled{{end}}>
+              Bring {{plural .HouseholdStale "article"}} up to date
+            </button>
+            <span class="reason">The upgrade follow-up, for everybody.</span>
+          </form>
+        {{end}}
+
+        <form method="post" action="/reprocess">
+          <input type="hidden" name="whose" value="household">
+          <input type="hidden" name="scope" value="all">
+          <button type="submit"{{if not $.Available}} disabled{{end}}>
+            Re-extract all {{plural .Household "article"}} again
+          </button>
+          <span class="reason">
+            The whole archive, whatever version each body came from. On a large archive
+            this is hours of the worker's time — at its own rate limits, and with no
+            requests to anybody's server.
+          </span>
+        </form>
+      </div>
+      {{end}}
+    </section>
+  {{end}}
+
+  <p class="hint">
+    Reprocessing one host instead is on the <a href="/domain-rules">rules page</a>, on
+    that host's own row — which is the usual case, because the usual reason to
+    reprocess anything is a rule just written for one site.
+  </p>
+</div>
+{{end}}

@@ -1,0 +1,220 @@
+{{define "title"}}Bodies worth a look — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="page audit">
+  <h1>Bodies worth a look</h1>
+
+  <p class="hint">
+    <a href="/attention">Needs attention</a> lists what did not arrive. This asks the
+    harder question underneath it — what arrived and is <em>wrong</em> — through three
+    lenses over the bodies you read. A cookie notice, a sign-in wall or a
+    related-articles rail reads as prose and passes every threshold extraction
+    enforces, so nothing but a second look finds one.
+  </p>
+
+  <p class="hint">
+    {{/*
+      Said before the findings rather than after them, because a list of complaints
+      with no stated error rate reads as a list of faults. Measured on a real archive,
+      the first lens flagged seven bodies and not one was a body extraction had got
+      wrong. That is a fine list to read and a terrible one to act on automatically,
+      which is why nothing here changes anything.
+    */}}
+    <strong>Expect false alarms.</strong> Every lens is deliberately imprecise: a link
+    roundup, a podcast episode page or a title in another language will show up here
+    and be perfectly fine. Nothing on this page has been changed, and nothing will be
+    unless you ask.
+  </p>
+
+  <section class="audit-lens">
+    <h2>Bodies that say nothing their title mentions</h2>
+    <p class="hint">
+      Extraction chose a block of the page and may have chosen the wrong one. A body
+      sharing no distinctive word with its own title is the shape that catches it —
+      a consent dialog has nothing to say about the article it is covering. Only the
+      two rungs that <em>choose</em> a block are examined; a hand-written selector
+      cannot wander, and a comic legitimately has no prose to match.
+    </p>
+
+    {{if .Suspect}}
+      <table class="attention-table">
+        <thead>
+          <tr>
+            <th scope="col">Article</th>
+            <th scope="col">Extractor</th>
+            <th scope="col" class="num">Words</th>
+            <th scope="col">Fix</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Suspect}}
+          <tr>
+            <th scope="row">
+              <a href="/articles/{{.ArticleID}}">{{displayTitle .Title .URL}}</a>
+              <span class="url">{{.URL}}</span>
+            </th>
+            <td>{{.Extractor}}</td>
+            <td class="num">{{.WordCount}}</td>
+            <td>
+              {{if .RulePath}}
+                <a class="rule-link" href="{{.RulePath}}"
+                   title="Write your own extraction rule for {{.Host}}. It changes only what you read.">Rule for {{.Host}}</a>
+              {{end}}
+              {{/*
+                The same explanation the attention queue offers, and for the same
+                reason: "why does this look like this" is the question a flagged row
+                provokes, and answering it used to mean a terminal.
+              */}}
+              <a class="explain-link" href="/articles/{{.ArticleID}}/explain"
+                 title="Run the extraction over the stored page and report what each step produced">Why?</a>
+
+              {{/*
+                And the remedy a rule cannot reach, which is the case that produced this
+                lens: the stored bytes really are the consent gate, so no selector over
+                them will ever find an article. Only the origin can help, and a domain
+                flagged as needing a browser is handed to one on the way through.
+              */}}
+              <form class="refetch" method="post" action="/articles/{{.ArticleID}}/refetch">
+                <input type="hidden" name="from" value="audit">
+                <button type="submit" title="Ask {{.Host}} for this page again and archive what comes back. Costs one request.">Fetch again</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{if eq (len .Suspect) .Limit}}
+        <p class="reason">The first {{.Limit}}. There are more.</p>
+      {{end}}
+    {{else}}
+      <p class="placeholder">None.</p>
+    {{end}}
+  </section>
+
+  <section class="audit-lens">
+    <h2>Bodies more than one article shares</h2>
+    <p class="hint">
+      Two articles do not coincidentally have the same prose. What they share is
+      usually a wall — a consent gate, a sign-in page, an "enable JavaScript" notice —
+      stored as though it were the article. Reposts of the same story are the ordinary
+      innocent case. This one finds a pattern only after it has repeated, which is what
+      an audit is for.
+    </p>
+
+    {{if .Shared}}
+      <table class="attention-table">
+        <thead>
+          <tr>
+            <th scope="col">Articles</th>
+            <th scope="col" class="num">Words</th>
+            <th scope="col">Hosts</th>
+            <th scope="col">How it starts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Shared}}
+          <tr>
+            <th scope="row">
+              {{range $i, $id := .ArticleIDs}}{{if $i}} · {{end}}<a href="/articles/{{$id}}">{{$id}}</a>{{end}}
+              {{if .Immutable}}
+                {{/*
+                  Worth saying on the row, because it changes what can be done about
+                  it: an imported body is never re-extracted, so a rule is not the
+                  remedy and may be the only surviving copy of a page that is gone.
+                */}}
+                <span class="badge" title="Imported. Nothing regenerates this body, so a rule cannot fix it.">imported</span>
+              {{end}}
+            </th>
+            <td class="num">{{.WordCount}}</td>
+            <td>{{range $i, $host := .Hosts}}{{if $i}}, {{end}}{{$host}}{{end}}</td>
+            <td><span class="reason">{{.Opening}}…</span></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{if eq (len .Shared) .Limit}}
+        <p class="reason">The first {{.Limit}}. There are more.</p>
+      {{end}}
+    {{else}}
+      <p class="placeholder">None.</p>
+    {{end}}
+  </section>
+
+  <section class="audit-lens">
+    <h2>Titles that are not titles</h2>
+    <p class="hint">
+      A URL or an encoded filename kept as a title, which an import does when its
+      source had none for a bookmark. Both halves that caused it are fixed, so this
+      finds the ones already stored — and the two remedies are not
+      interchangeable: one of these has a stored page to take a real title from, and
+      one has nothing to read a title out of and needs a fetch first.
+    </p>
+
+    {{if .Titles}}
+      <table class="attention-table">
+        <thead>
+          <tr>
+            <th scope="col">Article</th>
+            <th scope="col">What it needs</th>
+            <th scope="col">Fix</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Titles}}
+          <tr>
+            <th scope="row">
+              <a href="/articles/{{.ArticleID}}">{{.Title}}</a>
+              <span class="url">{{.URL}}</span>
+            </th>
+            <td>
+              {{if .HasBody}}
+                <span class="badge warn">re-extraction</span>
+                <span class="reason">the stored page has a real title in it</span>
+              {{else}}
+                <span class="badge warn">a fetch</span>
+                <span class="reason">nothing is stored to take a title from</span>
+              {{end}}
+            </td>
+            <td>
+              {{if .HasBody}}
+                {{if $.Reprocessable}}
+                  <a class="rule-link" href="/reprocess"
+                     title="Re-extracting your archive gives this a real title">Reprocess your archive</a>
+                {{else}}
+                  <span class="reason"><code>tome reextract</code> fixes this one</span>
+                {{end}}
+              {{else}}
+                {{/*
+                  A form rather than a link, because it costs the origin a request: a
+                  GET here would be followed by every crawler and prefetcher that saw
+                  the page. `from` brings the reader back to this page instead of the
+                  attention queue they did not come from.
+                */}}
+                <form class="refetch" method="post" action="/articles/{{.ArticleID}}/refetch">
+                  <input type="hidden" name="from" value="audit">
+                  <button type="submit" title="Ask {{.Host}} for this page again and archive what comes back. Costs one request.">Fetch again</button>
+                </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{if eq (len .Titles) .Limit}}
+        <p class="reason">The first {{.Limit}}. There are more.</p>
+      {{end}}
+    {{else}}
+      <p class="placeholder">None.</p>
+    {{end}}
+  </section>
+
+  {{if eq .Findings 0}}
+    {{/*
+      Said at the foot rather than instead of the lenses. "Nothing to look at" only
+      means something if you can see what was looked for, which is the same reason
+      the command prints its three headings whether they found anything or not.
+    */}}
+    <p class="placeholder">Nothing to look at. All three lenses came back empty.</p>
+  {{end}}
+</div>
+{{end}}

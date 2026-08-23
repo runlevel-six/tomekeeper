@@ -222,6 +222,14 @@
     anything and works for articles whose sites are gone. It never touches an
     imported body — those may be the only surviving copy of a page. This build
     extracts at version {{.ExtractorVersion}}.
+    {{/*
+      The whole-archive form of the button on every row above. Offered here rather
+      than only in Settings because somebody who has just edited three rules is
+      standing on this page, and that is precisely when redoing everything is the
+      thing they want.
+    */}}
+    <a href="/reprocess">Reprocess everything of yours</a> instead, if a rule change
+    has reached further than one host.
   </p>
 </div>
 {{end}}

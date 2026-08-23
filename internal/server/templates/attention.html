@@ -126,5 +126,25 @@
   {{else}}
     <p class="placeholder">Everything came through cleanly.</p>
   {{end}}
+
+  {{/*
+    The other half of the question. This page lists what did not arrive; the audit
+    asks what arrived and is wrong, which is the failure that removed itself from
+    this queue by succeeding.
+
+    A link rather than a section here, and the reason is a measurement: its three
+    lenses take about a second on a real archive, and inlining them would have
+    charged that to every visit to this page — including the visits where they find
+    nothing and nothing is shown. Always offered, even when it will come back empty,
+    because a page somebody chose to open may say "nothing to look at".
+  */}}
+  <p class="audit-link">
+    <a href="/attention/audit">Bodies worth a look →</a>
+    <span class="reason">
+      Three lenses over what you read, looking for a body that is not the article —
+      a consent gate or a sign-in wall stored as though it were prose. Run when you
+      open it, and it changes nothing.
+    </span>
+  </p>
 </div>
 {{end}}

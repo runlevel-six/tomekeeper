@@ -33,6 +33,49 @@ import (
 //
 // Read-only. Nothing here writes.
 
+// auditScope narrows a lens to what one reader may see.
+//
+// Each lens exists in two forms. `tome audit` asks an operator's question — is
+// anything in this archive wrong — and looks at every stored body. The audit page
+// asks a reader's — does anything *I* read look wrong — and may look only at their
+// articles, and only at the body each of those shows them.
+//
+// The two differ at three edges and nowhere else: which articles are in scope,
+// which of an article's bodies is the one being judged, and which parameter the
+// limit takes once a reader id has claimed $1. So each lens is written once and
+// narrowed here. A scoped copy of a lens is not a variant to be maintained
+// alongside the original — it is the same lens, and two copies that drifted would
+// report different answers about the same archive with nothing to say which was
+// right.
+type auditScope struct {
+	// articles decides which articles the lens may see.
+	articles string
+
+	// body decides which of an article's bodies it judges.
+	body string
+
+	// limit is the placeholder LIMIT takes.
+	limit string
+}
+
+// wholeArchive is the operator's scope: every article, every current body,
+// deliberately unnarrowed.
+//
+// Written as a predicate that is always true rather than by omitting the clause,
+// so the two forms of every lens are the same string with different edges instead
+// of two shapes assembled by conditionals.
+var wholeArchive = auditScope{articles: "(true)", body: "(true)", limit: "$1"}
+
+// readerView is one reader's scope: the articles they can see, and the body each
+// of those articles shows them.
+//
+// Both predicates take the reader as $1, which is the coupling documented on each
+// of them. preferredBody is the right predicate even where the question is merely
+// whether a body exists: it selects the reader's own row where they have one and
+// the household's otherwise, so exactly one row matches either way and "is there
+// one" gets the same answer as ownedBodyExists would give.
+var readerView = auditScope{articles: visibleArticles, body: preferredBody, limit: "$2"}
+
 // SuspectBody is a body with nothing in it that the title talks about.
 type SuspectBody struct {
 	ArticleID  ArticleID
@@ -76,31 +119,56 @@ type SuspectBody struct {
 // re-extract, and neither can touch a body that may be the only surviving copy of a
 // page that is gone.
 func (s *Store) SuspectBodies(ctx context.Context, limit int) ([]SuspectBody, error) {
+	return s.suspectBodies(ctx, wholeArchive, limit)
+}
+
+// SuspectBodiesFor is the same lens over one reader's articles and their own
+// bodies.
+//
+// A reader may hold their own extraction of a page the household also has, and
+// theirs is the one to judge: it is what they read, and it is the one their rule
+// produced. Judging the household's copy would report a problem they do not have
+// and hide the one they do.
+func (s *Store) SuspectBodiesFor(ctx context.Context, userID UserID, limit int) ([]SuspectBody, error) {
+	return s.suspectBodies(ctx, readerView, userID, limit)
+}
+
+func (s *Store) suspectBodies(ctx context.Context, scope auditScope, args ...any) ([]SuspectBody, error) {
+	// Scored per *body* rather than per article, which is what tenancy made
+	// necessary. One article can now have two current bodies — the household's and a
+	// reader's fork — and grouping by the article mixed them: the title's words were
+	// counted twice, `found` became "some body mentions the title" so one good body
+	// hid a bad one, and the final join emitted the same finding once per body. All
+	// three go away by asking the question the lens was always asking, which is about
+	// a body and not about an article.
 	rows, err := s.pool.Query(ctx, `
 		WITH tok AS (
-			SELECT a.id,
+			SELECT c.id AS body_id,
+			       a.id AS article_id,
 			       lower(w.word) AS word,
 			       lower(c.content_text) AS body
 			FROM articles a
 			JOIN article_content c ON c.article_id = a.id AND c.is_current
+			                      AND `+scope.body+`
 			CROSS JOIN LATERAL regexp_split_to_table(
 				regexp_replace(a.title, '[^[:alnum:]]+', ' ', 'g'), ' ') AS w(word)
 			WHERE c.extractor_name IN ('trafilatura', 'readability')
 			  AND length(w.word) > 3
+			  AND `+scope.articles+`
 		),
 		scored AS (
-			SELECT id,
+			SELECT body_id, article_id,
 			       count(*) AS title_words,
 			       count(*) FILTER (WHERE position(word IN body) > 0) AS found
-			FROM tok GROUP BY id
+			FROM tok GROUP BY body_id, article_id
 		)
-		SELECT s.id, a.title, a.url_canonical, c.extractor_name, c.word_count, s.title_words
+		SELECT s.article_id, a.title, a.url_canonical, c.extractor_name, c.word_count, s.title_words
 		FROM scored s
-		JOIN articles a ON a.id = s.id
-		JOIN article_content c ON c.article_id = s.id AND c.is_current
+		JOIN article_content c ON c.id = s.body_id
+		JOIN articles a ON a.id = s.article_id
 		WHERE s.found = 0 AND s.title_words >= 3
-		ORDER BY c.word_count, s.id
-		LIMIT $1`, limit)
+		ORDER BY c.word_count, s.body_id
+		LIMIT `+scope.limit, args...)
 	if err != nil {
 		return nil, fmt.Errorf("looking for bodies that do not match their title: %w", err)
 	}
@@ -145,6 +213,21 @@ type SharedBody struct {
 // authentication portal — "Sign in with Midway" — stored as the body of two imported
 // articles. The finding is worth having even where the remedy is not re-extraction.
 func (s *Store) SharedBodies(ctx context.Context, limit int) ([]SharedBody, error) {
+	return s.sharedBodies(ctx, wholeArchive, limit)
+}
+
+// SharedBodiesFor is the same lens over one reader's articles and their own
+// bodies.
+//
+// A pair only reports when the reader can see both halves of it, which is what
+// scoping means here and is a real narrowing rather than an incidental one: an
+// identical body on an article they cannot see is exactly the finding they must not
+// be shown, because the pairing itself would tell them that article exists.
+func (s *Store) SharedBodiesFor(ctx context.Context, userID UserID, limit int) ([]SharedBody, error) {
+	return s.sharedBodies(ctx, readerView, userID, limit)
+}
+
+func (s *Store) sharedBodies(ctx context.Context, scope auditScope, args ...any) ([]SharedBody, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT array_agg(a.id ORDER BY a.id),
 		       array_agg(DISTINCT regexp_replace(
@@ -160,10 +243,17 @@ func (s *Store) SharedBodies(ctx context.Context, limit int) ([]SharedBody, erro
 		  -- finding here is boilerplate presented as an article, which is never
 		  -- twenty words.
 		  AND c.word_count > 20
+		  AND `+scope.body+`
+		  AND `+scope.articles+`
 		GROUP BY md5(c.content_text)
-		HAVING count(*) > 1
+		-- Distinct *articles*, which tenancy made the load-bearing word. Two current
+		-- bodies of one article — the household's and a reader's fork — can be
+		-- byte-identical when a rule happens to select the same text, and counting
+		-- rows would report that article as sharing a body with itself. The finding
+		-- here is one wall serving as the article for two different pages.
+		HAVING count(DISTINCT a.id) > 1
 		ORDER BY count(*) DESC, min(c.word_count)
-		LIMIT $1`, limit)
+		LIMIT `+scope.limit, args...)
 	if err != nil {
 		return nil, fmt.Errorf("looking for bodies shared between articles: %w", err)
 	}
@@ -203,14 +293,30 @@ type PlaceholderTitle struct {
 // `tome reextract`; a bodyless one has no page to take a title from and needs a fetch
 // first, which is worth being able to see separately.
 func (s *Store) PlaceholderTitles(ctx context.Context, limit int) ([]PlaceholderTitle, error) {
+	return s.placeholderTitles(ctx, wholeArchive, limit)
+}
+
+// PlaceholderTitlesFor is the same lens over one reader's articles.
+//
+// A title is the household's — one row on `articles`, shared by everyone, which is
+// why a reader's rule may not rewrite it. So the finding is the same for every
+// reader who can see the article; what is scoped is which articles those are, and
+// whether *this* reader has a body to take a real title from.
+func (s *Store) PlaceholderTitlesFor(ctx context.Context, userID UserID, limit int) ([]PlaceholderTitle, error) {
+	return s.placeholderTitles(ctx, readerView, userID, limit)
+}
+
+func (s *Store) placeholderTitles(ctx context.Context, scope auditScope, args ...any) ([]PlaceholderTitle, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT a.id, a.title, a.url_canonical,
 		       EXISTS(SELECT 1 FROM article_content c
-		              WHERE c.article_id = a.id AND c.is_current)
+		              WHERE c.article_id = a.id AND c.is_current
+		                AND `+scope.body+`)
 		FROM articles a
 		WHERE `+placeholderTitleSQL+`
+		  AND `+scope.articles+`
 		ORDER BY a.id
-		LIMIT $1`, limit)
+		LIMIT `+scope.limit, args...)
 	if err != nil {
 		return nil, fmt.Errorf("looking for titles that are URLs: %w", err)
 	}

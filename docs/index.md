@@ -129,7 +129,8 @@ rejected. Design rationale lives here and nowhere else.
 | Make it check the feeds right now | **Check all feeds now** on the Feeds page — see [Troubleshoot a failing feed](how-to/troubleshoot-a-failing-feed.md#watch-a-poll-happen) |
 | Fix a site whose articles extract badly | [Add a domain rule](how-to/add-a-domain-rule.md) |
 | Archive a site that builds its pages in JavaScript | [Enable headless rendering](how-to/enable-headless-rendering.md) |
-| Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) |
+| Apply an extraction improvement to old articles | [Reprocess the archive](how-to/reprocess-the-archive.md) — **/reprocess**, or `tome reextract` |
+| Find an article that arrived and is *wrong* — a consent gate stored as prose | **Bodies worth a look**, at the foot of the attention queue — see [CLI](reference/cli.md#tome-audit) |
 | Know what the archive costs on disk | [Storage layout](reference/storage-layout.md) |
 | Stop the archive growing forever | [Retention](reference/retention.md) |
 | Scrape it with Prometheus | [Metrics](reference/metrics.md) |

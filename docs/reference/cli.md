@@ -419,6 +419,13 @@ opposite of what that is for. To *apply* a reader's rules to a host they have no
 bodies from, use **Reprocess** on their rule's row in the interface, which asks that
 question instead.
 
+**A reader can do this without a terminal.** `/reprocess` is the whole-archive form,
+reached from Settings and from the rules page: it counts what would move before
+anything is queued, offers "the ones from an older extraction" and "all of them
+again" separately, and moves the reader's own bodies. An administrator gets the
+household's as a second, clearly separated choice — refused outright to anybody else
+rather than quietly downgraded to their own bodies.
+
 
 ### `tome user`
 
@@ -613,6 +620,24 @@ A URL-titled article with a body gets a real title from the next `tome reextract
 without has no page to take a title from and needs a fetch first, which the report says
 per row.
 
+**The reader's form of this is `/attention/audit`**, linked from the foot of the
+attention queue and from Settings. Same three lenses, narrowed to the articles that
+reader can see and to the body each of those shows *them* — their own extraction where
+their rules produced one, the household's otherwise. This command keeps the
+archive-wide view, which is the operator's question and stays an operator's.
+
+It is a page of its own rather than a section of the attention queue because the lenses
+are not cheap: about 1.1 seconds over 2,264 bodies, almost all of it the title lens.
+Folding them in would have charged that to every visit to the queue, including the
+visits where they find nothing.
+
+Each lens judges one **body** rather than one article, which matters now that an
+article can have two current bodies — the household's and a reader's fork. Grouping by
+article counted a title's words twice, let a good body's overlap clear a bad one, and
+reported the same finding once per body; and "a body more than one article shares"
+counts distinct articles, so a reader's fork that happens to match the household's
+byte for byte is not a finding about anything.
+
 ## `tome explain`
 
 Reports what each rung of the extraction ladder produced for one article, and
@@ -736,7 +761,10 @@ is there — the same reasoning that makes another reader's article not-found.
 | `GET /feeds/{id}` | One feed's articles |
 | `GET /tags/{id}` | One tag's articles |
 | `GET /attention` | Articles that did not come through cleanly: failed, withheld by robots.txt, waiting on something an operator controls, or missing images. Each row reports how much visible text the served page carried, which is what distinguishes a JavaScript shell from a page that wants a CSS selector. |
-| `GET /settings` | Palette, reading preferences, and the export download |
+| `GET /attention/audit` | Bodies that may not be the article they claim to be: three lenses over what this reader reads. Its own page rather than a section of the queue above, because the lenses cost about a second on a real archive. Read-only. |
+| `GET /reprocess` | Re-extract this reader's archive from the pages already stored. Counts what would move before anything is queued. |
+| `POST /reprocess` | Queues it. `whose=mine` or `whose=household` (administrators only, refused rather than downgraded), `scope=stale` or `scope=all`. |
+| `GET /settings` | Palette, reading preferences, the export download, and the two pages above |
 | `GET /users` | Accounts. Administrators only. `?delete=<id>` asks before removing one. |
 | `POST /users` | Creates an account with no password. |
 | `POST /users/{id}/link` | Issues a single-use setup link and shows it once. |
@@ -1262,6 +1290,11 @@ The page is **overwritten in place**, at whatever path the article already point
 rather than at a recomputed one. An article's directory is named after its title and
 extraction fills that in after the first fetch, so recomputing would put the new page
 in one directory and leave the `index.html` and localized images in another.
+
+`from=` names the page the button was on, so a reader fixing four articles in a row
+stays where they were: `audit` returns to `/attention/audit`, and anything else lands
+on `/attention`. Matched against that fixed set rather than followed — a redirect built
+from what a form posted is an open redirect.
 
 ### Touch gestures
 

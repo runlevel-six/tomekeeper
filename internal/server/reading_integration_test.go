@@ -198,6 +198,10 @@ func TestEveryReadingViewRenders(t *testing.T) {
 	for _, path := range []string{
 		"/", "/all", "/starred", "/feeds", "/attention", "/search",
 		"/search?q=alpaca",
+		// The two pages that turned an operator's command into a reader's page. Here
+		// as well as in their own tests, because this case is what catches a template
+		// that stopped rendering rather than one that renders the wrong thing.
+		"/attention/audit", "/reprocess",
 		"/feeds/" + strconv.FormatInt(int64(tr.aliceFeed), 10),
 		"/articles/" + strconv.FormatInt(int64(tr.aliceOnly), 10),
 	} {

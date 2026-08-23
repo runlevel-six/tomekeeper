@@ -54,5 +54,22 @@ func (s *Server) handleRefetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Info("queued a re-fetch", "article_id", id)
-	http.Redirect(w, r, "/attention", http.StatusSeeOther)
+	http.Redirect(w, r, refetchReturn(r.PostFormValue("from")), http.StatusSeeOther)
+}
+
+// refetchReturn maps the form's `from` to where the reader goes next.
+//
+// A fixed set of destinations rather than the submitted value, which is the whole
+// point: a redirect built from what a form posted is an open redirect, and this one
+// would be reachable by anybody who can get a reader to submit a form. The field was
+// posted and ignored until now — every button landed on the attention queue, which
+// is wrong from the audit page, where a reader who fixes four titles in a row was
+// thrown off the page after the first.
+func refetchReturn(from string) string {
+	switch from {
+	case "audit":
+		return "/attention/audit"
+	default:
+		return "/attention"
+	}
 }

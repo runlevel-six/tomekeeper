@@ -859,6 +859,33 @@ kbd {
 .tag-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tag-list .count { font-size: 0.75rem; }
 
+/* The way from the attention queue to the audit. A rule above it, because it is a
+   different question from the list it follows rather than a footnote to it. */
+.audit-link {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+}
+.audit-link .reason { max-width: var(--measure); margin-top: 0.25rem; }
+
+/* Both pages that are a sequence of independent sections: the audit's three lenses
+   and the two scopes a reprocess can have. Separated by space and a rule, because in
+   each case the reader has to be able to tell where one thing ends — a finding under
+   the wrong lens, or a button under the wrong heading, is the whole risk on both
+   pages. */
+.audit-lens, .reprocess-scope { margin: 2rem 0; }
+.audit-lens + .audit-lens, .reprocess-scope + .reprocess-scope {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+.audit-lens .hint, .reprocess-scope .hint { margin-bottom: 0.9rem; }
+
+/* A button and the sentence that says what it will do, which belongs beside it rather
+   than in a confirmation afterwards: these are the controls whose two variants differ
+   only in wording, so the wording is the control. */
+.reprocess-actions { display: flex; flex-direction: column; gap: 1.1rem; }
+.reprocess-actions .reason { max-width: var(--measure); margin-top: 0.35rem; }
+
 /* Narrowing a list by category. Sits above the articles, wraps on a phone, and is
    deliberately quiet: it is a way to change the subject, not part of the reading. The
    selected one is filled rather than merely colored, so it survives being looked at

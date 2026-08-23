@@ -104,6 +104,30 @@ scoping deleted. The article has to be **shared** for the assertion to have any
 force. That is how the category test is written, and it fails when the clause is
 removed.
 
+### The same lens in two scopes
+
+Some questions are asked by both an operator and a reader, and the answer is not the
+same question twice. The audit lenses are the case: `tome audit` asks whether anything
+in *this archive* is wrong and looks at every stored body, which is right for somebody
+maintaining an archive. The audit page asks whether anything *this reader reads* is
+wrong, and may look only at their articles — and only at the body each of those shows
+them, which is their own extraction where their rules produced one and the household's
+otherwise.
+
+Those two forms are written as one query, narrowed at three edges: which articles are
+in scope, which of an article's bodies is judged, and which parameter the limit takes
+once a reader id has claimed `$1`. A scoped copy maintained beside the original is not
+a variant; it is the same lens, and two that drifted would give different answers
+about the same archive with nothing to say which was right.
+
+Both narrowings are load-bearing, and separately. Neuter the article predicate and a
+reader is shown findings about articles they cannot see — which tells them those
+articles exist, and in the shared-body lens the pairing *is* the disclosure. Neuter the
+body predicate and a reader is judged on somebody else's extraction: told their body is
+a consent gate when it is not, or told it is fine when theirs is the broken one. The
+tests for each are written on a **shared** article for the reason above, and each fails
+when its own predicate is replaced with `true`.
+
 ## Search is not a side door
 
 Searching `article_content` directly would work, be faster to write, and leak.

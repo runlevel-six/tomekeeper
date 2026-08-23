@@ -10,12 +10,44 @@
 > will pick all of them up.
 
 
-`tome reextract` re-runs extraction over articles already stored, using the raw
+Re-extraction re-runs extraction over articles already stored, using the raw
 pages kept at fetch time. It makes no requests to any site.
 
 Reach for it after changing anything that affects extraction: adding a domain
 rule, upgrading an extractor library, or taking a release that bumped the
 extractor version.
+
+## From the interface
+
+**`/reprocess`** is the whole-archive form, linked from Settings and from the foot of
+the rules page. Nothing here needs a terminal.
+
+It counts before it does anything, and it counts two things separately, because they
+answer different questions:
+
+| The offer | Selects | Reach for it |
+|---|---|---|
+| Bring *N* up to date | Bodies from an extractor version other than this build's | After an upgrade that changed how extraction works |
+| Re-extract all *N* again | Every mutable body in that slot, whatever version | After editing rules — a rule is data rather than a version, so a body it would now change is not "out of date" by any number |
+
+**Whose bodies move is the other axis, and the page keeps the two apart.** Your own
+extractions are the ones your rules produced, and redoing them affects nobody else. The
+household's are what every reader sees unless they hold their own — so that section is
+offered to administrators only, and refused to anybody else rather than quietly
+downgraded to their own bodies.
+
+Holding no bodies of your own is the ordinary state and the page says so rather than
+offering a button over a count of zero: copy-on-write means you get a body of your own
+only where [a rule of yours](add-a-domain-rule.md) produces something different from the
+household's extraction.
+
+Reprocessing **one host** is on that host's own row on the rules page, which is the
+usual case. The row decides whose bodies move, and the two are different questions:
+on your own rule's row it applies your rules to that host, including articles you have
+no body of yet; on the household's row an administrator brings everybody's forward.
+
+The rest of this page is the command, which is what an operator wants for a scripted or
+partial run.
 
 ## See what would happen first
 

@@ -236,9 +236,21 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /categories/delete", s.requireUser(s.handleDeleteCategory))
 	mux.HandleFunc("GET /tags/{id}", s.requireUser(s.handleTagStream))
 	mux.HandleFunc("GET /attention", s.requireUser(s.handleAttention))
+	// What arrived and is wrong, as against what did not arrive. Its own page rather
+	// than a section of the queue above, because its three lenses cost about a second
+	// against a real archive and folding them in would have charged that to every
+	// visit — including the visits that would have shown nothing.
+	mux.HandleFunc("GET /attention/audit", s.requireUser(s.handleAudit))
 	// Fetching a page again. A POST because it spends a request on somebody else's
 	// server, and a GET would be followed by every prefetcher that saw the page.
 	mux.HandleFunc("POST /articles/{id}/refetch", s.requireUser(s.handleRefetch))
+
+	// Re-extracting a reader's whole archive: the question, then the answer. Two
+	// steps like the bulk mark, because the count is the thing worth seeing before
+	// pressing it — and because the reader's own bodies and the household's are
+	// different work with different consequences.
+	mux.HandleFunc("GET /reprocess", s.requireUser(s.handleReprocessConfirm))
+	mux.HandleFunc("POST /reprocess", s.requireUser(s.handleReprocess))
 
 	// Extraction overrides. Admin surface rather than reader surface — rules are
 	// global — which is why these are grouped apart and why a multi-user build has

@@ -169,6 +169,26 @@
     </form>
   </section>
 
+  {{/*
+    Two pages rather than controls, because both of them do work and neither should
+    happen because somebody scrolled past it. They are listed here because this is
+    where a reader looks for the things that are theirs: the bodies you read are
+    yours, and until now redoing them or auditing them needed somebody's terminal.
+  */}}
+  <section class="extractions">
+    <h2>What you read</h2>
+    <p class="note">
+      <a href="/reprocess">Reprocess your archive</a> — run extraction again over the
+      pages already stored, with your rules as they now stand. Nothing is fetched, so
+      this costs nobody's server anything.
+    </p>
+    <p class="note">
+      <a href="/attention/audit">Bodies worth a look</a> — three lenses over what you
+      read, for the article that arrived and is wrong: a consent gate or a sign-in wall
+      stored as though it were prose. It reports and changes nothing.
+    </p>
+  </section>
+
   <section class="export">
     <h2>Export</h2>
     {{with .Export}}

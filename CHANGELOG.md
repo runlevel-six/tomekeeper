@@ -178,6 +178,45 @@ happens, because it is the one change that wants a follow-up command
   signs out your *other* browsers and keeps the one you are using: a password change
   that threw you out of your own session would be a poor way to secure an account.
 
+- **Reprocess your archive**, at `/reprocess`, from Settings and from the foot of the
+  rules page. Extraction runs again over the pages already stored, with your rules as
+  they now stand — nothing is fetched, so it costs nobody's server anything and works
+  for sites that no longer exist.
+
+  It counts before it acts, and counts two things separately because they answer
+  different questions: the bodies from an older extractor version, which is the
+  follow-up to an upgrade, and *all* of yours whatever version they came from, which is
+  what a spell of editing rules wants — a rule is data rather than a version, so a body
+  it would now change is not out of date by any number.
+
+  **Whose bodies move is the other axis, and the page keeps them apart.** Yours affect
+  nobody else. The household's are what every reader sees unless they hold their own, so
+  that half is offered to administrators only and **refused** to anybody else rather
+  than quietly downgraded to their own bodies. Holding none of your own is the ordinary
+  state and the page says so rather than offering a button over a count of zero: copy-on-write
+  gives you a body only where your rules produce something different.
+
+- **Bodies worth a look**, at `/attention/audit`, linked from the foot of the attention
+  queue and from Settings. The attention queue lists what did not arrive; this asks the
+  harder question underneath it — what arrived and is *wrong* — which is the failure
+  that removes itself from that queue by succeeding. Three lenses, scoped to the
+  articles you can see and to the body each of them shows *you*.
+
+  This existed as `tome audit`, which needed a terminal, and its queries are
+  archive-wide — right for an operator maintaining an archive and wrong for a page. The
+  command keeps that view; the page answers the reader's question.
+
+  **A page of its own rather than a section of the queue, and that was measured**: the
+  three lenses cost about 1.1 seconds over 2,264 bodies, almost all of it the title
+  lens. Inlining them would have charged that to every visit to the attention queue,
+  including the visits where they find nothing and nothing is shown. So the link is
+  always there and the work happens when you ask for it.
+
+  Nothing here is a gate and some of it is meant to be a false alarm — measured over a
+  real archive, the title lens flagged seven bodies and not one was a body extraction
+  had got wrong. The page says so above the findings, because a list of complaints with
+  no stated precision reads as a list of faults.
+
 - **Sign out everywhere**, under Settings. Ends every session signed in as you,
   including the one you are using, for the case where you signed in on a machine you
   no longer control. It asks first, like the bulk mark and unsubscribe do, because the
@@ -244,6 +283,21 @@ happens, because it is the one change that wants a follow-up command
   told apart from running out of time and left alone, because River hands an
   interrupted job to the next worker that starts — recording it would have permanently
   failed whatever was in flight during every rolling restart.
+
+- **The audit lenses judged an article rather than a body**, which was right until an
+  article could have two current bodies and wrong from the moment one could. With a
+  reader's fork beside the household's extraction, the title lens counted the title's
+  words twice, treated "some body mentions the title" as good enough — so one sound body
+  hid a broken one — and reported the same finding once per body. Each lens now judges
+  one body, and "a body more than one article shares" counts distinct *articles*, so a
+  fork that happens to match the household's byte for byte is no longer reported as an
+  article sharing a body with itself.
+
+- **Fetching a page again now comes back to the page you were on.** The button posted
+  where it came from and nothing read it, so every one of them landed on the attention
+  queue — which threw a reader off the audit page after the first of four fixes. The
+  destination is matched against a fixed set rather than followed, because a redirect
+  built from what a form posted is an open redirect.
 
 - **A precision figure in v0.15.0's notes was wrong.** They said the title lens flags
   seven bodies on this archive and "about three are real". That was inferred from word

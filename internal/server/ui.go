@@ -34,6 +34,7 @@ type ui struct {
 var pageNames = []string{
 	"login", "stream", "article", "search", "feeds", "categories",
 	"attention", "saved", "settings", "domainrules", "users", "setpassword", "explain",
+	"audit", "reprocess",
 }
 
 // newUI parses every page template.
