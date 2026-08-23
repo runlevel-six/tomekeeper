@@ -37,6 +37,11 @@ type settingsPage struct {
 	// not be counted.
 	Export *exportSummary
 
+	// ConfirmLeave asks before deleting the reader's own account. Two steps like
+	// every other irreversible control here, and the only one that ends with the
+	// reader having no account to come back to.
+	ConfirmLeave bool
+
 	// ConfirmSignOut asks before ending every session.
 	//
 	// A two-step confirmation rather than a button that acts, like the bulk mark
@@ -152,6 +157,7 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 		PollFloor: s.pollFloorLabel(),
 
 		ConfirmSignOut: r.URL.Query().Get("signout") == "all",
+		ConfirmLeave:   r.URL.Query().Get("leave") == "yes",
 	}
 	page.Palette, page.Mode = store.SplitTheme(page.Theme)
 

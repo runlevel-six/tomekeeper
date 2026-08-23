@@ -1,14 +1,18 @@
 package server
 
 import (
+	"bytes"
+	"compress/gzip"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/runlevel-six/tomekeeper/internal/auth"
+	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/config"
 	"github.com/runlevel-six/tomekeeper/internal/dbtest"
 	"github.com/runlevel-six/tomekeeper/internal/session"
@@ -567,5 +571,292 @@ func TestChangingAPasswordNeedsTheCurrentOne(t *testing.T) {
 	}
 	if ok, _ := auth.Verify(account.PasswordHash, "the current password"); !ok {
 		t.Error("the password changed despite the current one being wrong")
+	}
+}
+
+// Renaming rewrites the Fever key, because that key is derived from the name.
+//
+// The consequence if it did not: every mobile client would keep authenticating
+// against a stored key that no longer corresponds to anything the reader can type,
+// and nothing would say so. The key cannot be recomputed from the argon2 hash, which
+// is why the form asks for the password.
+func TestRenamingRewritesTheFeverKey(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	const password = "the current password"
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, password)
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", password)); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	rec := f.post(t, h, "/settings/username", url.Values{
+		"username": {"renamed"},
+		"password": {password},
+	}, f.currentIdentity(t))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rename = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+
+	var stored string
+	if err := f.store.Pool().QueryRow(t.Context(),
+		`SELECT api_key FROM users WHERE id = $1`, f.userID).Scan(&stored); err != nil {
+		t.Fatalf("reading the api key: %v", err)
+	}
+	if want := auth.FeverAPIKey("renamed", password); stored != want {
+		t.Error("the Fever key was not rewritten for the new name; every mobile client " +
+			"would now be authenticating against a key nobody can compute")
+	}
+
+	// And the rename actually happened.
+	account, err := f.store.System().SessionUser(t.Context(), f.userID)
+	if err != nil {
+		t.Fatalf("SessionUser() = %v", err)
+	}
+	if account.Username != "renamed" {
+		t.Errorf("username = %q, want the new one", account.Username)
+	}
+}
+
+// A rename needs the password, or an unattended browser could change how somebody
+// signs in.
+func TestRenamingNeedsThePassword(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, "the current password")
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", "the current password")); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	rec := f.post(t, h, "/settings/username", url.Values{
+		"username": {"renamed"},
+		"password": {"not it"},
+	}, f.currentIdentity(t))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("rename with a wrong password = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+
+	account, err := f.store.System().SessionUser(t.Context(), f.userID)
+	if err != nil {
+		t.Fatalf("SessionUser() = %v", err)
+	}
+	if account.Username != "tome" {
+		t.Errorf("username = %q; it changed despite the wrong password", account.Username)
+	}
+}
+
+// A reader may delete their own account, and the last administrator may not — an
+// archive with none cannot make another.
+func TestDeletingYourOwnAccount(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	const password = "the current password"
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, password)
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", password)); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+
+	// The seeded account is the only administrator, so it may not leave.
+	rec := f.post(t, h, "/settings/delete-account",
+		url.Values{"password": {password}}, f.currentIdentity(t))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("the last admin deleting themselves = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if _, err := f.store.System().SessionUser(t.Context(), f.userID); err != nil {
+		t.Fatalf("the last administrator was deleted anyway: %v", err)
+	}
+
+	// With somebody else to administer it, leaving is allowed.
+	if _, err := f.store.System().CreateUser(t.Context(), "other-admin", store.RoleAdmin); err != nil {
+		t.Fatalf("CreateUser() = %v", err)
+	}
+	rec = f.post(t, h, "/settings/delete-account",
+		url.Values{"password": {password}}, f.currentIdentity(t))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("deleting my own account = %d, want %d\n%s",
+			rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if !clearsSession(rec) {
+		t.Error("the session was left in the browser after the account was deleted")
+	}
+	if _, err := f.store.System().SessionUser(t.Context(), f.userID); err == nil {
+		t.Error("the account still exists after deleting it")
+	}
+}
+
+// Deleting your own account needs your password: a signed-in browser somebody
+// walked away from must not be enough to destroy their reading.
+func TestDeletingYourOwnAccountNeedsThePassword(t *testing.T) {
+	f := newAccessFixture(t)
+	h := f.handler(t)
+
+	p := auth.DefaultParams()
+	p.Memory, p.Iterations = 8*1024, 1
+	hash, err := auth.HashWith(p, "the current password")
+	if err != nil {
+		t.Fatalf("HashWith() = %v", err)
+	}
+	if err := f.store.System().SetPassword(t.Context(), f.userID, hash,
+		auth.FeverAPIKey("tome", "the current password")); err != nil {
+		t.Fatalf("SetPassword() = %v", err)
+	}
+	if _, err := f.store.System().CreateUser(t.Context(), "other-admin", store.RoleAdmin); err != nil {
+		t.Fatalf("CreateUser() = %v", err)
+	}
+
+	rec := f.post(t, h, "/settings/delete-account",
+		url.Values{"password": {"not it"}}, f.currentIdentity(t))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+	if _, err := f.store.System().SessionUser(t.Context(), f.userID); err != nil {
+		t.Error("the account was deleted despite the wrong password")
+	}
+}
+
+// post sends a form as a signed-in reader.
+func (f accessFixture) post(
+	t *testing.T, h http.Handler, path string, form url.Values, id session.Identity,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path,
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	issued := httptest.NewRecorder()
+	if err := f.sessions.Issue(issued, id); err != nil {
+		t.Fatalf("Issue() = %v", err)
+	}
+	for _, ck := range issued.Result().Cookies() {
+		req.AddCookie(ck)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// The explanation is reachable from a browser, which is the whole point: the
+// command it replaces needed a terminal and, on Kubernetes, permission to exec into
+// a pod — neither of which the reader who most needs it is likely to have.
+func TestExplainIsReachableAndScoped(t *testing.T) {
+	f := newAccessFixture(t)
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+	page := `<!DOCTYPE html><html><head><title>Explained</title></head><body>` +
+		`<article class="main"><p>` + strings.Repeat("Words about alpacas. ", 40) + `</p></article>` +
+		`</body></html>`
+	const path = "articles/test/explained/raw.html.gz"
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write([]byte(page)); err != nil {
+		t.Fatalf("gzip: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	if err := blobs.Put(t.Context(), path, bytes.NewReader(gz.Bytes())); err != nil {
+		t.Fatalf("Put() = %v", err)
+	}
+
+	h := New(&config.Config{}, slog.New(slog.DiscardHandler),
+		Deps{Store: f.store, Sessions: f.sessions, Blobs: blobs}).Handler()
+
+	const url = "https://explained.example/story"
+	articleID, _, err := f.store.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: url, URLOriginal: url, Title: "Explained",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+	if err := f.store.RecordFetchSuccess(t.Context(), articleID,
+		store.FetchedPage{SHA: "sha-explained", Path: path}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+
+	// Not visible to this reader yet: an article they may not see must be
+	// not-found rather than explained, or the explanation describes a page they
+	// are not entitled to know exists.
+	hidden := f.get(t, h, "/articles/"+strconv.FormatInt(int64(articleID), 10)+"/explain",
+		f.currentIdentity(t))
+	if hidden.Code != http.StatusNotFound {
+		t.Errorf("explaining an invisible article = %d, want %d", hidden.Code, http.StatusNotFound)
+	}
+
+	// Now visible, through a subscription.
+	feedID, _, err := f.store.UpsertFeed(t.Context(), f.userID, store.FeedParams{
+		FeedURL: "https://explained.example/feed.xml", Title: "Explained",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+	if _, err := f.store.InsertFeedItem(t.Context(), f.userID, store.FeedItemParams{
+		FeedID: feedID, ArticleID: articleID, GUID: "g", Title: "Explained",
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+
+	rec := f.get(t, h, "/articles/"+strconv.FormatInt(int64(articleID), 10)+"/explain",
+		f.currentIdentity(t))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("explain = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"What each step produced", "trafilatura", "chosen"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the explanation does not mention %q", want)
+		}
+	}
+	// It says which rules applied, which is the first thing somebody debugging
+	// their own selector needs.
+	if !strings.Contains(body, "The rules that apply to you here") {
+		t.Error("the explanation does not say which rules applied")
+	}
+
+	// And it describes *this reader's* extraction, not the archive's.
+	//
+	// With no rule of their own the two are identical, so the page could explain
+	// the household's and nobody would notice — which is exactly what neutering
+	// found. A rule of their own is what makes the difference observable, and it is
+	// also the case the page exists for: somebody debugging a selector they wrote.
+	if err := f.store.System().UpsertReaderRule(t.Context(), f.userID, store.DomainRule{
+		Domain: "explained.example", ContentSelector: "article.main",
+	}); err != nil {
+		t.Fatalf("UpsertReaderRule() = %v", err)
+	}
+
+	mine := f.get(t, h, "/articles/"+strconv.FormatInt(int64(articleID), 10)+"/explain",
+		f.currentIdentity(t))
+	if mine.Code != http.StatusOK {
+		t.Fatalf("explain after writing a rule = %d, want 200", mine.Code)
+	}
+	switch body := mine.Body.String(); {
+	case !strings.Contains(body, "article.main"):
+		t.Error("the explanation does not show the reader's own selector")
+	case !strings.Contains(body, "yours"):
+		t.Error("the explanation does not say the rule is the reader's own")
 	}
 }

@@ -95,6 +95,15 @@
           {{end}}
 
             {{/*
+              Why this one looks the way it does, which is the question a row in this
+              queue provokes and which used to need a terminal — and, on Kubernetes,
+              permission to exec into a pod. It runs the ladder over the page already
+              on disk and asks nobody for anything.
+            */}}
+            <a class="explain-link" href="/articles/{{.ArticleID}}/explain"
+               title="Run the extraction over the stored page and report what each step produced">Why?</a>
+
+            {{/*
               Fetching the page again, which is the only remedy for a problem the
               stored copy cannot be talked out of. Two live examples: a site whose
               images sit behind URLs that expired before a rule existed, and a page

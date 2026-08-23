@@ -396,3 +396,53 @@ func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }
+
+// SetUsername renames an account and rewrites its Fever API key.
+//
+// The two are one operation because of how the Fever protocol works: the key is
+// md5(username:password), computed by the *client* from what the reader types. Change
+// the name without the key and every mobile client silently stops authenticating,
+// with a stored key that no longer corresponds to any credential anybody holds.
+//
+// The key cannot be recomputed from the stored hash — that is the whole point of an
+// argon2 hash — so a rename needs the cleartext password. That is why the form asks
+// for it, and it is a reasonable thing to ask for anyway: a rename changes how the
+// reader signs in.
+func (s *SystemStore) SetUsername(ctx context.Context, id UserID, username, apiKey string) error {
+	username, err := ValidUsername(username)
+	if err != nil {
+		return err
+	}
+	if apiKey == "" {
+		return fmt.Errorf("fever api key must not be empty")
+	}
+
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET username = $2, api_key = $3 WHERE id = $1`, id, username, apiKey)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return ErrUsernameTaken
+		}
+		return fmt.Errorf("renaming user %d: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+// SetRetention stores how long a reader keeps what they have read.
+//
+// nil means "follow the archive's own setting"; zero is a real value meaning keep
+// everything, and is deliberately distinct from nil.
+func (s *SystemStore) SetRetention(ctx context.Context, id UserID, d *time.Duration) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET retain_after_read = $2 WHERE id = $1`, id, d)
+	if err != nil {
+		return fmt.Errorf("setting retention for user %d: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}

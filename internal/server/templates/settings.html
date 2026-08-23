@@ -170,6 +170,28 @@
     {{end}}
   </section>
 
+  <section class="username">
+    <h2>Your name</h2>
+    <p class="note">
+      What you sign in with. Changing it asks for your password, because your mobile
+      clients authenticate with a key derived from <em>both</em> — they will need
+      reconnecting with the new name.
+    </p>
+    <form method="post" action="/settings/username">
+      <p>
+        <label for="username">Name</label>
+        <input type="text" id="username" name="username" value="{{.Username}}"
+               required maxlength="64" autocomplete="username">
+      </p>
+      <p>
+        <label for="rename_password">Your password</label>
+        <input type="password" id="rename_password" name="password" required
+               autocomplete="current-password">
+      </p>
+      <p><button type="submit">Change name</button></p>
+    </form>
+  </section>
+
   <section class="password">
     <h2>Password</h2>
     <p class="note">
@@ -195,6 +217,38 @@
       </p>
       <p><button type="submit">Change password</button></p>
     </form>
+  </section>
+
+  <section class="leaving">
+    <h2>Leaving</h2>
+    {{if .ConfirmLeave}}
+      <p>
+        This deletes your account, your subscriptions, your tags and highlights, and
+        everything you had read or saved. <strong>It cannot be undone.</strong>
+      </p>
+      <p class="note">
+        Every article and image stays in the archive — they belong to the household,
+        not to you — so nobody else loses anything. If you want your own copy first,
+        take the export above; afterwards there is no account to take one from.
+      </p>
+      <form method="post" action="/settings/delete-account">
+        <p>
+          <label for="leave_password">Your password</label>
+          <input type="password" id="leave_password" name="password" required
+                 autocomplete="current-password">
+        </p>
+        <p>
+          <button type="submit" class="danger">Delete my account</button>
+          <a class="cancel" href="/settings">Stay</a>
+        </p>
+      </form>
+    {{else}}
+      <p class="note">
+        You can delete your own account without asking anyone. Your reading goes;
+        the archive stays.
+      </p>
+      <p><a href="/settings?leave=yes">Delete my account&hellip;</a></p>
+    {{end}}
   </section>
 
   <section class="sessions">

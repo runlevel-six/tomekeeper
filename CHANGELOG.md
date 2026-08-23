@@ -127,6 +127,32 @@ happens, because it is the one change that wants a follow-up command
   `tome prune` reports. **The last administrator cannot be deleted or demoted** — an
   archive without one cannot make another through the interface.
 
+- **Why this article looks like this**, at `/articles/{id}/explain` and from **Why?**
+  on any attention-queue row. It runs the extraction over the page already on disk and
+  reports which rules applied — yours or the household's — what each step produced,
+  and whether what is stored is stale.
+
+  This existed as `tome explain`, which needed a terminal and, on Kubernetes,
+  permission to exec into a pod. Once a reader can write their own rules, the person
+  who most needs to know why a selector produced nothing is the one least likely to
+  have either. The command and the page now call the same function, because two
+  implementations of "what would the ladder do" would drift, and an explanation that
+  no longer describes the extraction is worse than none. `tome explain --user NAME`
+  explains what one reader sees.
+
+- **Change your own name**, under Settings. It asks for your password, and not only
+  because a rename changes how you sign in: the Fever API key is derived from your
+  name *and* your password and is computed by the client, so renaming without
+  rewriting it would leave every mobile client authenticating against a key nobody
+  can compute — silently, since the client has no way to be told. It cannot be
+  recomputed from the stored hash, which is why the form asks.
+
+- **Delete your own account**, under Settings. Leaving no longer requires asking an
+  administrator. Your subscriptions, tags, highlights and reading state go; every
+  article and image stays, so nobody else loses anything. It asks first, and asks for
+  your password. The last administrator is refused — an archive without one cannot
+  make another.
+
 - **Change your own password**, under Settings. It asks for the current one, then
   signs out your *other* browsers and keeps the one you are using: a password change
   that threw you out of your own session would be a poor way to secure an account.

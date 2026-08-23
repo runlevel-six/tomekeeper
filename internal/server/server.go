@@ -206,6 +206,8 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings", s.requireUser(s.handleSaveSettings))
 	mux.HandleFunc("POST /sign-out-everywhere", s.requireUser(s.handleSignOutEverywhere))
 	mux.HandleFunc("POST /settings/password", s.requireUser(s.handleChangePassword))
+	mux.HandleFunc("POST /settings/username", s.requireUser(s.handleChangeUsername))
+	mux.HandleFunc("POST /settings/delete-account", s.requireUser(s.handleDeleteMyAccount))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by
 	// method, so ServeMux never has to choose between them.
@@ -261,6 +263,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /articles/{id}/keep", s.requireUser(s.handleToggleKept))
 	// Choosing between an article's stored bodies. The one deliberate human act the
 	// archive's automatic rules deliberately leave room for.
+	mux.HandleFunc("GET /articles/{id}/explain", s.requireUser(s.handleExplain))
 	mux.HandleFunc("POST /articles/{id}/promote", s.requireUser(s.handlePromoteBody))
 
 	// Archived images. A session, or a signature this service issued: the archive is

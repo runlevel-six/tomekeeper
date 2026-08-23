@@ -1,10 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,10 +8,9 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/runlevel-six/tomekeeper/internal/blob"
 	"github.com/runlevel-six/tomekeeper/internal/db"
+	explainer "github.com/runlevel-six/tomekeeper/internal/explain"
 	"github.com/runlevel-six/tomekeeper/internal/extract"
 	"github.com/runlevel-six/tomekeeper/internal/store"
 )
@@ -34,6 +29,8 @@ func explain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	showBody := fs.Bool("body", false, "print the winning body's opening as well")
+	username := fs.String("user", "",
+		"explain what this reader sees, rather than the household's extraction")
 
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: tome explain [--body] <article-id>")
@@ -74,63 +71,48 @@ func explain(args []string, stdout, stderr io.Writer) int {
 
 	s := store.New(pool)
 
-	article, err := s.GetArticle(ctx, store.ArticleID(id))
-	if err != nil {
-		// "No article" only when that is what happened. Every other failure — a schema
-		// older than this binary being the one that actually turns up — reports itself,
-		// because a missing column announced as a missing article sends somebody looking
-		// in the wrong place entirely. Found doing exactly that.
-		if !store.IsNotFound(err) {
-			fmt.Fprintf(stderr, "tome explain: %v\n", err)
-			return exitFailure
-		}
-		fmt.Fprintf(stderr, "tome explain: no article %d\n", id)
-		return exitFailure
-	}
-
 	blobs, err := blob.NewFilesystem(cfg.BlobRoot)
 	if err != nil {
 		fmt.Fprintf(stderr, "tome explain: opening the archive: %v\n", err)
 		return exitFailure
 	}
 
-	raw, err := storedPage(ctx, blobs, article)
+	// The same function the web page calls. Two implementations of "what would the
+	// ladder do" would drift, and the drift would be invisible: an explanation that
+	// no longer describes the extraction is worse than none, because it is believed.
+	//
+	// The household's view, because that is what a command run by an operator is
+	// asking about. `--user` explains what one reader sees instead, which can differ
+	// the moment they have written a rule.
+	reader := store.HouseholdRule
+	if *username != "" {
+		id, lookupErr := s.System().LookupUser(ctx, *username)
+		if lookupErr != nil {
+			return noSuchUser(stderr, "explain", *username, lookupErr)
+		}
+		reader = id
+	}
+
+	report, err := explainer.For(ctx, s, blobs, reader, store.ArticleID(id))
 	if err != nil {
+		if store.IsNotFound(err) {
+			fmt.Fprintf(stderr, "tome explain: no article %d\n", id)
+			return exitFailure
+		}
 		fmt.Fprintf(stderr, "tome explain: %v\n", err)
 		return exitFailure
 	}
 
-	in := extract.Input{RawHTML: raw, URL: article.URLCanonical}
-
-	// The rule that would apply, looked up the same way the worker looks it up, so
-	// this explains the extraction that actually happens rather than a hypothetical
-	// one with no rule.
-	//
-	// A missing rule is an answer; a database error is not, and treating the two the
-	// same would print a confident explanation of a ladder that never ran this way.
-	rule, err := s.System().DomainRuleFor(ctx, hostOfURL(article.URLCanonical))
-	switch {
-	case err == nil:
+	article, in := report.Article, extract.Input{RawHTML: nil, URL: report.Article.URLCanonical}
+	if report.Rule.ContentSelector != "" || len(report.Rule.StripSelectors) > 0 {
 		in.Rule = &extract.Rule{
-			ContentSelector: rule.ContentSelector,
-			StripSelectors:  rule.StripSelectors,
+			ContentSelector: report.Rule.ContentSelector,
+			StripSelectors:  report.Rule.StripSelectors,
 		}
-	case !errors.Is(err, pgx.ErrNoRows):
-		fmt.Fprintf(stderr, "tome explain: looking up the domain rule: %v\n", err)
-		return exitFailure
 	}
+	result, steps, extractErr := report.Result, report.Steps, report.Err
 
-	// The feed body, for the rung that falls back to it.
-	body, err := s.FeedBodyFor(ctx, store.ArticleID(id))
-	if err != nil {
-		fmt.Fprintf(stderr, "tome explain: looking up the feed body: %v\n", err)
-		return exitFailure
-	}
-	in.FeedBody = body
-
-	result, steps, extractErr := extract.New().Explain(in)
-
-	printExplanation(stdout, article, in, len(raw), result, steps, extractErr, *showBody)
+	printExplanation(stdout, article, in, report.RawBytes, result, steps, extractErr, *showBody)
 
 	if extractErr != nil {
 		// Not an error in this command: reporting a failure accurately is what it
@@ -138,39 +120,6 @@ func explain(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 	return exitOK
-}
-
-// storedPage reads and decompresses the page kept for an article.
-func storedPage(ctx context.Context, blobs blob.Store, article store.Article) ([]byte, error) {
-	if article.RawBlobPath == "" {
-		// Not an error: an article can legitimately have no stored page, and what
-		// this command should then explain is a ladder with only the feed-body rung
-		// available to it.
-		return nil, nil
-	}
-
-	r, err := blobs.Get(ctx, article.RawBlobPath)
-	if err != nil {
-		if errors.Is(err, blob.ErrNotFound) {
-			return nil, fmt.Errorf("the stored page %s is missing from the archive; "+
-				"the row points at a file that is not there", article.RawBlobPath)
-		}
-		return nil, fmt.Errorf("reading %s: %w", article.RawBlobPath, err)
-	}
-	defer func() { _ = r.Close() }()
-
-	compressed, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", article.RawBlobPath, err)
-	}
-
-	gz, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return nil, fmt.Errorf("decompressing %s: %w", article.RawBlobPath, err)
-	}
-	defer func() { _ = gz.Close() }()
-
-	return io.ReadAll(gz)
 }
 
 // hostOfURL is the host a domain rule is looked up by.

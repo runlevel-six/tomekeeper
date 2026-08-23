@@ -70,6 +70,13 @@ If handing over a URL is not possible, `tome user passwd jane` sets one directly
 It reads from standard input and does **not** hide what you type, so prefer the
 link.
 
+## Changing your own name
+
+**Settings → Your name.** It asks for your password, and that is not only because a
+rename changes how you sign in: mobile clients authenticate with a key derived from
+your name *and* your password, so they will need reconnecting afterwards. The key
+cannot be recomputed without the password, which is why the form asks.
+
 ## Changing your own password
 
 **Settings → Password.** It asks for your current one, then signs out your *other*
@@ -77,6 +84,16 @@ browsers and keeps the one you are using.
 
 **Settings → Signed-in devices** ends every session including the current one, for
 when you have signed in somewhere you no longer control.
+
+## Leaving
+
+**Settings → Leaving.** A reader can delete their own account without asking
+anybody: their subscriptions, tags, highlights and reading state go, and every
+article and image stays. It asks for the password, because a signed-in browser
+somebody walked away from should not be enough to destroy their reading.
+
+The last administrator cannot leave — an archive with none cannot make another — so
+make somebody else one first.
 
 ## Removing a reader
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -282,6 +283,123 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("password changed", "user_id", account.ID)
 	s.renderSettings(w, r, http.StatusOK, true, "")
+}
+
+// handleChangeUsername renames the signed-in reader.
+//
+// It asks for the password, and not only because a rename changes how you sign in:
+// the Fever API key is md5(username:password), computed by the client from what the
+// reader types, and it cannot be recovered from the stored argon2 hash. Renaming
+// without the cleartext would leave every mobile client authenticating against a key
+// that no longer corresponds to anything anybody can type — silently, since the
+// client has no way to be told.
+func (s *Server) handleChangeUsername(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	account := signedInAccount(r)
+	wanted := strings.TrimSpace(r.PostFormValue("username"))
+	password := r.PostFormValue("password")
+
+	fail := func(status int, problem string) {
+		s.renderSettings(w, r, status, false, problem)
+	}
+
+	if wanted == account.Username {
+		s.renderSettings(w, r, http.StatusOK, true, "")
+		return
+	}
+
+	stored, err := s.store.System().SessionUser(r.Context(), account.ID)
+	if err != nil {
+		s.log.Error("loading the account to rename it failed", "error", err)
+		fail(http.StatusInternalServerError, "That could not be checked just now. The log will say why.")
+		return
+	}
+	ok, err := auth.Verify(stored.PasswordHash, password)
+	if err != nil {
+		s.log.Error("the stored password hash could not be read", "user_id", account.ID, "error", err)
+		fail(http.StatusInternalServerError, "The stored password could not be read. The log will say what.")
+		return
+	}
+	if !ok {
+		s.log.Warn("failed rename", "user_id", account.ID)
+		fail(http.StatusUnauthorized, "That is not your password, so your name is unchanged.")
+		return
+	}
+
+	switch err := s.store.System().SetUsername(
+		r.Context(), account.ID, wanted, auth.FeverAPIKey(wanted, password)); {
+	case errors.Is(err, store.ErrUsernameBlank):
+		fail(http.StatusBadRequest, "A name is needed.")
+		return
+	case errors.Is(err, store.ErrUsernameInvalid):
+		fail(http.StatusBadRequest,
+			"A username cannot contain spaces or control characters, and must be short enough to type.")
+		return
+	case errors.Is(err, store.ErrUsernameTaken):
+		fail(http.StatusConflict, "Somebody else here is called "+wanted+".")
+		return
+	case err != nil:
+		s.log.Error("renaming an account failed", "user_id", account.ID, "error", err)
+		fail(http.StatusInternalServerError, "That name could not be saved. The log will say why.")
+		return
+	}
+
+	s.log.Info("renamed an account", "user_id", account.ID, "username", wanted)
+	s.renderSettings(w, r, http.StatusOK, true, "")
+}
+
+// handleDeleteMyAccount removes the signed-in reader's own account.
+//
+// Their own, and only their own: administrators remove other people's from the
+// accounts page, and this exists so that leaving does not require asking somebody.
+// It asks for the password, because an unattended signed-in browser should not be
+// enough to destroy somebody's reading.
+//
+// The last administrator is refused here as everywhere else — an archive without one
+// cannot make another — and the refusal says so rather than reporting a constraint.
+func (s *Server) handleDeleteMyAccount(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	account := signedInAccount(r)
+
+	stored, err := s.store.System().SessionUser(r.Context(), account.ID)
+	if err != nil {
+		s.log.Error("loading the account to delete it failed", "error", err)
+		s.renderSettings(w, r, http.StatusInternalServerError, false,
+			"That could not be checked just now. The log will say why.")
+		return
+	}
+	ok, err := auth.Verify(stored.PasswordHash, r.PostFormValue("password"))
+	if err != nil || !ok {
+		s.log.Warn("failed self-deletion", "user_id", account.ID)
+		s.renderSettings(w, r, http.StatusUnauthorized, false,
+			"That is not your password, so nothing was deleted.")
+		return
+	}
+
+	switch err := s.store.System().DeleteUser(r.Context(), account.ID); {
+	case errors.Is(err, store.ErrLastAdmin):
+		s.renderSettings(w, r, http.StatusBadRequest, false,
+			"You are the only administrator. Make somebody else one first, or this archive "+
+				"would have nobody who could manage it.")
+		return
+	case err != nil:
+		s.log.Error("self-deletion failed", "user_id", account.ID, "error", err)
+		s.renderSettings(w, r, http.StatusInternalServerError, false,
+			"Your account could not be deleted. The log will say why.")
+		return
+	}
+
+	s.log.Info("account deleted by its owner", "user_id", account.ID)
+	s.sessions.Clear(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // setPasswordPage is the page a setup link leads to. It is served to nobody in

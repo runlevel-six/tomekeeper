@@ -1,0 +1,119 @@
+{{define "title"}}Why this looks like this — Tomekeeper{{end}}
+
+{{define "content"}}
+<div class="page explain">
+  <h1>Why this article looks like this</h1>
+
+  {{if .Unavailable}}
+    <p class="error" role="alert">
+      The archive directory could not be opened, so there is no stored page to run
+      the extraction over. The log will say why.
+    </p>
+  {{else}}
+    {{with .Report}}
+      <p class="explain-subject">
+        <a href="/articles/{{.Article.ID}}">{{if .Article.Title}}{{.Article.Title}}{{else}}{{.Article.URLCanonical}}{{end}}</a>
+        <span class="reason">{{.Article.Host}}</span>
+      </p>
+
+      <section class="explain-rule">
+        <h2>The rules that apply to you here</h2>
+        {{if .Rule.Domain}}
+          <p>
+            {{if .Rule.FromReader}}
+              <span class="badge">yours</span> Your own rule for <code>{{.Rule.Domain}}</code>.
+            {{else}}
+              <span class="badge">everyone</span> The household's rule for <code>{{.Rule.Domain}}</code>.
+              <a href="/domain-rules?edit={{.Rule.Domain}}">Write your own</a> to change
+              only what you read.
+            {{end}}
+          </p>
+          <p>
+            Body selector:
+            {{if .Rule.ContentSelector}}<code>{{.Rule.ContentSelector}}</code>{{else}}<span class="reason">none</span>{{end}}
+          </p>
+          {{if .Rule.StripSelectors}}
+            <p>Stripped first: <code>{{range $i, $sel := .Rule.StripSelectors}}{{if $i}}, {{end}}{{$sel}}{{end}}</code></p>
+          {{end}}
+        {{else}}
+          <p class="note">
+            No rule applies to this host, so the general heuristics decide.
+            <a href="/domain-rules?edit={{.Article.Host}}">Write one</a> if they are
+            choosing the wrong part of the page.
+          </p>
+        {{end}}
+      </section>
+
+      <section class="explain-ladder">
+        <h2>What each step produced</h2>
+        {{if .RawBytes}}
+          <p class="note">
+            Run over the {{.RawBytes}} bytes of the page as it was stored. Nothing was
+            fetched: every input is already on disk.
+          </p>
+        {{else}}
+          <p class="note">
+            There is no stored page for this article, so only the feed's own copy was
+            available to work from.
+          </p>
+        {{end}}
+
+        <table class="ladder">
+          <thead>
+            <tr>
+              <th scope="col">Step</th><th scope="col" class="num">Words</th>
+              <th scope="col" class="num">Characters</th><th scope="col" class="num">Images</th>
+              <th scope="col">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Steps}}
+              <tr{{if .Accepted}} class="won"{{end}}>
+                <th scope="row">{{.Rung}}</th>
+                <td class="num">{{if .Ran}}{{.Words}}{{end}}</td>
+                <td class="num">{{if .Ran}}{{.Chars}}{{end}}</td>
+                <td class="num">{{if .Ran}}{{.Images}}{{end}}</td>
+                <td>
+                  {{if not .Ran}}<span class="reason">did not run</span>
+                  {{else if .Accepted}}<strong>chosen</strong>
+                  {{else}}<span class="reason">{{.Why}}</span>{{end}}
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+
+        {{if .Err}}
+          <p class="error" role="alert">
+            No step produced anything acceptable, which is why this article has no body.
+          </p>
+        {{end}}
+      </section>
+
+      <section class="explain-stored">
+        <h2>What is stored</h2>
+        {{if .HasStored}}
+          <p>
+            {{.Stored.ExtractorName}}, extractor version {{.Stored.ExtractorVersion}},
+            {{.Stored.WordCount}} words.
+            {{if .Stored.Immutable}}
+              <span class="badge">imported</span> Nothing regenerates this one — it may
+              be the only surviving copy of the page.
+            {{end}}
+          </p>
+          {{if .StoredStale}}
+            <p class="note">
+              This build extracts at version {{$.Version}} and the rules above may have
+              changed since, so re-extracting would produce something different from
+              what is stored. That happens on its own within a minute or so of a rule
+              changing; the table above is what it would produce.
+            </p>
+          {{end}}
+        {{else}}
+          <p class="note">Nothing is stored for you yet.</p>
+        {{end}}
+      </section>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

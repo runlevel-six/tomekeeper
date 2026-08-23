@@ -665,6 +665,16 @@ from the archive, or the database cannot be reached.
 See [Add a domain rule](../how-to/add-a-domain-rule.md), which is where the
 answer usually leads.
 
+**`--user NAME` explains what one reader sees.** Without it this reports the
+household's extraction — what everybody gets unless they have written a rule of
+their own — which is what an operator running a command is usually asking about.
+
+The same explanation is in the interface at `/articles/{id}/explain`, reached from
+**Why?** on any attention-queue row, and both call the same function: two
+implementations of "what would the ladder do" would drift, and an explanation that no
+longer describes the extraction is worse than none because it is believed.
+
+
 ### `tome version`
 
 Prints the build identity to stdout and exits `0`.
@@ -733,7 +743,10 @@ is there — the same reasoning that makes another reader's article not-found.
 | `POST /users/{id}/delete` | Deletes an account, keeping every article and image. |
 | `GET /set-password?token=` | Choose a password, from a setup link. No session. |
 | `POST /set-password` | Spends the link and stores the password. |
+| `GET /articles/{id}/explain` | Why this article's body looks the way it does: which rules applied, what each extraction step produced, and whether what is stored is stale. |
+| `POST /settings/username` | Change your own name. Requires your password — see below. |
 | `POST /settings/password` | Change your own password. Requires the current one. |
+| `POST /settings/delete-account` | Delete your own account. Requires your password; refuses the last administrator. |
 | `POST /sign-out-everywhere` | Ends every session for the signed-in reader, this one included. |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
