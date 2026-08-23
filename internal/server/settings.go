@@ -24,6 +24,11 @@ type settingsPage struct {
 	// MarkOnScroll is the stored preference, which is what the checkbox shows.
 	MarkOnScroll bool
 
+	// Retain is the stored retention window as the picker's value, and
+	// RetentionChoices are the options.
+	Retain           string
+	RetentionChoices []store.RetentionChoice
+
 	// PollEvery is the stored general cadence as the picker's value, PollChoices
 	// are the options, and PollFloor names the shortest this instance will honor.
 	PollEvery   string
@@ -49,6 +54,40 @@ type settingsPage struct {
 	// is no JavaScript dialog available, and this is an action whose effect is
 	// mostly on devices the reader is not looking at.
 	ConfirmSignOut bool
+}
+
+// handleSaveRetention stores how long this reader keeps what they have read.
+//
+// Its own route rather than a field on the settings form, and the reason is written
+// on that form already: it posts every preference it holds, so an absent checkbox
+// means off. A second form posting to the same place would be a partial submission
+// that silently turned the others off — which is precisely what the comment there
+// warns a future preference must not do.
+func (s *Server) handleSaveRetention(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "that form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	// Matched against the offered windows rather than parsed freely, so a
+	// hand-crafted POST cannot ask for one nobody offered. That matters more here
+	// than for a palette: this setting deletes things.
+	window, ok := store.RetentionFor(r.PostFormValue("retain"))
+	if !ok {
+		s.renderSettings(w, r, http.StatusBadRequest, false,
+			"That is not one of the retention windows, so nothing was saved.")
+		return
+	}
+
+	if err := s.store.System().SetRetention(r.Context(), signedInUser(r), window); err != nil {
+		s.log.Error("saving the retention window failed", "error", err)
+		s.renderSettings(w, r, http.StatusInternalServerError, false,
+			"That could not be saved. The log will say why.")
+		return
+	}
+
+	s.log.Info("stored a retention window", "user_id", signedInUser(r), "window", window)
+	s.renderSettings(w, r, http.StatusOK, true, "")
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +215,8 @@ func (s *Server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	// otherwise show as a save that worked. The cadence picker is read back for the
 	// same reason.
 	page.MarkOnScroll = page.MarkReadOnScroll
+	page.RetentionChoices = store.RetentionChoices
+	page.Retain = store.RetentionValue(page.RetainAfterRead)
 	page.PollEvery = store.PollChoiceValue(page.DefaultPollInterval)
 	page.PollChoices = s.pollChoices(page.PollEvery)
 

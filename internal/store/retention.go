@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 // Expirable is an article whose stored body and images can be released.
@@ -54,7 +53,7 @@ type Expired struct {
 // for anything marked read before that column was populated — blocks expiry
 // rather than being assumed old, because the cost of guessing wrong is an
 // article that cannot be got back.
-func (s *Store) ExpirableArticles(ctx context.Context, cutoff time.Time, limit int) ([]Expirable, error) {
+func (s *Store) ExpirableArticles(ctx context.Context, limit int) ([]Expirable, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -75,26 +74,33 @@ func (s *Store) ExpirableArticles(ctx context.Context, cutoff time.Time, limit i
 		    SELECT 1 FROM article_content c
 		    WHERE c.article_id = a.id AND c.immutable)
 
-		  -- Somebody finished with it, long enough ago.
+		  -- Somebody has forgotten it.
 		  AND EXISTS (
 		    SELECT 1 FROM article_state st
-		    WHERE st.article_id = a.id
-		      AND st.read AND NOT st.starred AND NOT st.kept
-		      AND st.saved_at IS NULL
-		      AND st.read_at IS NOT NULL AND st.read_at < $1)
+		    WHERE st.article_id = a.id AND st.forgotten_at IS NOT NULL)
 
-		  -- And nobody still has a claim on it.
+		  -- And nobody still holds a claim.
+		  --
+		  -- **Forgetting is the only thing that releases a claim.** This used to
+		  -- compare every reader's read_at against one archive-wide cutoff, which
+		  -- was right while there was one reader and became wrong the moment their
+		  -- windows could differ: a reader who asked to keep things for a year would
+		  -- have had their claim released after the archive's thirty days, and lost
+		  -- articles they had said they wanted.
+		  --
+		  -- Now each reader's own window decides when they let go, applied by the
+		  -- forgetting sweep, and this only asks whether anybody still has. A row
+		  -- that is not forgotten is a claim however old it is.
 		  AND NOT EXISTS (
 		    SELECT 1 FROM article_state st
-		    WHERE st.article_id = a.id
-		      AND (NOT st.read
-		           OR st.starred
-		           OR st.kept
-		           OR st.saved_at IS NOT NULL
-		           OR st.read_at IS NULL
-		           OR st.read_at >= $1))
+		    WHERE st.article_id = a.id AND st.forgotten_at IS NULL)
 
 		  -- And no subscriber has simply not got to it yet.
+		  --
+		  -- A tombstone satisfies this, which is precisely why forgetting leaves one
+		  -- for an article a feed still carries: deleting the row would make a reader
+		  -- who is finished indistinguishable from one who has never opened it, and
+		  -- the article would never be expirable again.
 		  AND NOT EXISTS (
 		    SELECT 1 FROM feed_items fi
 		    JOIN feeds f ON f.id = fi.feed_id
@@ -104,7 +110,7 @@ func (s *Store) ExpirableArticles(ctx context.Context, cutoff time.Time, limit i
 		        WHERE st2.article_id = a.id AND st2.user_id = f.user_id))
 
 		ORDER BY a.id
-		LIMIT $2`, cutoff, limit)
+		LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("finding expirable articles: %w", err)
 	}
@@ -228,7 +234,8 @@ func (s *Store) SetKept(ctx context.Context, userID UserID, id ArticleID, kept b
 	tag, err := s.pool.Exec(ctx, `
 		INSERT INTO article_state (user_id, article_id, kept)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id, article_id) DO UPDATE SET kept = EXCLUDED.kept`,
+		ON CONFLICT (user_id, article_id) DO UPDATE
+		SET kept = EXCLUDED.kept, forgotten_at = NULL`,
 		userID, id, kept)
 	if err != nil {
 		return false, fmt.Errorf("setting kept on article %d: %w", id, err)

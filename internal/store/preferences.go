@@ -29,6 +29,11 @@ type Preferences struct {
 	// which is what everybody has until they say otherwise — means the poller
 	// decides per feed. A feed with its own override does not consult this.
 	DefaultPollInterval *time.Duration
+
+	// RetainAfterRead is how long this reader keeps what they have read before it
+	// is forgotten. Nil follows the archive's setting; zero is a real value meaning
+	// keep everything, and is deliberately distinct from nil.
+	RetainAfterRead *time.Duration
 }
 
 // GetPreferences returns one reader's settings.
@@ -40,16 +45,19 @@ type Preferences struct {
 func (s *Store) GetPreferences(ctx context.Context, userID UserID) (Preferences, error) {
 	prefs := Preferences{Theme: "auto", TextScale: TextScaleNormal}
 
-	var pollSeconds *int64
+	var pollSeconds, retainSeconds *int64
 	if err := s.pool.QueryRow(ctx, `
 		SELECT COALESCE(theme, 'auto'), COALESCE(text_scale, 'normal'), mark_read_on_scroll,
-		       EXTRACT(EPOCH FROM default_poll_interval)::bigint
+		       EXTRACT(EPOCH FROM default_poll_interval)::bigint,
+		       EXTRACT(EPOCH FROM retain_after_read)::bigint
 		FROM users WHERE id = $1`, userID,
-	).Scan(&prefs.Theme, &prefs.TextScale, &prefs.MarkReadOnScroll, &pollSeconds); err != nil {
+	).Scan(&prefs.Theme, &prefs.TextScale, &prefs.MarkReadOnScroll,
+		&pollSeconds, &retainSeconds); err != nil {
 		return Preferences{Theme: "auto", TextScale: TextScaleNormal},
 			fmt.Errorf("reading preferences for user %d: %w", userID, err)
 	}
 	prefs.DefaultPollInterval = secondsToDuration(pollSeconds)
+	prefs.RetainAfterRead = secondsToDuration(retainSeconds)
 	return prefs, nil
 }
 

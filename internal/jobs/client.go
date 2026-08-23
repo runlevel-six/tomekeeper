@@ -143,6 +143,12 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 		store: d.Store, blobs: d.Blobs, retain: d.RetainAfterRead, log: d.Log,
 	})
 
+	// Registered on the same terms, and runs before expiry means anything: a
+	// reader forgetting an article is what releases their claim on it.
+	river.AddWorker(workers, &ForgetReadingWorker{
+		store: d.Store, retain: d.RetainAfterRead, log: d.Log,
+	})
+
 	client, err := river.NewClient(riverpgxv5.New(d.Pool), &river.Config{
 		Logger:  d.Log,
 		Workers: workers,
@@ -181,6 +187,7 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 				&river.PeriodicJobOpts{RunOnStart: true},
 			),
 			expiryPeriodicJob(),
+			forgetPeriodicJob(),
 		},
 	})
 	if err != nil {

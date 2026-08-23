@@ -745,6 +745,7 @@ is there — the same reasoning that makes another reader's article not-found.
 | `POST /set-password` | Spends the link and stores the password. |
 | `GET /articles/{id}/explain` | Why this article's body looks the way it does: which rules applied, what each extraction step produced, and whether what is stored is stale. |
 | `POST /settings/username` | Change your own name. Requires your password — see below. |
+| `POST /settings/retention` | How long your reading stays yours. Its own route, not a field on the settings form: that form posts every preference it holds, so a second form posting to it would silently turn the others off. |
 | `POST /settings/password` | Change your own password. Requires the current one. |
 | `POST /settings/delete-account` | Delete your own account. Requires your password; refuses the last administrator. |
 | `POST /sign-out-everywhere` | Ends every session for the signed-in reader, this one included. |

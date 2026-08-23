@@ -127,6 +127,27 @@ happens, because it is the one change that wants a follow-up command
   `tome prune` reports. **The last administrator cannot be deleted or demoted** — an
   archive without one cannot make another through the interface.
 
+- **Forgetting**, under Settings. How long your reading stays yours: after your
+  window, articles you have read drop off your lists and the record of having read
+  them goes. Anything starred, saved, kept or **highlighted** is never forgotten —
+  annotations are the one thing a reader may value more than the article, and deleting
+  them on a timer is not a trade anybody asked for.
+
+  **The archive keeps the articles until everybody has forgotten them**, so your
+  choice never costs anybody else anything. Forgetting is what releases your claim,
+  and the stored copy goes only when no claim is left.
+
+  **`TOME_RETAIN_AFTER_READ` is now the default window rather than a global
+  deadline**, and that is a correctness fix as much as a feature: expiry used to
+  compare every reader's read time against one archive-wide cutoff, so once windows
+  could differ, somebody asking to keep things for a year would have had their claim
+  released after the archive's thirty days and lost articles they had said they
+  wanted.
+
+  Engaging with an article un-forgets it. Reading, starring, keeping or saving one
+  restores the claim — otherwise the archive would be saying "nobody wants this" about
+  something you are looking at.
+
 - **Why this article looks like this**, at `/articles/{id}/explain` and from **Why?**
   on any attention-queue row. It runs the extraction over the page already on disk and
   reports which rules applied — yours or the household's — what each step produced,

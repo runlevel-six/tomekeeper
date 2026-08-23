@@ -207,6 +207,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /sign-out-everywhere", s.requireUser(s.handleSignOutEverywhere))
 	mux.HandleFunc("POST /settings/password", s.requireUser(s.handleChangePassword))
 	mux.HandleFunc("POST /settings/username", s.requireUser(s.handleChangeUsername))
+	mux.HandleFunc("POST /settings/retention", s.requireUser(s.handleSaveRetention))
 	mux.HandleFunc("POST /settings/delete-account", s.requireUser(s.handleDeleteMyAccount))
 	mux.HandleFunc("GET /feeds", s.requireUser(s.handleFeeds))
 	// Registered before the {id} pattern for readability only: they differ by

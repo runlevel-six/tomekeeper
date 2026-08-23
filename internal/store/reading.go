@@ -320,7 +320,12 @@ func (s *Store) MarkReadIn(ctx context.Context, userID UserID, q StreamQuery) (i
 		WHERE `+strings.Join(f.where, "\n		  AND ")+`
 		ON CONFLICT (user_id, article_id) DO UPDATE
 		SET read = true,
-		    read_at = COALESCE(article_state.read_at, now())`,
+		    read_at = COALESCE(article_state.read_at, now()),
+		    -- Engaging with an article un-forgets it. A reader whose retention window
+		    -- let it lapse and who then reads it again wants it, and a tombstone left
+		    -- in place would say the opposite: no claim, free to expire, while they
+		    -- are looking at it.
+		    forgotten_at = NULL`,
 		f.args...)
 	if err != nil {
 		return 0, fmt.Errorf("marking a stream read for user %d: %w", userID, err)
@@ -381,7 +386,8 @@ func (s *Store) MarkReadAutomatically(ctx context.Context, userID UserID, ids []
 		  AND st.saved_at IS NULL
 		ON CONFLICT (user_id, article_id) DO UPDATE
 		SET read = true,
-		    read_at = COALESCE(article_state.read_at, now())
+		    read_at = COALESCE(article_state.read_at, now()),
+		    forgotten_at = NULL
 		RETURNING article_id, kept`,
 		userID, raw)
 	if err != nil {
@@ -644,7 +650,8 @@ func (s *Store) SetRead(ctx context.Context, userID UserID, id ArticleID, read b
 		FROM articles a
 		WHERE a.id = $2 AND `+visibleArticles+`
 		ON CONFLICT (user_id, article_id) DO UPDATE
-		SET read = EXCLUDED.read,
+		SET forgotten_at = NULL,
+		    read = EXCLUDED.read,
 		    -- Keep the first time it was read rather than the latest, and clear it
 		    -- when it goes back to unread so the column never claims a read that
 		    -- was undone.
@@ -671,7 +678,8 @@ func (s *Store) SetStarred(ctx context.Context, userID UserID, id ArticleID, sta
 		FROM articles a
 		WHERE a.id = $2 AND `+visibleArticles+`
 		ON CONFLICT (user_id, article_id) DO UPDATE
-		SET starred = EXCLUDED.starred,
+		SET forgotten_at = NULL,
+		    starred = EXCLUDED.starred,
 		    saved_at = CASE WHEN EXCLUDED.starred
 		                    THEN COALESCE(article_state.saved_at, now())
 		                    ELSE article_state.saved_at END`,

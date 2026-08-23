@@ -61,13 +61,21 @@ type ExpireContentWorker struct {
 
 // Work implements river.Worker.
 func (w *ExpireContentWorker) Work(ctx context.Context, _ *river.Job[ExpireContentArgs]) error {
+	// Still gated on retention being configured somewhere, so that an archive with
+	// it off does nothing here — but the window itself no longer decides anything.
+	// Forgetting applies each reader's own, and this only asks whether every reader
+	// has let go.
 	if w.retain <= 0 {
-		return nil
+		readers, err := w.store.ReadersWithRetention(ctx, 0)
+		if err != nil {
+			return err
+		}
+		if len(readers) == 0 {
+			return nil
+		}
 	}
 
-	cutoff := time.Now().Add(-w.retain)
-
-	candidates, err := w.store.ExpirableArticles(ctx, cutoff, expireBatchSize)
+	candidates, err := w.store.ExpirableArticles(ctx, expireBatchSize)
 	if err != nil {
 		return err
 	}
@@ -156,6 +164,91 @@ func expiryPeriodicJob() *river.PeriodicJob {
 		// should already have happened; this one deletes things, and a worker that
 		// starts by deleting is a worker whose first crash-loop restart is
 		// expensive.
+		nil,
+	)
+}
+
+// ForgetReadingArgs asks for readers' old reading to be forgotten.
+type ForgetReadingArgs struct{}
+
+// Kind implements river.JobArgs.
+func (ForgetReadingArgs) Kind() string { return "forget_reading" }
+
+// InsertOpts keeps overlapping runs from piling up, for the same reason expiry
+// does: two of these would race on the same rows.
+func (ForgetReadingArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		UniqueOpts: river.UniqueOpts{
+			ByState: []rivertype.JobState{
+				rivertype.JobStateAvailable,
+				rivertype.JobStatePending,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+			},
+		},
+	}
+}
+
+// ForgetReadingWorker lets each reader's old reading lapse on their own schedule.
+//
+// This runs before expiry means anything, and the ordering is worth stating: a
+// reader forgetting an article releases their claim on it, and only when every
+// claim has lapsed does ExpireContentWorker release the bytes. So this is the
+// per-reader half — a privacy setting, which ages out what somebody read and when
+// — and expiry is the household half, which reclaims disk once nobody minds.
+//
+// A reader with no window of their own follows the archive's. Zero on both means
+// keep everything, and then this does nothing, which is the default.
+type ForgetReadingWorker struct {
+	river.WorkerDefaults[ForgetReadingArgs]
+
+	store  *store.Store
+	retain time.Duration
+	log    *slog.Logger
+}
+
+// Work implements river.Worker.
+func (w *ForgetReadingWorker) Work(ctx context.Context, _ *river.Job[ForgetReadingArgs]) error {
+	readers, err := w.store.ReadersWithRetention(ctx, w.retain)
+	if err != nil {
+		return err
+	}
+	if len(readers) == 0 {
+		return nil
+	}
+
+	// Per reader, each against their own cutoff. One batch each per run rather
+	// than draining one reader before starting the next: this deletes things, and
+	// a bug that ran away would otherwise take one person's entire history before
+	// anybody else's first row.
+	for userID, window := range readers {
+		forgotten, err := w.store.ForgetReadArticles(ctx, userID, time.Now().Add(-window), expireBatchSize)
+		if err != nil {
+			// One reader's failure must not stop the others: a broken row in one
+			// account is not a reason for everybody's retention to stop working.
+			w.log.Error("forgetting old reading failed", "user_id", userID, "error", err)
+			continue
+		}
+		if forgotten.Tombstoned == 0 && forgotten.Deleted == 0 {
+			continue
+		}
+
+		w.log.Info("forgot old reading",
+			"user_id", userID, "window", window,
+			"forgotten", forgotten.Tombstoned, "removed", forgotten.Deleted)
+	}
+	return nil
+}
+
+// forgetPeriodicJob schedules the forgetting sweep.
+func forgetPeriodicJob() *river.PeriodicJob {
+	return river.NewPeriodicJob(
+		river.PeriodicInterval(expiryInterval),
+		func() (river.JobArgs, *river.InsertOpts) { return ForgetReadingArgs{}, nil },
+		// Not RunOnStart, for the same reason expiry is not: this removes things,
+		// and a worker whose first act after every restart is a deletion is one
+		// whose crash loop is expensive.
 		nil,
 	)
 }

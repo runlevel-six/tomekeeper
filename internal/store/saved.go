@@ -91,7 +91,8 @@ func (s *Store) SaveArticle(ctx context.Context, userID UserID, rawURL string) (
 		INSERT INTO article_state (user_id, article_id, saved_at)
 		VALUES ($1, $2, now())
 		ON CONFLICT (user_id, article_id) DO UPDATE
-		SET saved_at = COALESCE(article_state.saved_at, now())
+		SET saved_at = COALESCE(article_state.saved_at, now()),
+		    forgotten_at = NULL
 		RETURNING (xmax <> 0)`,
 		userID, articleID).Scan(&result.AlreadySaved); err != nil {
 		return Saved{}, fmt.Errorf("saving the article for the reader: %w", err)

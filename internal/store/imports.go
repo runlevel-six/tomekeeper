@@ -268,7 +268,8 @@ func (s *Store) applyImportedState(ctx context.Context, userID UserID, id Articl
 		FROM articles a
 		WHERE a.id = $2
 		ON CONFLICT (user_id, article_id) DO UPDATE
-		SET read     = article_state.read OR EXCLUDED.read,
+		SET forgotten_at = NULL,
+		    read     = article_state.read OR EXCLUDED.read,
 		    starred  = article_state.starred OR EXCLUDED.starred,
 		    saved_at = COALESCE(article_state.saved_at, EXCLUDED.saved_at),
 		    read_at  = CASE

@@ -57,7 +57,8 @@ func TestRetentionNeverReleasesAnImportedBody(t *testing.T) {
 		t.Fatalf("aging the state row: %v", err)
 	}
 
-	expirable, err := s.ExpirableArticles(ctx, time.Now(), 100)
+	forgetEverybody(t, s, time.Now().Add(-24*time.Hour))
+	expirable, err := s.ExpirableArticles(ctx, 100)
 	if err != nil {
 		t.Fatalf("ExpirableArticles() = %v", err)
 	}
@@ -87,6 +88,24 @@ func TestRetentionNeverReleasesAnImportedBody(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("InsertContent() = %v", err)
 	}
+	// A feed of this reader's carries it too, which is what makes it expirable
+	// rather than prunable. Forgetting leaves a tombstone for an article a
+	// subscription still reaches and deletes the row outright for one it does not —
+	// and an article nothing refers to any more is `tome prune`'s case, not
+	// expiry's, so the control here has to be the former or it proves nothing about
+	// the immutable guard.
+	controlFeed, _, err := s.UpsertFeed(ctx, userID, store.FeedParams{
+		FeedURL: "https://example.com/ordinary.xml", Title: "Ordinary",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+	if _, err := s.InsertFeedItem(ctx, userID, store.FeedItemParams{
+		FeedID: controlFeed, ArticleID: ordinary, GUID: "ordinary",
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+
 	if _, err := s.SetRead(ctx, userID, ordinary, true); err != nil {
 		t.Fatalf("SetRead() = %v", err)
 	}
@@ -96,7 +115,8 @@ func TestRetentionNeverReleasesAnImportedBody(t *testing.T) {
 		t.Fatalf("aging the state row: %v", err)
 	}
 
-	expirable, err = s.ExpirableArticles(ctx, time.Now(), 100)
+	forgetEverybody(t, s, time.Now().Add(-24*time.Hour))
+	expirable, err = s.ExpirableArticles(ctx, 100)
 	if err != nil {
 		t.Fatalf("ExpirableArticles() = %v", err)
 	}

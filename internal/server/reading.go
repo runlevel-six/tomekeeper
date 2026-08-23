@@ -52,6 +52,11 @@ type pageData struct {
 	// on.
 	MarkReadOnScroll bool
 
+	// RetainAfterRead is how long this reader keeps what they have read, nil to
+	// follow the archive's own setting. Rendered into Settings so the picker shows
+	// what is stored rather than a default that happens to look the same.
+	RetainAfterRead *time.Duration
+
 	// DefaultPollInterval is their general feed-checking cadence, nil for
 	// automatic. Carried here because two pages need it and the preferences row is
 	// already being read; nothing in the chrome draws it.
@@ -82,6 +87,7 @@ func (s *Server) pageData(r *http.Request, nav string) pageData {
 		d.TextScale = prefs.TextScale
 		d.MarkReadOnScroll = prefs.MarkReadOnScroll
 		d.DefaultPollInterval = prefs.DefaultPollInterval
+		d.RetainAfterRead = prefs.RetainAfterRead
 	}
 
 	// A failed count is not worth failing a page over — the reader came here to

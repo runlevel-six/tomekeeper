@@ -139,6 +139,36 @@
     download and a download is a GET — long-pressing it, copying it, or fetching it
     with curl and a session cookie all work the way anyone would expect.
   */}}
+  <section class="retention">
+    <h2>Forgetting</h2>
+    <p class="note">
+      How long your reading stays yours. After this, articles you have read drop off
+      your lists and the record of having read them goes — <strong>this is about your
+      history, not disk space</strong>. Anything you starred, saved, kept, or
+      highlighted is never forgotten.
+    </p>
+    <p class="note">
+      The archive keeps the articles themselves until <em>everybody</em> here has
+      forgotten them, so nobody else loses anything by your choice.
+    </p>
+    <form method="post" action="/settings/retention">
+      <fieldset>
+        <legend>Forget what I have read after</legend>
+        {{range .RetentionChoices}}
+          <p>
+            <label>
+              <input type="radio" name="retain" value="{{.Value}}"
+                     {{if eq .Value $.Retain}} checked{{end}}>
+              {{.Name}}
+              {{if .Blurb}}<span class="note">{{.Blurb}}</span>{{end}}
+            </label>
+          </p>
+        {{end}}
+      </fieldset>
+      <p><button type="submit">Save</button></p>
+    </form>
+  </section>
+
   <section class="export">
     <h2>Export</h2>
     {{with .Export}}

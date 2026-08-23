@@ -3,6 +3,31 @@
 By default nothing is ever deleted. Retention is opt-in, and this page is what
 you should read before opting in.
 
+## Two settings, one mechanism
+
+Retention has a per-reader half and a household half, and they are the same act
+seen from two sides.
+
+**A reader's window** — **Settings → Forgetting** — says how long *their* reading
+stays theirs. When it lapses, articles they have read drop off their lists and the
+record of having read them goes. This is about history, not disk: nothing is deleted
+from the archive by one person forgetting.
+
+**The archive's window** — `TOME_RETAIN_AFTER_READ` — is the default for anybody who
+has not chosen. It is also what makes the whole thing do anything at all: with it
+unset and nobody having chosen a window, nothing is ever forgotten and nothing is
+ever released.
+
+**The bytes go when everybody has forgotten.** Forgetting is what releases a reader's
+claim, and an article's stored copy is released only when no claim is left. So one
+reader's window can never cost anybody else an article.
+
+That is why a reader's window is not compared against the archive's when deciding
+what to delete. It used to be — one cutoff for everybody — and that was right while
+there was one reader and wrong the moment windows could differ: somebody asking to
+keep things for a year would have had their claim released after the archive's thirty
+days, and lost articles they had said they wanted.
+
 ## Turning it on
 
 ```
@@ -28,6 +53,7 @@ has finished with it. Any one of these keeps it, for everyone:
 | **Starred** | Never expires. |
 | **Kept** | Never expires. The ⬡ control on any article, for pages worth holding onto without having liked them. |
 | **Saved by hand** | Never expires. Anything added from **Saved**. |
+| **Highlighted** | Never forgotten, and so never expires. Annotations are the one thing a reader may value more than the article, and deleting them on a timer is not a trade anybody asked for. |
 | **Imported** | Never expires, twice over. An imported body is `immutable` — it may be the only surviving copy of a page that is gone, so "it can be fetched again" does not hold and releasing it would lose the article, not reclaim space. Imports are also marked saved, so the rule above applies as well. |
 | **Read recently** | Not until it is older than the configured window. |
 | **Read, but with no recorded time** | Never expires. Possible for anything marked read before read timestamps existed; the ambiguity resolves toward keeping. |
@@ -58,6 +84,23 @@ So expiry asks a global question: is there anybody left with a claim? Only when
 the answer is no does anything get deleted. On a single-user archive this is
 invisible; it is written this way so that it does not become a data-loss bug the
 day a second reader exists.
+
+A reader forgetting an article leaves a **tombstone** rather than deleting their row
+outright, and that is load-bearing rather than tidy. Expiry reads "no state row" as
+*never seen it* — a subscriber who has not got to something yet must never lose it —
+so deleting the row would make a reader who is finished indistinguishable from one
+who has never opened it, and the article would be pinned forever. The tombstone says
+"done" and nothing else: not when they read it, not what they marked, and their
+highlights are gone with it.
+
+The exception is an article reachable *only* through that reader's own state —
+something read from a feed they have since unsubscribed from. Nothing refers to it
+afterwards, so the row is deleted outright and the article becomes
+[`tome prune`](cli.md#tome-prune)'s case rather than expiry's.
+
+**Engaging with an article un-forgets it.** Reading, starring, keeping or saving one
+clears the tombstone and restores the claim — otherwise the archive would be saying
+"nobody wants this" about something somebody is looking at.
 
 ## What is actually deleted
 

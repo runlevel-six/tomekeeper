@@ -24,7 +24,34 @@ func markRead(t *testing.T, tr twoReaders, userID store.UserID, id store.Article
 func expirableIDs(t *testing.T, s *store.Store, cutoff time.Time) map[store.ArticleID]bool {
 	t.Helper()
 
-	found, err := s.ExpirableArticles(t.Context(), cutoff, 100)
+	// Forgetting is what releases a claim, so it has to have run before anything is
+	// expirable. That is the pipeline rather than a test convenience: a reader's own
+	// window decides when they let go, and expiry only asks whether everybody has.
+	//
+	// Applied to every reader at the same cutoff here, which is the single-window
+	// case these tests were written for; forget_integration_test.go covers windows
+	// that differ.
+	rows, err := s.Pool().Query(t.Context(), `SELECT id FROM users`)
+	if err != nil {
+		t.Fatalf("listing users: %v", err)
+	}
+	var readers []store.UserID
+	for rows.Next() {
+		var id store.UserID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			t.Fatalf("scanning a user: %v", err)
+		}
+		readers = append(readers, id)
+	}
+	rows.Close()
+	for _, id := range readers {
+		if _, err := s.ForgetReadArticles(t.Context(), id, cutoff, 100); err != nil {
+			t.Fatalf("ForgetReadArticles(%d) = %v", id, err)
+		}
+	}
+
+	found, err := s.ExpirableArticles(t.Context(), 100)
 	if err != nil {
 		t.Fatalf("ExpirableArticles() = %v", err)
 	}
@@ -65,6 +92,10 @@ func TestProtectionsBlockExpiry(t *testing.T) {
 	tests := []struct {
 		name    string
 		protect func(t *testing.T, tr twoReaders)
+
+		// beforeSweep applies the protection before anything is forgotten, for the
+		// ones that act at that stage rather than on expiry.
+		beforeSweep bool
 	}{
 		{
 			name: "starred",
@@ -96,6 +127,14 @@ func TestProtectionsBlockExpiry(t *testing.T) {
 		},
 		{
 			name: "read but with no recorded time",
+			// Applied before the sweep, because this protection now lives in
+			// forgetting rather than in expiry: a row with no read time is never
+			// forgotten, so it never reaches the point of having no claim. Under the
+			// old single-cutoff design the same rule sat in ExpirableArticles, where
+			// a NULL read_at meant "we do not know when" — it now also means "this
+			// is a tombstone", which is why the check had to move to where the two
+			// are still distinguishable.
+			beforeSweep: true,
 			protect: func(t *testing.T, tr twoReaders) {
 				if _, err := tr.pool.Exec(t.Context(),
 					`UPDATE article_state SET read_at = NULL WHERE article_id = $1`,
@@ -111,11 +150,16 @@ func TestProtectionsBlockExpiry(t *testing.T) {
 			tr := setupTwoReaders(t)
 
 			markRead(t, tr, tr.alice, tr.aliceOnly, long)
-			if !expirableIDs(t, tr.store, cutoff)[tr.aliceOnly] {
-				t.Fatal("the article is not expirable before the protection is applied, so this test proves nothing")
-			}
 
-			tt.protect(t, tr)
+			if tt.beforeSweep {
+				tt.protect(t, tr)
+			} else {
+				if !expirableIDs(t, tr.store, cutoff)[tr.aliceOnly] {
+					t.Fatal("the article is not expirable before the protection is applied, " +
+						"so this test proves nothing")
+				}
+				tt.protect(t, tr)
+			}
 
 			if expirableIDs(t, tr.store, cutoff)[tr.aliceOnly] {
 				t.Errorf("an article protected by %q is still expirable", tt.name)
@@ -341,4 +385,11 @@ func TestExpiredArticlesAreNotFoundAgain(t *testing.T) {
 	if expirableIDs(t, tr.store, cutoff)[tr.aliceOnly] {
 		t.Error("an already-expired article is offered for expiry again")
 	}
+}
+
+// forgetEverybody runs the forgetting sweep for every reader at one cutoff, which
+// is what has to happen before anything is expirable.
+func forgetEverybody(t *testing.T, s *store.Store, cutoff time.Time) {
+	t.Helper()
+	expirableIDs(t, s, cutoff)
 }
