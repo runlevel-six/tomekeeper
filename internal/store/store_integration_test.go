@@ -34,29 +34,55 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	}
 }
 
-// The seed user must be creatable repeatedly, and renaming via configuration
-// must not create a second user and orphan every feed.
-func TestEnsureSeedUserIsIdempotent(t *testing.T) {
+// Seeding is repeatable, and it must not rename an account somebody has renamed.
+//
+// This test asserted the opposite until 2026-08-23, because configuration used to be
+// the only thing that could name an account. Then a reader renamed themselves from
+// Settings, signed out, signed back in as the new name — and the next release put the
+// old one back, because `tome migrate` runs on every deploy and wrote TOME_USERNAME
+// over the row. The rename also rewrites the Fever API key, so what was left was an
+// account whose stored key belonged to a username the web interface no longer knew.
+//
+// So the contract is now: create if absent, otherwise leave alone and report what the
+// account is actually called.
+func TestEnsureSeedUserDoesNotRenameAnExistingAccount(t *testing.T) {
 	_, s, first := dbtest.SetupWithUser(t)
 
-	second, err := s.System().EnsureSeedUser(t.Context(), "tome")
+	second, name, err := s.System().EnsureSeedUser(t.Context(), "tome")
 	if err != nil {
 		t.Fatalf("EnsureSeedUser() = %v", err)
 	}
 	if first != second {
 		t.Errorf("second call returned id %d, want %d", second, first)
 	}
+	if name != "tome" {
+		t.Errorf("name = %q, want the account's own name", name)
+	}
 
-	renamed, err := s.System().EnsureSeedUser(t.Context(), "jason")
+	// The reader renames themselves, which is what Settings does.
+	// The Fever key travels with the name, which is the second half of what the reset
+	// broke: a key computed for one username left on an account called another.
+	if err := s.System().SetUsername(t.Context(), first, "jason", "0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatalf("SetUsername() = %v", err)
+	}
+
+	// A deploy: the migration Job runs again with the configured name unchanged.
+	same, name, err := s.System().EnsureSeedUser(t.Context(), "tome")
 	if err != nil {
-		t.Fatalf("EnsureSeedUser() = %v", err)
+		t.Fatalf("EnsureSeedUser() after a rename = %v", err)
 	}
-	if renamed != first {
-		t.Errorf("renaming created user id %d, want the existing %d", renamed, first)
+	if same != first {
+		t.Errorf("seeding created user id %d, want the existing %d", same, first)
 	}
-
+	if name != "jason" {
+		t.Errorf("the account is called %q after a deploy, want the name the reader chose; "+
+			"configuration overwrote it, which is the bug this test exists for", name)
+	}
 	if _, err := s.System().LookupUser(t.Context(), "jason"); err != nil {
-		t.Errorf("LookupUser after rename = %v", err)
+		t.Errorf("LookupUser(the chosen name) = %v", err)
+	}
+	if _, err := s.System().LookupUser(t.Context(), "tome"); err == nil {
+		t.Error("the configured name still resolves, so the row was written after all")
 	}
 }
 

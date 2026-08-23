@@ -549,7 +549,7 @@ func emptyArchive(t *testing.T, s *store.Store) (*store.Store, store.UserID) {
 
 	dbtest.Empty(t, s.Pool())
 
-	userID, err := s.System().EnsureSeedUser(t.Context(), "tome")
+	userID, _, err := s.System().EnsureSeedUser(t.Context(), "tome")
 	if err != nil {
 		t.Fatalf("re-seeding the reader: %v", err)
 	}

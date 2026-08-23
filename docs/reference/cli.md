@@ -92,9 +92,16 @@ a 304 for a feed whose items were never stored.
 
 ### `tome migrate`
 
-Applies pending database migrations, then creates or renames the single v1 user
-from `TOME_USERNAME`. Both are idempotent, so running it on every deployment is
-correct.
+Applies pending database migrations, then creates the operator's account from
+`TOME_USERNAME` if it does not exist. Both are idempotent, so running it on every
+deployment is correct.
+
+**It does not rename an existing account.** `TOME_USERNAME` names the account at
+creation; after that the reader owns their own name and changes it under
+**Settings → Your name**. Honoring the setting later would undo that choice on every
+deploy — which it did until v0.18.0, silently, and left the Fever API key belonging to
+a username the web interface no longer knew. When the configured name and the stored
+one differ, the command says which one is in force and carries on.
 
 Takes no flags or positional arguments.
 

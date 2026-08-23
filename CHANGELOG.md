@@ -32,7 +32,31 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A deploy no longer undoes a rename.** `tome migrate` runs on every deployment and
+  wrote `TOME_USERNAME` over the account's name each time, so a reader who renamed
+  themselves under **Settings → Your name** — which worked, and survived a sign-out —
+  had the old name put back by the next release. Reported from production immediately
+  after v0.17.0.
+
+  It was worse than losing the name. Renaming rewrites the Fever API key, because that
+  key is `md5(username:password)` and is computed by the client; the reset touched only
+  the name, so the stored key still belonged to the *old* username. Mobile clients kept
+  working under a name the web interface no longer knew, and a client configured afresh
+  with the reset name would have been refused.
+
+  `TOME_USERNAME` now names the account **when it is created** and is ignored
+  afterwards, with `tome migrate` saying so when the two differ. Configuration seeds an
+  archive; it does not overrule what the people using it have since chosen. The same
+  lesson was already learned one field over — setting the password here unconditionally
+  used to revoke every session on every deploy, and the fix was to verify first and
+  write nothing when nothing had changed.
+
+  **If your account was renamed before v0.18.0**, rename it again under Settings once
+  this release is deployed: that rewrites the Fever key to match, which is the half a
+  mobile client cannot be told about.
+
 
 ## [v0.17.0] — 2026-08-23
 

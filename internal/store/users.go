@@ -11,22 +11,45 @@ import (
 // system, and it is created by `tome migrate` from configuration.
 const SeedUserID UserID = 1
 
-// EnsureSeedUser creates or renames the single v1 user and returns its id.
+// EnsureSeedUser creates the operator's account if it does not exist, and returns
+// its id and the name it actually has.
 //
-// This is idempotent, so running `tome migrate` repeatedly is safe, and it
-// tracks TOME_USERNAME: changing the configured name renames the existing user
-// rather than creating a second one, which would orphan every feed.
+// Idempotent, so running `tome migrate` on every deploy is safe.
+//
+// **It no longer renames an existing account, and that was a bug with teeth.** The
+// upsert used to carry `SET username = EXCLUDED.username`, so `tome migrate` — which
+// runs as a Job on every single deploy — wrote TOME_USERNAME over whatever the account
+// was called. That was harmless while configuration was the only thing that could name
+// an account. It stopped being harmless when a reader could rename themselves from
+// Settings: the rename worked, survived a sign-out, and was silently undone by the
+// next release. Reported from production after v0.17.0, on an account renamed two
+// commits earlier.
+//
+// Worse than losing the name, it left the account inconsistent. Renaming rewrites the
+// Fever API key, because that key is md5(username:password) and is computed by the
+// client — so after the reset the stored key still matched the *old* name, mobile
+// clients kept working under a username the web interface no longer knew, and a
+// client configured afresh with the reset name would have been refused.
+//
+// The same lesson had already been learned one field over: setting the password here
+// unconditionally used to revoke sessions on every deploy, and the fix was to verify
+// first and write nothing when nothing changed. Configuration seeds an archive; it
+// does not get to overrule what the people using it have since chosen.
+//
+// TOME_USERNAME therefore names the account **at creation**. Changing it later does
+// nothing, and the returned name is what the account is really called so the caller
+// can say so rather than reporting the configured value back at whoever set it.
 //
 // The password hash is left empty. Authentication arrives with the web interface; there is no
 // login surface to protect until there is a login.
-func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (UserID, error) {
+func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (UserID, string, error) {
 	if username == "" {
-		return 0, fmt.Errorf("username must not be empty")
+		return 0, "", fmt.Errorf("username must not be empty")
 	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -38,18 +61,30 @@ func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (User
 	// the shape of bug that survives because the upgrade path is the one anybody
 	// tests.
 	//
-	// The conflict branch deliberately does not touch the role. Re-running
-	// `tome migrate` must not re-promote an account somebody demoted on purpose.
-	var id UserID
+	// The conflict branch deliberately touches nothing: not the role, so re-running
+	// `tome migrate` cannot re-promote an account somebody demoted on purpose, and not
+	// the username, for the reason above. DO UPDATE with no assignment is not
+	// expressible, so the row is re-read instead — which is also how the caller learns
+	// the name the account really has.
+	var (
+		id   UserID
+		name string
+	)
 	err = tx.QueryRow(ctx, `
-		INSERT INTO users (id, username, role)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username
-		RETURNING id`,
+		WITH seeded AS (
+			INSERT INTO users (id, username, role)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (id) DO NOTHING
+			RETURNING id, username
+		)
+		SELECT id, username FROM seeded
+		UNION ALL
+		SELECT id, username FROM users WHERE id = $1
+		LIMIT 1`,
 		SeedUserID, username, RoleAdmin,
-	).Scan(&id)
+	).Scan(&id, &name)
 	if err != nil {
-		return 0, fmt.Errorf("seeding user: %w", err)
+		return 0, "", fmt.Errorf("seeding user: %w", err)
 	}
 
 	// Inserting an explicit id does not advance the bigserial sequence, so
@@ -61,13 +96,13 @@ func (s *SystemStore) EnsureSeedUser(ctx context.Context, username string) (User
 			pg_get_serial_sequence('users', 'id'),
 			GREATEST((SELECT max(id) FROM users), 1))`,
 	); err != nil {
-		return 0, fmt.Errorf("resetting user id sequence: %w", err)
+		return 0, "", fmt.Errorf("resetting user id sequence: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return id, nil
+	return id, name, nil
 }
 
 // SetPassword stores a password hash and its matching Fever API key.

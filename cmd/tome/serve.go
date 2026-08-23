@@ -287,13 +287,23 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 
 	system := store.New(pool).System()
 
-	userID, err := system.EnsureSeedUser(ctx, cfg.Username)
+	userID, name, err := system.EnsureSeedUser(ctx, cfg.Username)
 	if err != nil {
 		log.Error("seeding the user failed", "error", err)
 		return exitFailure
 	}
 
-	fmt.Fprintf(stdout, "schema up to date; user %q is id %d\n", cfg.Username, userID)
+	fmt.Fprintf(stdout, "schema up to date; user %q is id %d\n", name, userID)
+
+	// Said out loud, because the alternative is silence about a setting that is not
+	// being obeyed. TOME_USERNAME names the account when it is created; after that the
+	// reader owns their own name, and this Job used to overwrite their choice on every
+	// deploy.
+	if name != cfg.Username {
+		fmt.Fprintf(stdout, "%sUSERNAME says %q, which is ignored: the account was renamed to %q "+
+			"from Settings, and configuration does not overrule that\n",
+			config.Prefix, cfg.Username, name)
+	}
 
 	// The password is set here rather than by `tome serve`, so the cleartext
 	// exists only in the migration step and never in the long-running process.

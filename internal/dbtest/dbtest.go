@@ -95,7 +95,7 @@ func SetupWithUser(t *testing.T) (*pgxpool.Pool, *store.Store, store.UserID) {
 	pool := Setup(t)
 	s := store.New(pool)
 
-	userID, err := s.System().EnsureSeedUser(t.Context(), "tome")
+	userID, _, err := s.System().EnsureSeedUser(t.Context(), "tome")
 	if err != nil {
 		t.Fatalf("seeding the test user: %v", err)
 	}
