@@ -133,6 +133,9 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	assetScheduler := &ScheduleAssetsWorker{store: d.Store, log: d.Log}
 	river.AddWorker(workers, assetScheduler)
 
+	reextractScheduler := &ScheduleReextractionWorker{store: d.Store, log: d.Log}
+	river.AddWorker(workers, reextractScheduler)
+
 	// Registered whether or not retention is on, so that turning the setting on
 	// is a configuration change rather than a different build. With RetainAfterRead
 	// at zero the worker returns immediately.
@@ -169,6 +172,14 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 				func() (river.JobArgs, *river.InsertOpts) { return ScheduleAssetsArgs{}, nil },
 				&river.PeriodicJobOpts{RunOnStart: true},
 			),
+			// RunOnStart matters more here than for the others: the case this sweep
+			// exists for is a rule saved while the worker was down, so the first
+			// thing a worker should do on coming back is look for one.
+			river.NewPeriodicJob(
+				river.PeriodicInterval(ScheduleInterval),
+				func() (river.JobArgs, *river.InsertOpts) { return ScheduleReextractionArgs{}, nil },
+				&river.PeriodicJobOpts{RunOnStart: true},
+			),
 			expiryPeriodicJob(),
 		},
 	})
@@ -179,6 +190,7 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	feedScheduler.client = client
 	fetchScheduler.client = client
 	assetScheduler.client = client
+	reextractScheduler.client = client
 	return client, nil
 }
 

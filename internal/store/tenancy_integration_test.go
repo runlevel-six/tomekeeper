@@ -361,3 +361,218 @@ func TestAReaderCannotPromoteAnothersBody(t *testing.T) {
 		}
 	}
 }
+
+// The backstop finds work an eager enqueue would have missed.
+//
+// This is the case the design turned on. Saving a rule enqueues its articles
+// immediately, and that enqueue does not happen at all if the worker is not running
+// — which on this deployment is every rollout, every migration wait and every OOM,
+// because the server and the worker are separate Deployments. StaleBodies is what
+// re-derives the work afterwards, from state rather than from having been told.
+//
+// Nothing here enqueues anything: the rule is written and the sweep is asked what
+// is outstanding, which is exactly the sequence a worker restart produces.
+func TestTheSweepFindsWorkNobodyQueued(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	system := s.System()
+
+	articleID := shareOneArticle(t, s, alice)
+	// A stored page, because the sweep only offers articles there is something to
+	// re-extract from.
+	if err := s.RecordFetchSuccess(t.Context(), articleID,
+		store.FetchedPage{SHA: "sha-sweep", Path: "articles/x/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+
+	// A body produced with no rule at all.
+	if _, err := s.InsertContent(t.Context(), store.ContentParams{
+		ArticleID: articleID, Owner: store.Owned(alice),
+		ExtractorName: "trafilatura", ExtractorVersion: "6",
+		ContentOrigin: store.OriginFetched,
+		HTML:          "<p>before</p>", Text: "before", WordCount: 1,
+	}); err != nil {
+		t.Fatalf("InsertContent() = %v", err)
+	}
+
+	// Nothing is outstanding yet.
+	if stale, err := system.StaleBodies(t.Context(), 50); err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	} else if len(stale) != 0 {
+		t.Fatalf("the sweep found %d stale bodies before any rule existed", len(stale))
+	}
+
+	// Alice writes a rule. No job is enqueued here — this is the worker-was-down
+	// case.
+	if err := system.UpsertReaderRule(t.Context(), alice, store.DomainRule{
+		Domain: "example.com", ContentSelector: "main.alice",
+	}); err != nil {
+		t.Fatalf("UpsertReaderRule() = %v", err)
+	}
+
+	stale, err := system.StaleBodies(t.Context(), 50)
+	if err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	}
+	var found bool
+	for _, b := range stale {
+		if b.ID == articleID && b.UserID == alice {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the sweep did not find alice's article after her rule changed: %+v", stale)
+	}
+
+	// Once her body carries that rule's key, it stops being outstanding — or the
+	// sweep would re-extract the same articles on every pass forever.
+	rule, err := system.EffectiveRuleFor(t.Context(), alice, "example.com")
+	if err != nil {
+		t.Fatalf("EffectiveRuleFor() = %v", err)
+	}
+	if _, err := s.InsertContent(t.Context(), store.ContentParams{
+		ArticleID: articleID, Owner: store.Owned(alice),
+		ExtractorName: "domain_rule", ExtractorVersion: "6",
+		ContentOrigin: store.OriginFetched, RulesetKey: rule.RulesetKey(),
+		HTML: "<p>after</p>", Text: "after", WordCount: 1,
+	}); err != nil {
+		t.Fatalf("InsertContent() = %v", err)
+	}
+
+	stale, err = system.StaleBodies(t.Context(), 50)
+	if err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	}
+	for _, b := range stale {
+		if b.ID == articleID && b.UserID == alice {
+			t.Error("the sweep still reports an article whose body carries the current rule")
+		}
+	}
+
+	// A second body in another slot must not be mistaken for hers.
+	//
+	// The household now holds a body of its own, extracted under no rule, and a
+	// household rule that makes it genuinely stale. Alice's is current. If the
+	// sweep compared her rule against whatever body it happened to find rather
+	// than against the one in her slot, she would be reported stale forever and
+	// her articles re-extracted on every pass. Found by neutering: without the
+	// owner clause every assertion above still passed.
+	if err := system.UpsertDomainRule(t.Context(), store.DomainRule{
+		Domain: "example.com", ContentSelector: "main.house",
+	}); err != nil {
+		t.Fatalf("UpsertDomainRule() = %v", err)
+	}
+	if _, err := s.InsertContent(t.Context(), store.ContentParams{
+		ArticleID: articleID, Owner: store.Household(),
+		ExtractorName: "trafilatura", ExtractorVersion: "6",
+		ContentOrigin: store.OriginFetched,
+		HTML:          "<p>household</p>", Text: "household", WordCount: 1,
+	}); err != nil {
+		t.Fatalf("InsertContent(household) = %v", err)
+	}
+
+	stale, err = system.StaleBodies(t.Context(), 50)
+	if err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	}
+	var householdStale bool
+	for _, b := range stale {
+		switch {
+		case b.ID == articleID && b.UserID == alice:
+			t.Error("alice is reported stale because of a body that is not hers")
+		case b.ID == articleID && b.UserID == store.HouseholdRule:
+			householdStale = true
+		}
+	}
+	// And the household genuinely is stale, so the absence above is the owner
+	// clause working rather than the sweep having stopped finding anything.
+	if !householdStale {
+		t.Error("the household's own stale body was not found; the test proves nothing")
+	}
+}
+
+// An imported body is never stale, because nothing can regenerate it.
+//
+// A rule cannot conjure a better copy out of a page nobody has, and re-extracting
+// would replace the only surviving record of a dead URL with whatever the ladder
+// makes of an absent one.
+func TestTheSweepLeavesImportedBodiesAlone(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	system := s.System()
+
+	articleID := shareOneArticle(t, s, alice)
+	if err := s.RecordFetchSuccess(t.Context(), articleID,
+		store.FetchedPage{SHA: "sha-imported", Path: "articles/y/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+	if _, err := s.InsertContent(t.Context(), store.ContentParams{
+		ArticleID: articleID, Owner: store.Owned(alice),
+		ExtractorName: "imported", ExtractorVersion: "1",
+		ContentOrigin: store.OriginImport("wallabag"), Immutable: true,
+		HTML: "<p>the only copy</p>", Text: "the only copy", WordCount: 3,
+	}); err != nil {
+		t.Fatalf("InsertContent() = %v", err)
+	}
+
+	if err := system.UpsertReaderRule(t.Context(), alice, store.DomainRule{
+		Domain: "example.com", ContentSelector: "main.alice",
+	}); err != nil {
+		t.Fatalf("UpsertReaderRule() = %v", err)
+	}
+
+	stale, err := system.StaleBodies(t.Context(), 50)
+	if err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	}
+	for _, b := range stale {
+		if b.ID == articleID {
+			t.Error("the sweep offered an imported body for re-extraction")
+		}
+	}
+}
+
+// A rule for a domain covers its subdomains, and covers nothing that merely ends
+// with the same letters.
+func TestTheSweepMatchesSubdomainsAndNotLookalikes(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	system := s.System()
+
+	ids := map[string]store.ArticleID{}
+	for _, host := range []string{"example.com", "blog.example.com", "notexample.com"} {
+		url := "https://" + host + "/story"
+		id, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{URLCanonical: url, URLOriginal: url})
+		if err != nil {
+			t.Fatalf("UpsertArticle(%s) = %v", host, err)
+		}
+		if err := s.RecordFetchSuccess(t.Context(), id,
+			store.FetchedPage{SHA: "sha-" + host, Path: "articles/" + host + "/raw.html.gz"}); err != nil {
+			t.Fatalf("RecordFetchSuccess() = %v", err)
+		}
+		ids[host] = id
+	}
+
+	if err := system.UpsertReaderRule(t.Context(), alice, store.DomainRule{
+		Domain: "example.com", ContentSelector: "main",
+	}); err != nil {
+		t.Fatalf("UpsertReaderRule() = %v", err)
+	}
+
+	stale, err := system.StaleBodies(t.Context(), 50)
+	if err != nil {
+		t.Fatalf("StaleBodies() = %v", err)
+	}
+	got := map[store.ArticleID]bool{}
+	for _, b := range stale {
+		got[b.ID] = true
+	}
+
+	if !got[ids["example.com"]] {
+		t.Error("the rule's own domain was not matched")
+	}
+	if !got[ids["blog.example.com"]] {
+		t.Error("a subdomain was not matched, though a rule covers them")
+	}
+	// The one this project has already been bitten by once, with a LIKE.
+	if got[ids["notexample.com"]] {
+		t.Error("notexample.com was matched by a rule for example.com")
+	}
+}

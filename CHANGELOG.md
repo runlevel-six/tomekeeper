@@ -62,6 +62,25 @@ happens, because it is the one change that wants a follow-up command
   household's names a more specific domain**, because specificity orders your own
   rules against each other rather than against somebody else's.
 
+  **Writing a rule now extracts the articles it covers**, and says how many. On the
+  domain-rules page an administrator chooses whether a rule is theirs or everybody's;
+  a reader always writes their own. The page lists your rules and the household's and
+  never another reader's — showing you that somebody has a rule for a host would tell
+  you they read it.
+
+  **A sweep re-derives that work every minute as a backstop.** The eager enqueue
+  happens in the request that saved the rule and does not happen at all if the worker
+  is down — which, with the server and worker as separate Deployments, is every
+  rollout, every migration wait and every OOM. Without the sweep a rule saved in one
+  of those windows would appear to have been accepted and never be applied to a single
+  article. Every other stage of the pipeline already pairs eager enqueueing with a
+  sweep for the same reason.
+
+  A reader's extraction writes only their body: not the article's title, not its
+  attempt version, not its images' status, not the failure recorded against it, and
+  not `index.html` on disk. One reader's selector must not rename an article in
+  everybody's list, and their success does not mean the archive managed the page.
+
 - **Accounts have a role, and sessions can be revoked.** The first half of
   multi-user, and on its own it closes a hole that was live: `requireUser` trusted the
   user id sealed in the session cookie without checking that the account still existed,

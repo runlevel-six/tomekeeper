@@ -211,9 +211,9 @@ func (w *FetchArticleWorker) Work(ctx context.Context, job *river.Job[FetchArtic
 	// Extraction is a separate job so that an extractor crash or a slow
 	// extraction cannot cost the fetch, which is the expensive, impolite-to-
 	// repeat half of the work.
-	client := river.ClientFromContext[pgx.Tx](ctx)
-	if client == nil {
-		return fmt.Errorf("no river client in context; cannot enqueue extraction")
+	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
+	if err != nil {
+		return fmt.Errorf("no river client in context; cannot enqueue extraction: %w", err)
 	}
 	if _, err := client.Insert(ctx, ExtractArticleArgs{
 		ArticleID: job.Args.ArticleID,
@@ -297,9 +297,9 @@ func (w *FetchArticleWorker) handOffToBrowser(
 		return false, nil
 	}
 
-	client := river.ClientFromContext[pgx.Tx](ctx)
-	if client == nil {
-		return false, fmt.Errorf("no river client in context; cannot enqueue a render")
+	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
+	if err != nil {
+		return false, fmt.Errorf("no river client in context; cannot enqueue a render: %w", err)
 	}
 	if _, err := client.Insert(ctx, RenderArticleArgs{ArticleID: int64(article.ID)}, nil); err != nil {
 		return false, fmt.Errorf("enqueueing a render: %w", err)

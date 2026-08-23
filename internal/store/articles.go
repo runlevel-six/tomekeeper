@@ -17,6 +17,10 @@ type Article struct {
 	ID           ArticleID
 	URLCanonical string
 	URLOriginal  string
+
+	// Host is url_canonical's host, maintained by the database. Read rather than
+	// computed, so every caller that needs one agrees about what it is.
+	Host         string
 	Title        string
 	Author       string
 	SiteName     string
@@ -51,11 +55,15 @@ type Article struct {
 type ArticleParams struct {
 	URLCanonical string
 	URLOriginal  string
-	Title        string
-	Author       string
-	SiteName     string
-	Language     string
-	PublishedAt  *time.Time
+
+	// Host is url_canonical's host, maintained by the database. Read rather than
+	// computed, so every caller that needs one agrees about what it is.
+	Host        string
+	Title       string
+	Author      string
+	SiteName    string
+	Language    string
+	PublishedAt *time.Time
 }
 
 // UpsertArticle inserts an article or returns the existing one, reporting

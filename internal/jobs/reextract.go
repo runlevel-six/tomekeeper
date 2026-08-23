@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -95,4 +96,69 @@ func QueueReextraction(
 			}
 		}
 	}
+}
+
+// ruleExtractionBatch bounds one enqueueing pass when a rule is written.
+//
+// The largest single host in a real archive here is under three hundred articles,
+// so this is a ceiling rather than a paging loop — and if a host ever exceeds it,
+// the backstop sweep enqueues the remainder on its next run rather than this
+// blocking a form submission for as long as the host is large.
+const ruleExtractionBatch = 1000
+
+// QueueRuleExtraction enqueues extraction for the articles a newly written rule
+// applies to, for the owner who wrote it.
+//
+// The eager half of "a rule change reprocesses its articles". It runs inside the
+// request that saved the rule, so the reader is told how many articles are being
+// reconsidered rather than left wondering whether anything happened.
+//
+// It is not the guarantee. The worker may be down at this moment — on this
+// deployment the server and the worker are separate Deployments, so that is every
+// rollout — in which case nothing here is queued and the backstop sweep picks the
+// work up instead. That is why this returns a count and not a promise.
+func QueueRuleExtraction(
+	ctx context.Context,
+	s *store.Store,
+	client *river.Client[pgx.Tx],
+	owner store.UserID,
+	domain string,
+) (int, error) {
+	articles, err := s.System().ArticlesUnderRule(ctx, domain, ruleExtractionBatch)
+	if err != nil {
+		return 0, err
+	}
+	if len(articles) == 0 {
+		return 0, nil
+	}
+
+	params := make([]river.InsertManyParams, 0, len(articles))
+	for _, id := range articles {
+		params = append(params, river.InsertManyParams{
+			Args: ExtractArticleArgs{
+				ArticleID: int64(id),
+				UserID:    int64(owner),
+				// Force, because the point of writing a rule is that the body it
+				// would now produce differs from the one on record. The job's own
+				// skip check compares the ruleset and would reach the same
+				// conclusion; saying so here means a rule saved twice in a row does
+				// the work twice rather than appearing to do nothing the second
+				// time, which is what somebody adjusting a selector is doing.
+				Force: true,
+			},
+		})
+	}
+
+	results, err := client.InsertMany(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("enqueueing extraction for %s: %w", domain, err)
+	}
+
+	var inserted int
+	for _, r := range results {
+		if !r.UniqueSkippedAsDuplicate {
+			inserted++
+		}
+	}
+	return inserted, nil
 }

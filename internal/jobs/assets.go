@@ -33,6 +33,16 @@ import (
 // the handful of images an article carries.
 type LocalizeAssetsArgs struct {
 	ArticleID int64 `json:"article_id"`
+
+	// UserID is the reader whose body is being localized, or zero for the
+	// household's.
+	//
+	// A reader's own extraction needs this as much as the household's does, and for
+	// a reason beyond tidiness: an unlocalized body keeps the origin's image URLs,
+	// so viewing it makes that reader's browser fetch from the site. The archive
+	// would then be telling every publisher what one of its readers is reading,
+	// which is the opposite of what localizing images is for.
+	UserID int64 `json:"user_id,omitempty"`
 }
 
 // Kind implements river.JobArgs.
@@ -111,6 +121,12 @@ type LocalizeAssetsWorker struct {
 func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[LocalizeAssetsArgs]) error {
 	id := store.ArticleID(job.Args.ArticleID)
 
+	reader := store.UserID(job.Args.UserID)
+	owner := store.Household()
+	if reader != store.HouseholdRule {
+		owner = store.Owned(reader)
+	}
+
 	article, err := w.store.GetArticle(ctx, id)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -119,7 +135,7 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 		return err
 	}
 
-	content, err := w.store.CurrentContent(ctx, id, store.Household())
+	content, err := w.store.CurrentContent(ctx, id, owner)
 	if err != nil {
 		if store.IsNotFound(err) {
 			// Nothing extracted, so there is no body to localize. Extraction
@@ -138,7 +154,7 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 		// The same slot the body was read from just above. Localization rewrites
 		// image URLs inside a body it already has in hand, so writing anywhere else
 		// would put one reader's rewritten HTML over another's extraction.
-		if err := w.store.UpdateContentHTML(ctx, id, store.Household(), localized); err != nil {
+		if err := w.store.UpdateContentHTML(ctx, id, owner, localized); err != nil {
 			return err
 		}
 	}
@@ -153,12 +169,22 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 		// rather than being discovered years later as a broken image.
 		status = store.AssetsPartial
 	}
-	if err := w.store.SetAssetsStatus(ctx, id, status); err != nil {
-		return err
-	}
+	// Both of these are article-level and shared, so only the household's run may
+	// write them.
+	//
+	// assets_status describes the page's images, which are the same images whoever
+	// extracted the body — but a reader whose selector happens to exclude a picture
+	// would otherwise report the article as having no images at all, for everybody.
+	// index.html on disk is the household's record of the page; a reader's fork is a
+	// row, not a second file. Both are stated in the archive's own reference.
+	if reader == store.HouseholdRule {
+		if err := w.store.SetAssetsStatus(ctx, id, status); err != nil {
+			return err
+		}
 
-	if err := w.writeFiles(ctx, article, content, localized); err != nil {
-		return err
+		if err := w.writeFiles(ctx, article, content, localized); err != nil {
+			return err
+		}
 	}
 
 	log.Info("localized assets",
@@ -455,9 +481,13 @@ func (w *ScheduleAssetsWorker) Work(ctx context.Context, _ *river.Job[ScheduleAs
 	return nil
 }
 
-// EnqueueLocalization queues one article's images for localization.
-func EnqueueLocalization(ctx context.Context, client *river.Client[pgx.Tx], id store.ArticleID) error {
-	if _, err := client.Insert(ctx, LocalizeAssetsArgs{ArticleID: int64(id)}, nil); err != nil {
+// EnqueueLocalization queues one article's images for localization, for one
+// reader's body or the household's.
+func EnqueueLocalization(
+	ctx context.Context, client *river.Client[pgx.Tx], id store.ArticleID, reader store.UserID,
+) error {
+	args := LocalizeAssetsArgs{ArticleID: int64(id), UserID: int64(reader)}
+	if _, err := client.Insert(ctx, args, nil); err != nil {
 		return fmt.Errorf("queueing asset localization for article %d: %w", id, err)
 	}
 	return nil

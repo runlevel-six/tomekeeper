@@ -25,6 +25,10 @@ func TestDomainRuleFormSavesARule(t *testing.T) {
 		"strip":    {".ad-wrapper\n\n  .related-stories  \n"},
 		"notes":    {"body is split around the ads"},
 		"rate":     {"0.5"},
+		// The household's rule, which is what this form wrote when there was one
+		// reader. A rate limit is a fetch setting and only the household may hold
+		// one, so without this the save is refused — see the test below.
+		"for_household": {"true"},
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /domain-rules = %d, want 200\n%s", rec.Code, rec.Body.String())
@@ -473,5 +477,67 @@ func TestAttentionLinksToTheRuleForm(t *testing.T) {
 	}
 	if !strings.Contains(body, "/domain-rules?edit=troublesome.example.org") {
 		t.Errorf("the row does not link to a rule for its host:\n%s", body)
+	}
+}
+
+// A reader's own rule may set selectors and nothing else, and the refusal says why
+// rather than reporting a constraint.
+func TestAReadersRuleRefusesFetchSettings(t *testing.T) {
+	rd, _ := readingFixture(t)
+
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":   {"example.com"},
+		"selector": {"main"},
+		"rate":     {"0.5"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST a reader rule with a rate = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "fetched once") {
+		t.Errorf("the refusal does not explain why:\n%s", body)
+	}
+}
+
+// A reader's own rule is saved against them, leaving the household's alone.
+func TestAReadersRuleIsSavedAgainstThem(t *testing.T) {
+	rd, tr := readingFixture(t)
+
+	// The household's rule first, so there is something for the reader's to not
+	// disturb.
+	if err := tr.store.System().UpsertDomainRule(t.Context(), store.DomainRule{
+		Domain: "example.com", ContentSelector: "main.house",
+	}); err != nil {
+		t.Fatalf("UpsertDomainRule() = %v", err)
+	}
+
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":   {"example.com"},
+		"selector": {"main.mine"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /domain-rules = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "for <strong>you</strong>") {
+		t.Errorf("the page does not say whose rule was saved:\n%s", body)
+	}
+
+	// The household's is untouched.
+	household, err := tr.store.System().DomainRuleFor(t.Context(), "example.com")
+	if err != nil {
+		t.Fatalf("DomainRuleFor() = %v", err)
+	}
+	if household.ContentSelector != "main.house" {
+		t.Errorf("the household selector is now %q; a reader's rule overwrote it",
+			household.ContentSelector)
+	}
+
+	// And the reader gets their own.
+	mine, err := tr.store.System().EffectiveRuleFor(t.Context(), tr.alice, "example.com")
+	if err != nil {
+		t.Fatalf("EffectiveRuleFor() = %v", err)
+	}
+	if mine.ContentSelector != "main.mine" || !mine.FromReader {
+		t.Errorf("the reader's effective selector = %q (own: %v), want their own",
+			mine.ContentSelector, mine.FromReader)
 	}
 }

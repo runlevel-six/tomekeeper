@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +44,18 @@ type domainRulesPage struct {
 
 	// Outcome reports what the last action did.
 	Outcome *domainRuleOutcome
+
+	// CanSetHousehold says whether this reader may write the rule everybody gets.
+	//
+	// Administrators only. The distinction is shown rather than implied, because
+	// "did I just change this for everyone or only for me" is the question a rule
+	// form must never leave ambiguous.
+	CanSetHousehold bool
+
+	// ForHousehold is what the ownership control holds — on by default for an
+	// administrator, so saving a rule keeps doing what it did when there was one
+	// reader.
+	ForHousehold bool
 }
 
 // domainRuleRow is one rule as the table shows it.
@@ -57,6 +70,11 @@ type domainRuleRow struct {
 	// Strip is the strip selectors joined for display, since the form takes them
 	// one per line.
 	Strip string
+
+	// Mine says this is the reader's own rule rather than the household's. The
+	// table shows both, and a row that did not say which was which would make a
+	// reader think they had changed something they had not.
+	Mine bool
 }
 
 // domainRuleForm is the editable shape of a rule.
@@ -71,6 +89,10 @@ type domainRuleForm struct {
 	Notes           string
 	Rate            string
 	RequiresJS      bool
+
+	// ForHousehold asks for the rule everybody gets rather than this reader's own.
+	// Ignored for anybody who is not an administrator.
+	ForHousehold bool
 }
 
 // domainRuleOutcome is what the page says after a change.
@@ -84,6 +106,11 @@ type domainRuleOutcome struct {
 
 	Reprocessed string
 	Queued      int
+
+	// ForHousehold says the save changed what everybody gets, which the page has
+	// to state rather than leave to be inferred from a checkbox that has since
+	// been cleared.
+	ForHousehold bool
 }
 
 func (s *Server) handleDomainRules(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +146,7 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	account := signedInAccount(r)
 	form := domainRuleForm{
 		Domain:          strings.TrimSpace(r.PostFormValue("domain")),
 		ContentSelector: strings.TrimSpace(r.PostFormValue("selector")),
@@ -126,6 +154,10 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 		Notes:           strings.TrimSpace(r.PostFormValue("notes")),
 		Rate:            strings.TrimSpace(r.PostFormValue("rate")),
 		RequiresJS:      r.PostFormValue("requires_js") != "",
+		// Only an administrator may write the rule everybody gets. Read from the
+		// account rather than from the form alone, so a hand-crafted POST cannot
+		// change what other readers see.
+		ForHousehold: account.IsAdmin() && r.PostFormValue("for_household") != "",
 	}
 
 	rule, problem := form.rule()
@@ -135,7 +167,22 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.System().UpsertDomainRule(r.Context(), rule); err != nil {
+	owner := account.ID
+	var err error
+	if form.ForHousehold {
+		owner = store.HouseholdRule
+		err = s.store.System().UpsertDomainRule(r.Context(), rule)
+	} else {
+		err = s.store.System().UpsertReaderRule(r.Context(), account.ID, rule)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrReaderRuleFetchSettings) {
+			s.renderDomainRules(w, r, http.StatusBadRequest, form.Domain, form,
+				&domainRuleOutcome{Problem: "Whether a page needs a browser, and how fast it is " +
+					"fetched, are the same for everyone — the page is fetched once. Only the " +
+					"selectors can be yours alone."})
+			return
+		}
 		s.log.Error("saving a domain rule failed", "domain", rule.Domain, "error", err)
 		s.renderDomainRules(w, r, http.StatusInternalServerError, form.Domain, form,
 			&domainRuleOutcome{Problem: "That rule could not be saved. The log will say why."})
@@ -143,12 +190,24 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Info("saved a domain rule",
-		"domain", rule.Domain, "selector", rule.ContentSelector, "strips", len(rule.StripSelectors))
+		"domain", rule.Domain, "selector", rule.ContentSelector, "strips", len(rule.StripSelectors),
+		"for_household", form.ForHousehold, "user_id", account.ID)
 
-	// The form is cleared and the saved rule is in the table below. What comes
-	// next is reprocessing that domain, which is a control on its row.
-	s.renderDomainRules(w, r, http.StatusOK, "", domainRuleForm{},
-		&domainRuleOutcome{Saved: rule.Domain})
+	// Saving a rule is a statement that the articles it covers should be
+	// reconsidered, so this queues them rather than leaving it to a second button.
+	// A failure here does not fail the save: the rule is stored, and the sweep that
+	// runs every minute will find the same work.
+	outcome := &domainRuleOutcome{Saved: rule.Domain, ForHousehold: form.ForHousehold}
+	if s.jobs != nil {
+		queued, qErr := jobs.QueueRuleExtraction(r.Context(), s.store, s.jobs, owner, rule.Domain)
+		if qErr != nil {
+			s.log.Warn("queueing extraction after a rule change failed; the sweep will pick it up",
+				"domain", rule.Domain, "error", qErr)
+		}
+		outcome.Queued = queued
+	}
+
+	s.renderDomainRules(w, r, http.StatusOK, "", domainRuleForm{}, outcome)
 }
 
 // handleDeleteDomainRule removes one rule.
@@ -248,7 +307,11 @@ const reprocessEveryVersion = "0"
 func (s *Server) renderDomainRules(w http.ResponseWriter, r *http.Request, status int,
 	editing string, form domainRuleForm, outcome *domainRuleOutcome,
 ) {
-	rules, err := s.store.System().ListDomainRules(r.Context())
+	account := signedInAccount(r)
+
+	// This reader's rules and the household's, never another reader's: showing
+	// Alice that Bob has a rule for a host tells her he reads it.
+	rules, err := s.store.System().RulesVisibleTo(r.Context(), account.ID)
 	if err != nil {
 		s.log.Error("listing domain rules failed", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -262,6 +325,8 @@ func (s *Server) renderDomainRules(w http.ResponseWriter, r *http.Request, statu
 		ReprocessAvailable: s.jobs != nil,
 		ExtractorVersion:   extract.Version,
 		Outcome:            outcome,
+		CanSetHousehold:    account.IsAdmin(),
+		ForHousehold:       form.ForHousehold,
 	}
 
 	counts, err := s.store.System().ArticlesPerRuleDomain(r.Context())
@@ -272,7 +337,8 @@ func (s *Server) renderDomainRules(w http.ResponseWriter, r *http.Request, statu
 
 	for _, rule := range rules {
 		page.Rules = append(page.Rules, domainRuleRow{
-			DomainRule: rule,
+			DomainRule: rule.DomainRule,
+			Mine:       rule.Mine,
 			Articles:   counts[rule.Domain],
 			Strip:      strings.Join(rule.StripSelectors, ", "),
 		})

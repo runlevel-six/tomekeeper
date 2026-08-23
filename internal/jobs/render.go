@@ -172,9 +172,9 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 		"bytes", len(raw), "stored_bytes", len(compressed), "path", path,
 		"subresources_blocked", page.Blocked, "subresources_allowed", page.Requests)
 
-	client := river.ClientFromContext[pgx.Tx](ctx)
-	if client == nil {
-		return fmt.Errorf("no river client in context; cannot enqueue extraction")
+	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
+	if err != nil {
+		return fmt.Errorf("no river client in context; cannot enqueue extraction: %w", err)
 	}
 	if _, err := client.Insert(ctx, ExtractArticleArgs{ArticleID: job.Args.ArticleID}, nil); err != nil {
 		return fmt.Errorf("enqueueing extraction: %w", err)

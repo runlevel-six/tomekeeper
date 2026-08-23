@@ -219,14 +219,14 @@ func (s *Store) ClearExtractionFailure(ctx context.Context, id ArticleID) error 
 func (s *Store) GetArticle(ctx context.Context, id ArticleID) (Article, error) {
 	var a Article
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, url_canonical, url_original,
+		SELECT id, url_canonical, url_original, host,
 		       COALESCE(title, ''), COALESCE(author, ''),
 		       COALESCE(site_name, ''), COALESCE(language, ''),
 		       published_at, first_seen_at, fetch_status, COALESCE(fetch_error, ''),
 		       assets_status, COALESCE(raw_blob_sha, ''), COALESCE(raw_blob_path, ''),
 		       browser_rendered, COALESCE(extract_attempt_version, '')
 		FROM articles WHERE id = $1`, id,
-	).Scan(&a.ID, &a.URLCanonical, &a.URLOriginal, &a.Title, &a.Author,
+	).Scan(&a.ID, &a.URLCanonical, &a.URLOriginal, &a.Host, &a.Title, &a.Author,
 		&a.SiteName, &a.Language, &a.PublishedAt, &a.FirstSeenAt, &a.FetchStatus,
 		&a.FetchError, &a.AssetsStatus, &a.RawBlobSHA, &a.RawBlobPath, &a.BrowserRendered,
 		&a.ExtractAttemptVersion)
@@ -270,6 +270,10 @@ type ContentParams struct {
 	Text             string
 	WordCount        int
 	FSPath           string
+
+	// RulesetKey identifies the extraction rules that produced this body. Empty
+	// means none applied — see EffectiveRule.RulesetKey.
+	RulesetKey string
 
 	// Owner is the reader this body belongs to, or nil for the household's.
 	//
@@ -330,11 +334,13 @@ func (s *Store) InsertContent(ctx context.Context, p ContentParams) (bool, error
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO article_content (
 			article_id, user_id, extractor_name, extractor_version, content_origin,
-			immutable, content_html, content_text, word_count, is_current, fs_path
+			immutable, content_html, content_text, word_count, is_current, fs_path,
+			ruleset_key
 		)
-		VALUES ($1, $11, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''))`,
+		VALUES ($1, $11, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $12)`,
 		p.ArticleID, p.ExtractorName, p.ExtractorVersion, p.ContentOrigin,
 		p.Immutable, p.HTML, p.Text, p.WordCount, makeCurrent, p.FSPath, p.Owner,
+		p.RulesetKey,
 	); err != nil {
 		return false, fmt.Errorf("inserting the body of article %d: %w", p.ArticleID, err)
 	}
@@ -356,6 +362,10 @@ type Content struct {
 	Text             string
 	WordCount        int
 	ExtractedAt      time.Time
+
+	// RulesetKey is what produced this body, beside ExtractorVersion. Together they
+	// answer whether it is stale.
+	RulesetKey string
 }
 
 // CurrentContent returns the body in one owner's slot — nil for the household's.
@@ -369,12 +379,13 @@ func (s *Store) CurrentContent(ctx context.Context, id ArticleID, owner *UserID)
 	var c Content
 	err := s.pool.QueryRow(ctx, `
 		SELECT article_id, extractor_name, extractor_version, content_origin,
-		       immutable, content_html, content_text, COALESCE(word_count, 0), extracted_at
+		       immutable, content_html, content_text, COALESCE(word_count, 0), extracted_at,
+		       ruleset_key
 		FROM article_content
 		WHERE article_id = $1 AND is_current
 		  AND user_id IS NOT DISTINCT FROM $2`, id, owner,
 	).Scan(&c.ArticleID, &c.ExtractorName, &c.ExtractorVersion, &c.ContentOrigin,
-		&c.Immutable, &c.HTML, &c.Text, &c.WordCount, &c.ExtractedAt)
+		&c.Immutable, &c.HTML, &c.Text, &c.WordCount, &c.ExtractedAt, &c.RulesetKey)
 	if err != nil {
 		return Content{}, fmt.Errorf("looking up the body of article %d: %w", id, err)
 	}

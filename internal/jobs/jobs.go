@@ -102,9 +102,9 @@ func (w *PollFeedWorker) Work(ctx context.Context, job *river.Job[PollFeedArgs])
 	// Fetching is a separate job per article: one slow origin must not hold up
 	// the rest of the feed, and a fetch that fails should retry on its own
 	// schedule rather than re-polling the feed.
-	client := river.ClientFromContext[pgx.Tx](ctx)
-	if client == nil {
-		return fmt.Errorf("no river client in context; cannot enqueue fetches")
+	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
+	if err != nil {
+		return fmt.Errorf("no river client in context; cannot enqueue fetches: %w", err)
 	}
 
 	params := make([]river.InsertManyParams, 0, len(result.NewArticleIDs))
@@ -241,5 +241,90 @@ func (w *ScheduleFetchesWorker) Work(ctx context.Context, _ *river.Job[ScheduleF
 
 	w.log.Debug("scheduled article fetches",
 		"pending", len(pending), "enqueued", inserted, "already_queued", len(pending)-inserted)
+	return nil
+}
+
+// ScheduleReextractionArgs asks for bodies whose rules have changed to be
+// re-extracted.
+type ScheduleReextractionArgs struct{}
+
+// Kind implements river.JobArgs.
+func (ScheduleReextractionArgs) Kind() string { return "schedule_reextraction" }
+
+// InsertOpts keeps overlapping scheduler runs from piling up.
+func (ScheduleReextractionArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		UniqueOpts: river.UniqueOpts{
+			ByState: []rivertype.JobState{
+				rivertype.JobStateAvailable,
+				rivertype.JobStatePending,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+			},
+		},
+	}
+}
+
+// ScheduleReextractionWorker enqueues extraction for bodies the current rules
+// would no longer produce.
+//
+// The backstop to writing a rule, not the mechanism: saving a rule enqueues its
+// articles immediately, and in steady state this finds nothing. It exists for the
+// case that deployment makes ordinary rather than rare — the server and the worker
+// are separate Deployments, so a reader can save a rule while the worker is down,
+// during a rollout or a migration or after an OOM, and eagerly queued work is then
+// simply never queued. Without this, that rule would appear to have been accepted
+// and would never be applied to a single article.
+//
+// The same shape as ScheduleFetchesWorker, and for the same reason it gives.
+type ScheduleReextractionWorker struct {
+	river.WorkerDefaults[ScheduleReextractionArgs]
+
+	store  *store.Store
+	client *river.Client[pgx.Tx]
+	log    *slog.Logger
+}
+
+// Work implements river.Worker.
+func (w *ScheduleReextractionWorker) Work(ctx context.Context, _ *river.Job[ScheduleReextractionArgs]) error {
+	stale, err := w.store.System().StaleBodies(ctx, scheduleBatchSize)
+	if err != nil {
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+
+	params := make([]river.InsertManyParams, 0, len(stale))
+	for _, b := range stale {
+		params = append(params, river.InsertManyParams{
+			Args: ExtractArticleArgs{ArticleID: int64(b.ID), UserID: int64(b.UserID)},
+		})
+	}
+
+	results, err := w.client.InsertMany(ctx, params)
+	if err != nil {
+		return fmt.Errorf("enqueueing %d re-extractions: %w", len(params), err)
+	}
+
+	var inserted int
+	for _, r := range results {
+		if !r.UniqueSkippedAsDuplicate {
+			inserted++
+		}
+	}
+
+	w.log.Info("scheduled re-extraction for changed rules",
+		"stale", len(stale), "enqueued", inserted, "already_queued", len(stale)-inserted)
+
+	if len(stale) == scheduleBatchSize {
+		// Visible rather than silent, like the feed scheduler's full batch: a
+		// persistently full one means a rule change is being worked through in
+		// slices, which is expected right after an edit and worth noticing if it
+		// never stops.
+		w.log.Info("re-extraction batch was full; the rest wait for the next run",
+			"batch_size", scheduleBatchSize)
+	}
 	return nil
 }

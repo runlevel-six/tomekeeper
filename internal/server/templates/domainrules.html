@@ -16,9 +16,14 @@
       <p class="import-result bad">{{.Problem}}</p>
     {{else if .Saved}}
       <p class="import-result ok">
-        Saved the rule for <strong>{{.Saved}}</strong>. It applies to everything
-        extracted from now on — use <strong>Reprocess</strong> on its row to apply it
-        to what is already stored.
+        Saved the rule for <strong>{{.Saved}}</strong>{{if .ForHousehold}}, for
+        <strong>everyone</strong>{{else}}, for <strong>you</strong>{{end}}.
+        {{if .Queued}}
+          {{plural .Queued "article"}} from that host {{if eq .Queued 1}}is{{else}}are{{end}}
+          being extracted again with it.
+        {{else}}
+          Nothing needed re-extracting.
+        {{end}}
       </p>
     {{else if .Deleted}}
       <p class="import-result ok">
@@ -135,6 +140,22 @@
           Read once when the worker starts, so a change here needs a worker restart.
         </p>
       </div>
+
+      {{if .CanSetHousehold}}
+        <div class="field">
+          <label class="checkbox">
+            <input type="checkbox" name="for_household" value="true"{{if .ForHousehold}} checked{{end}}>
+            Apply this for everyone
+          </label>
+          <p class="hint-inline">
+            On, this is the rule the whole household gets — the default anybody may
+            override with one of their own. Off, it is yours alone and changes nothing
+            about what anybody else reads. A rule fixing a site that extracts badly is
+            usually worth giving everyone; a rule about which part of a page you want
+            to read is usually not.
+          </p>
+        </div>
+      {{end}}
 
       <div class="field">
         <label class="checkbox">

@@ -155,7 +155,7 @@ func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO domain_rules (
 			domain, content_selector, strip_selectors, requires_js,
-			user_agent, rate_limit_rps, notes
+			user_agent, rate_limit_rps, notes, ruleset_key
 		)
 		-- The rate is cast before the comparison, not after. Written as
 		-- NULLIF($6, 0)::numeric, Postgres infers the parameter's type from the
@@ -163,7 +163,7 @@ func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error 
 		-- arrived as 0, and NULLIF turned it into NULL. Fractional rates — the
 		-- useful ones, since 0.5 is one request every two seconds — were silently
 		-- discarded while whole numbers worked, which is why it went unnoticed.
-		VALUES ($1, NULLIF($2, ''), $3, $4, NULLIF($5, ''), NULLIF($6::numeric, 0), NULLIF($7, ''))
+		VALUES ($1, NULLIF($2, ''), $3, $4, NULLIF($5, ''), NULLIF($6::numeric, 0), NULLIF($7, ''), $8)
 		-- The conflict target names the index expression, not just the column:
 		-- uniqueness is now one rule per domain *per owner*, with the household's
 		-- default in the COALESCE(user_id, 0) slot. Naming the column alone stopped
@@ -174,9 +174,13 @@ func (s *SystemStore) UpsertDomainRule(ctx context.Context, r DomainRule) error 
 			requires_js      = EXCLUDED.requires_js,
 			user_agent       = EXCLUDED.user_agent,
 			rate_limit_rps   = EXCLUDED.rate_limit_rps,
-			notes            = EXCLUDED.notes`,
+			notes            = EXCLUDED.notes,
+			ruleset_key      = EXCLUDED.ruleset_key`,
 		domain, r.ContentSelector, r.StripSelectors, r.RequiresJS,
-		r.UserAgent, r.RateLimitRPS, r.Notes)
+		r.UserAgent, r.RateLimitRPS, r.Notes,
+		// Same function that stamps a body, so the two sides of the staleness
+		// comparison cannot drift.
+		EffectiveRule{ContentSelector: r.ContentSelector, StripSelectors: r.StripSelectors}.RulesetKey())
 	if err != nil {
 		return fmt.Errorf("saving the rule for %s: %w", domain, err)
 	}

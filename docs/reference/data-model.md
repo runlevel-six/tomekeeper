@@ -288,6 +288,7 @@ Per-domain extraction overrides.
 | `requires_js` | `boolean` | Needs a headless render. **Household only.** |
 | `user_agent` | `text` | Reserved; not yet read. **Household only.** |
 | `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. **Household only.** |
+| `ruleset_key` | `text` | The extraction half of this rule, hashed. A body whose own `ruleset_key` differs from this is one the rule would no longer produce, which is how a sweep finds work nobody queued. Written by the store from the same function that stamps a body, so the two sides cannot drift. |
 | `notes` | `text` | Why the rule exists. |
 
 **The two halves of a rule have different owners**, and a check constraint holds the

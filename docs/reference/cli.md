@@ -459,7 +459,10 @@ cannot make another through the interface, and the remedy would be a hand-writte
 
 ### `tome domain-rule`
 
-Manages per-domain extraction overrides.
+Manages the **household's** per-domain extraction overrides — the defaults every
+reader gets unless they have written one of their own. A reader's own rules are
+written from the domain-rules page; only the household's are managed here, because
+only the household's carry the fetch settings.
 
 ```
 tome domain-rule list

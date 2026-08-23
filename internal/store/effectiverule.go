@@ -12,6 +12,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// HouseholdRule is the reader id meaning "no reader" — the household's own
+// extraction and the rules that shape it.
+//
+// Zero is safe as that sentinel because no account has it: the id sequence starts
+// at 1 and EnsureSeedUser resets it so a future signup cannot collide. A lookup
+// scoped to this id therefore matches only rows with no owner, which is exactly
+// the household's.
+const HouseholdRule UserID = 0
+
 // EffectiveRule is the rule that actually shapes one reader's extraction of one
 // host: their own where they have written one, the household's otherwise.
 //
@@ -167,14 +176,19 @@ func (s *SystemStore) UpsertReaderRule(ctx context.Context, userID UserID, r Dom
 		return fmt.Errorf("domain must not be empty")
 	}
 
+	// The key is computed here, from the same function that stamps a body, so the
+	// two sides of the staleness comparison cannot drift.
+	key := EffectiveRule{ContentSelector: r.ContentSelector, StripSelectors: r.StripSelectors}.RulesetKey()
+
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO domain_rules (user_id, domain, content_selector, strip_selectors, notes)
-		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''))
+		INSERT INTO domain_rules (user_id, domain, content_selector, strip_selectors, notes, ruleset_key)
+		VALUES ($1, $2, NULLIF($3, ''), $4, NULLIF($5, ''), $6)
 		ON CONFLICT (domain, COALESCE(user_id, 0)) DO UPDATE SET
 			content_selector = EXCLUDED.content_selector,
 			strip_selectors  = EXCLUDED.strip_selectors,
-			notes            = EXCLUDED.notes`,
-		userID, domain, r.ContentSelector, r.StripSelectors, r.Notes)
+			notes            = EXCLUDED.notes,
+			ruleset_key      = EXCLUDED.ruleset_key`,
+		userID, domain, r.ContentSelector, r.StripSelectors, r.Notes, key)
 	if err != nil {
 		return fmt.Errorf("saving %d's rule for %s: %w", userID, domain, err)
 	}
@@ -196,4 +210,53 @@ func (s *SystemStore) DeleteReaderRule(ctx context.Context, userID UserID, domai
 		return pgx.ErrNoRows
 	}
 	return nil
+}
+
+// OwnedRule is a rule as the reader who may act on it sees it.
+type OwnedRule struct {
+	DomainRule
+
+	// Mine says this is the reader's own rather than the household's. Only their
+	// own may be edited or deleted from the interface.
+	Mine bool
+}
+
+// RulesVisibleTo lists the rules a reader may see: the household's and their own.
+//
+// Never another reader's. ListDomainRules returns every row in the table and is
+// right for an operator holding the database, and wrong for a page — showing Alice
+// that Bob has a rule for a host tells her he reads it, which is exactly the
+// inference the scoping discipline exists to prevent.
+//
+// Ordered so that a domain's two rules sit together with the reader's own first,
+// because the page shows both and the question it must answer at a glance is
+// "which of these is mine".
+func (s *SystemStore) RulesVisibleTo(ctx context.Context, userID UserID) ([]OwnedRule, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT user_id IS NOT NULL,
+		       domain, COALESCE(content_selector, ''), COALESCE(strip_selectors, '{}'),
+		       requires_js, COALESCE(user_agent, ''),
+		       COALESCE(rate_limit_rps, 0)::float8, COALESCE(notes, '')
+		FROM domain_rules
+		WHERE user_id = $1 OR user_id IS NULL
+		ORDER BY domain, (user_id IS NOT NULL) DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing the rules visible to %d: %w", userID, err)
+	}
+	defer rows.Close()
+
+	var out []OwnedRule
+	for rows.Next() {
+		var (
+			r         OwnedRule
+			selectors []string
+		)
+		if err := rows.Scan(&r.Mine, &r.Domain, &r.ContentSelector, &selectors,
+			&r.RequiresJS, &r.UserAgent, &r.RateLimitRPS, &r.Notes); err != nil {
+			return nil, fmt.Errorf("scanning a rule: %w", err)
+		}
+		r.StripSelectors = selectors
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
