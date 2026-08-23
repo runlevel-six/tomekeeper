@@ -328,14 +328,22 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 	// The stored hash is what gets verified against, not a comparison of hashes:
 	// argon2id salts randomly, so the same password hashes differently every time
 	// and two hashes are never equal.
-	unchanged, err := passwordUnchanged(ctx, system, cfg.Username, cfg.Password, log)
+	//
+	// **Looked up by the name the account has, not by the configured one**, and every
+	// line below uses the same. Passing cfg.Username here found nothing once the reader
+	// had renamed themselves: an account that cannot be found reads as "no password
+	// stored", so a deploy that changed nothing decided the password had changed —
+	// revoking every session and rewriting the Fever API key on every single deploy,
+	// which is the exact failure the check above was added to prevent. Reported from
+	// production, one release after the rename it was written to protect.
+	unchanged, err := passwordUnchanged(ctx, system, name, cfg.Password, log)
 	if err != nil {
 		log.Error("checking the stored password failed", "error", err)
 		return exitFailure
 	}
 	if unchanged {
 		fmt.Fprintf(stdout, "the password for %q is already the configured one; nothing changed\n",
-			cfg.Username)
+			name)
 		fmt.Fprintln(stdout, "existing sessions and mobile clients keep working")
 		return exitOK
 	}
@@ -345,12 +353,16 @@ func migrate(args []string, stdout, stderr io.Writer) int {
 		log.Error("hashing the password failed", "error", err)
 		return exitFailure
 	}
-	if err := system.SetPassword(ctx, userID, hash, auth.FeverAPIKey(cfg.Username, cfg.Password)); err != nil {
+	// The key is md5(name:password) and the client computes it from what the reader
+	// types, so it has to be derived from the name the account actually has. Derived
+	// from cfg.Username it was a credential for a username that no longer existed:
+	// every mobile client refused, and nothing in the archive could say why.
+	if err := system.SetPassword(ctx, userID, hash, auth.FeverAPIKey(name, cfg.Password)); err != nil {
 		log.Error("storing the password failed", "error", err)
 		return exitFailure
 	}
 
-	fmt.Fprintf(stdout, "password set for %q\n", cfg.Username)
+	fmt.Fprintf(stdout, "password set for %q\n", name)
 	// Stated because both are surprising, and reached only when the password really
 	// changed. The Fever key is derived from the cleartext, so it necessarily
 	// changes with it; browser sessions are revoked because a password change that

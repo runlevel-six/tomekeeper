@@ -32,7 +32,34 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A deploy no longer signs you out and breaks your mobile clients either.** The other
+  half of the same mistake, found in v0.17.1's own deploy log by the notice v0.17.1
+  added: right after saying it would not overrule the reader's name, `tome migrate`
+  printed `password set for "tome"` on an account called `jason`.
+
+  Setting a password is guarded by a check that it actually changed, precisely so a
+  deploy does not revoke sessions every time. That check looked the account up by
+  `TOME_USERNAME` — and after a rename there is no such account, which reads as "no
+  password stored", which reads as changed. So every deploy rewrote the password,
+  **revoked every browser session**, and rewrote the Fever API key. Worse, it derived
+  that key from the configured name: `md5("tome:…")` stored on an account called
+  `jason`, a credential for a username that no longer existed, so every mobile client
+  was refused with nothing anywhere to explain it.
+
+  The password path now uses the name the account actually has — for the lookup, for
+  the key, and in what it prints. Two tests invoke `tome migrate` itself against a
+  renamed account, which is what neither bug had: the command was awkward to call, so
+  the wiring was never covered while the pieces it wires were.
+
+  **If a deploy has already rewritten your key**, one command repairs it, and it is the
+  only way to: the fix above makes migrate correctly leave an unchanged password alone,
+  so nothing will rewrite the key on its own. Set the password again explicitly, which
+  recomputes the key from the right name — `kubectl exec -i deploy/tomekeeper-server --
+  tome user passwd <name>` and type it, rather than passing `--password` and leaving it
+  in a shell history.
+
 
 ## [v0.17.1] — 2026-08-23
 

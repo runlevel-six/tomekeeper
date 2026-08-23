@@ -103,6 +103,13 @@ deploy — which it did until v0.18.0, silently, and left the Fever API key belo
 a username the web interface no longer knew. When the configured name and the stored
 one differ, the command says which one is in force and carries on.
 
+`TOME_PASSWORD` is checked against the stored hash first and written only when it has
+really changed, because writing it revokes every browser session and rewrites the Fever
+API key. That check, the key it derives, and what the command prints all use the name
+the account **has** rather than the configured one — looking it up by `TOME_USERNAME`
+after a rename found nothing, which reads as "no password yet", so every deploy revoked
+sessions and stored a key for a username that did not exist.
+
 Takes no flags or positional arguments.
 
 Migrations never run automatically when `serve` or `worker` starts. They run
