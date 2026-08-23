@@ -154,7 +154,7 @@ func TestReextractCandidatesExcludeImmutable(t *testing.T) {
 	insertBody(t, s, unfetched, store.ContentParams{ExtractorName: "feed_body", ExtractorVersion: "1"})
 	insertBody(t, s, current, store.ContentParams{ExtractorName: "trafilatura", ExtractorVersion: "2"})
 
-	candidates, err := s.System().ReextractCandidates(ctx, "2", "", 0, 100)
+	candidates, err := s.System().ReextractCandidates(ctx, store.Household(), "2", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}
@@ -198,7 +198,7 @@ func TestReextractCandidatesPaginate(t *testing.T) {
 	var seen []store.ArticleID
 	var cursor store.ArticleID
 	for range total + 2 { // more passes than needed; the walk must terminate
-		batch, err := s.System().ReextractCandidates(ctx, "2", "", cursor, 2)
+		batch, err := s.System().ReextractCandidates(ctx, store.Household(), "2", "", cursor, 2)
 		if err != nil {
 			t.Fatalf("ReextractCandidates() = %v", err)
 		}
@@ -550,7 +550,7 @@ func TestReextractCandidatesByDomain(t *testing.T) {
 
 	selected := func(domain string) map[store.ArticleID]bool {
 		t.Helper()
-		got, err := s.System().ReextractCandidates(ctx, "2", domain, 0, 100)
+		got, err := s.System().ReextractCandidates(ctx, store.Household(), "2", domain, 0, 100)
 		if err != nil {
 			t.Fatalf("ReextractCandidates(%q) = %v", domain, err)
 		}
@@ -648,7 +648,7 @@ func TestReextractCandidatesIncludeArticlesWithNoBody(t *testing.T) {
 	// No stored page: nothing to extract from, so not a candidate however out of date.
 	nopage := newArticle(t, s, "https://example.com/never-fetched")
 
-	got, err := s.System().ReextractCandidates(ctx, "5", "", 0, 100)
+	got, err := s.System().ReextractCandidates(ctx, store.Household(), "5", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}

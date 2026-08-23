@@ -16,9 +16,17 @@ import (
 // current extractor version. `tome reextract` sets it, because the articles it
 // selects all have a body already; the fetch pipeline does not, so a
 // duplicated job is cheap rather than wasteful.
-func EnqueueExtraction(ctx context.Context, client *river.Client[pgx.Tx], id store.ArticleID, force bool) error {
+// owner is whose body to produce — nil for the household's.
+func EnqueueExtraction(
+	ctx context.Context, client *river.Client[pgx.Tx], id store.ArticleID, owner *store.UserID, force bool,
+) error {
+	var user int64
+	if owner != nil {
+		user = int64(*owner)
+	}
 	if _, err := client.Insert(ctx, ExtractArticleArgs{
 		ArticleID: int64(id),
+		UserID:    user,
 		Force:     force,
 	}, nil); err != nil {
 		return fmt.Errorf("queueing extraction of article %d: %w", id, err)

@@ -76,6 +76,13 @@ happens, because it is the one change that wants a follow-up command
   article. Every other stage of the pipeline already pairs eager enqueueing with a
   sweep for the same reason.
 
+  **`tome reextract --user NAME`** brings one reader's own bodies forward instead of
+  the household's. It reaches only bodies they already have — a reader without one
+  reads the household's, and giving them a private copy of every article in the
+  archive is the opposite of what copy-on-write is for. Applying a reader's rules to
+  a host they have no bodies from is a different question, and **Reprocess** on their
+  rule's row asks it.
+
   A reader's extraction writes only their body: not the article's title, not its
   attempt version, not its images' status, not the failure recorded against it, and
   not `index.html` on disk. One reader's selector must not rename an article in

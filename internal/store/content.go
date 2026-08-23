@@ -468,7 +468,7 @@ type ReextractCandidate struct {
 // to cover the same set or the flag would quietly do less than the rule it exists
 // to apply.
 func (s *SystemStore) ReextractCandidates(
-	ctx context.Context, beforeVersion, domain string, afterID ArticleID, limit int,
+	ctx context.Context, owner *UserID, beforeVersion, domain string, afterID ArticleID, limit int,
 ) ([]ReextractCandidate, error) {
 	// Compared against the article's host rather than with a LIKE over the whole
 	// URL. `LIKE '%example.com%'` would also match notexample.com, and — worse —
@@ -500,29 +500,38 @@ func (s *SystemStore) ReextractCandidates(
 		SELECT id, raw_blob_path FROM (
 			SELECT a.id AS id,
 			       COALESCE(a.raw_blob_path, '') AS raw_blob_path,
-			       -- scheme://host[:port]/path -> host
-			       split_part(split_part(split_part(a.url_canonical, '://', 2), '/', 1), ':', 1) AS host
+			       a.host AS host
 			FROM articles a
-			-- The household's body, not whichever slot happens to match.
+			-- One owner's slot, never whichever happens to match.
 			--
 			-- A bare reextract brings the household's extraction to the current
-			-- version; a reader's fork is re-extracted when that reader asks, against
-			-- their own rules. Joining any current row would compare a reader's
-			-- version here and then decide the household's fate from it — selecting
-			-- the wrong articles in both directions, and silently, which is the shape
-			-- this project has repeatedly paid for.
+			-- version; asking for a reader brings theirs. Joining any current row
+			-- would compare one owner's version and then decide another's fate from
+			-- it — selecting the wrong articles in both directions, and silently,
+			-- which is the shape this project has repeatedly paid for.
 			LEFT JOIN article_content c
-			       ON c.article_id = a.id AND c.is_current AND c.user_id IS NULL
+			       ON c.article_id = a.id AND c.is_current
+			      AND c.user_id IS NOT DISTINCT FROM $5
 			WHERE COALESCE(a.raw_blob_path, '') <> ''
 			  AND a.id > $2
 			  AND (
 			        (c.id IS NOT NULL AND NOT c.immutable AND c.extractor_version <> $1)
-			     OR (c.id IS NULL AND a.extract_attempt_version IS DISTINCT FROM $1)
+			        -- An article with no body in this slot is a candidate only for the
+			        -- household. A reader without one is not missing anything: they
+			        -- read the household's, and a fork exists only where their rules
+			        -- differ — which is the sweep's question, not this one. Queueing
+			        -- them here would give every reader a private copy of every
+			        -- article in the archive.
+			     OR ($5::bigint IS NULL AND c.id IS NULL
+			         AND a.extract_attempt_version IS DISTINCT FROM $1)
 			  )
 		) candidates
-		WHERE $4 = '' OR host = $4 OR host LIKE '%.' || $4
+		-- Suffix matched with right() rather than LIKE, so a domain containing an
+		-- underscore cannot act as a wildcard, and so this reads the same way as the
+		-- staleness sweep.
+		WHERE $4 = '' OR host = $4 OR right(host, length($4) + 1) = '.' || $4
 		ORDER BY id
-		LIMIT $3`, beforeVersion, afterID, limit, host)
+		LIMIT $3`, beforeVersion, afterID, limit, host, owner)
 	if err != nil {
 		return nil, fmt.Errorf("listing reextract candidates: %w", err)
 	}

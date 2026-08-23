@@ -271,15 +271,39 @@ func (s *Server) handleReprocessDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Version 0 rather than the current extractor version, and this is the whole
-	// subtlety of reprocessing after a rule change. Selection is "any version other
-	// than this one", so asking for the current version selects nothing: a rule is
-	// data that changes between runs of one binary, and no rule edit can bump a
-	// constant compiled into it. No body carries version "0", so every body matches.
-	queued, err := jobs.QueueReextraction(r.Context(), s.store, s.jobs, jobs.ReextractRequest{
-		Version: reprocessEveryVersion,
-		Domain:  domain,
-	})
+	// Whose bodies this reprocesses follows whose rule the row is. Reprocessing the
+	// household's on a reader's behalf would change what everybody reads from a
+	// control that says nothing about doing so.
+	forHousehold := r.PostFormValue("for_household") != "" && signedInAccount(r).IsAdmin()
+
+	// The two are different questions, not one with a parameter.
+	//
+	// For the household: bring bodies forward that are at some other version.
+	// Selection is "any version other than this one", so version 0 is how it says
+	// "whatever version they are, do them again" — a rule is data that changes
+	// between runs of one binary, and no rule edit can bump a constant compiled
+	// into it. Imported bodies are provably excluded by that query's own WHERE
+	// clause.
+	//
+	// For a reader: apply my rules to this host. That has to reach articles they
+	// have no body of yet, because having none is the ordinary state — they read
+	// the household's until their rules differ. Selecting only what they already
+	// have would make the control do nothing the first time it is pressed, which is
+	// exactly when somebody presses it.
+	var (
+		queued int
+		err    error
+	)
+	if forHousehold {
+		queued, err = jobs.QueueReextraction(r.Context(), s.store, s.jobs, jobs.ReextractRequest{
+			Version: reprocessEveryVersion,
+			Domain:  domain,
+			Owner:   store.Household(),
+		})
+	} else {
+		queued, err = jobs.QueueRuleExtraction(
+			r.Context(), s.store, s.jobs, signedInAccount(r).ID, domain)
+	}
 	if err != nil {
 		s.log.Error("queueing re-extraction failed", "domain", domain, "error", err)
 		s.renderDomainRules(w, r, http.StatusInternalServerError, "", domainRuleForm{},

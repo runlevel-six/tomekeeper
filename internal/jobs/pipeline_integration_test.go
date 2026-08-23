@@ -422,14 +422,14 @@ func TestDomainRuleAppliedByReextract(t *testing.T) {
 
 		// Exactly what `tome reextract` does: confirm the article is a
 		// candidate, then queue a forced extraction.
-		candidates, err := s.System().ReextractCandidates(ctx, "never-matches", "", 0, 100)
+		candidates, err := s.System().ReextractCandidates(ctx, store.Household(), "never-matches", "", 0, 100)
 		if err != nil {
 			t.Fatalf("ReextractCandidates() = %v", err)
 		}
 		if !containsArticle(candidates, articleID) {
 			t.Fatal("the article was not offered as a reextract candidate")
 		}
-		if err := jobs.EnqueueExtraction(ctx, riverClient, articleID, true); err != nil {
+		if err := jobs.EnqueueExtraction(ctx, riverClient, articleID, store.Household(), true); err != nil {
 			t.Fatalf("EnqueueExtraction() = %v", err)
 		}
 
@@ -717,7 +717,7 @@ func TestExtractionWithNothingToExtractFromSaysSo(t *testing.T) {
 	client := httpclient.New(httpclient.Options{UserAgent: "tomekeeper/test", MaxAttempts: 1})
 
 	runPipeline(t, s, blobs, client, func(ctx context.Context, riverClient *river.Client[pgx.Tx]) {
-		if err := jobs.EnqueueExtraction(ctx, riverClient, id, true); err != nil {
+		if err := jobs.EnqueueExtraction(ctx, riverClient, id, store.Household(), true); err != nil {
 			t.Fatalf("EnqueueExtraction() = %v", err)
 		}
 

@@ -22,6 +22,15 @@ type ReextractRequest struct {
 	// site, and without this, fixing one site means re-extracting everything.
 	Domain string
 
+	// Owner is whose bodies to bring forward — nil for the household's, which is
+	// what a bare reextract means and what it has always done.
+	//
+	// A reader's run reaches only their own forks. It deliberately does not create
+	// forks for articles they have none of: a reader without one reads the
+	// household's body, and giving them a private copy of every article in the
+	// archive is the opposite of what copy-on-write is for.
+	Owner *store.UserID
+
 	// Limit stops after queueing this many. Zero means no limit.
 	Limit int
 
@@ -68,7 +77,8 @@ func QueueReextraction(
 		// clause rather than filtered here. That is deliberate: imported bodies must
 		// be *provably* skipped, and a WHERE clause is a proof while a conditional
 		// in a loop is a promise.
-		candidates, err := s.System().ReextractCandidates(ctx, req.Version, req.Domain, cursor, reextractBatch)
+		candidates, err := s.System().ReextractCandidates(
+			ctx, req.Owner, req.Version, req.Domain, cursor, reextractBatch)
 		if err != nil {
 			return total, err
 		}
@@ -85,7 +95,7 @@ func QueueReextraction(
 			if !req.DryRun {
 				// Forced: these articles all have a current body already, and without
 				// it the worker would see one and skip.
-				if err := EnqueueExtraction(ctx, client, c.ArticleID, true); err != nil {
+				if err := EnqueueExtraction(ctx, client, c.ArticleID, req.Owner, true); err != nil {
 					return total, err
 				}
 			}
@@ -124,7 +134,11 @@ func QueueRuleExtraction(
 	owner store.UserID,
 	domain string,
 ) (int, error) {
-	articles, err := s.System().ArticlesUnderRule(ctx, domain, ruleExtractionBatch)
+	var slot *store.UserID
+	if owner != store.HouseholdRule {
+		slot = store.Owned(owner)
+	}
+	articles, err := s.System().ArticlesUnderRule(ctx, slot, domain, ruleExtractionBatch)
 	if err != nil {
 		return 0, err
 	}

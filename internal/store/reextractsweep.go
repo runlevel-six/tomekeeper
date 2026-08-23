@@ -82,17 +82,43 @@ func (s *SystemStore) StaleBodies(ctx context.Context, limit int) ([]StaleBody, 
 
 // ArticlesUnderRule lists the articles a rule applies to, for one owner.
 //
-// What the eager path enqueues when a rule is written. It takes no view on whether
-// each body is stale — writing a rule is a statement that you want it applied, and
-// the extraction job skips anything already current anyway, so filtering here would
-// duplicate that judgement in a second place where it could disagree.
-func (s *SystemStore) ArticlesUnderRule(ctx context.Context, domain string, limit int) ([]ArticleID, error) {
+// What the eager path enqueues when a rule is written, and what "reprocess this
+// host" asks for. Unlike ReextractCandidates it deliberately reaches articles the
+// owner has no body of yet: for a reader that is the ordinary state, since they
+// read the household's until their rules differ, and selecting only what they
+// already have would make the control do nothing the first time it is pressed.
+//
+// It takes no view on staleness — writing a rule is a statement that you want it
+// applied, and the extraction job skips anything already current anyway.
+//
+// It does take a view on immutability. An article whose current body *for this
+// owner* is imported is excluded, because that copy may be the only surviving
+// record of a page that is gone and the rule is that nothing automatic replaces
+// one. Writing a domain rule is deliberate, but it is a statement about a host
+// rather than about that article, and the deliberate act for a single body is
+// promoting it.
+//
+// The raw-page requirement is not that guard, though it hides the need for it: an
+// imported article usually has no stored page and drops out for that reason alone.
+// One imported and later fetched has both, and would otherwise be silently
+// superseded in that reader's view.
+func (s *SystemStore) ArticlesUnderRule(
+	ctx context.Context, owner *UserID, domain string, limit int,
+) ([]ArticleID, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT a.id FROM articles a
+		LEFT JOIN article_content c
+		       ON c.article_id = a.id AND c.is_current
+		      AND c.user_id IS NOT DISTINCT FROM $3
+		-- The household's body stands in when this owner has none, because that is
+		-- what they are reading and therefore what a fork would supersede.
+		LEFT JOIN article_content h
+		       ON h.article_id = a.id AND h.is_current AND h.user_id IS NULL
 		WHERE (a.host = $1 OR right(a.host, length($1) + 1) = '.' || $1)
 		  AND COALESCE(a.raw_blob_path, '') <> ''
+		  AND NOT COALESCE(c.immutable, h.immutable, false)
 		ORDER BY a.id
-		LIMIT $2`, domain, limit)
+		LIMIT $2`, domain, limit, owner)
 	if err != nil {
 		return nil, fmt.Errorf("listing the articles under %q: %w", domain, err)
 	}

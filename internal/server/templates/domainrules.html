@@ -61,6 +61,16 @@
         <tr>
           <th scope="row">
             {{.Domain}}
+            {{/*
+              Which rule is whose, stated on the row. Both are listed — yours and
+              the household's — and the page would otherwise leave a reader unable
+              to tell whether editing one changes what everybody reads.
+            */}}
+            {{if .Mine}}
+              <span class="badge" title="Your own rule; nobody else is affected by it">yours</span>
+            {{else}}
+              <span class="badge" title="The default everybody gets unless they write their own">everyone</span>
+            {{end}}
             {{if .RequiresJS}}<span class="badge warn" title="Pages from this host are fetched through a headless browser">needs JS</span>{{end}}
             {{if .Notes}}<span class="reason">{{.Notes}}</span>{{end}}
           </th>
@@ -71,15 +81,30 @@
           </td>
           <td class="num">{{if .Articles}}{{.Articles}}{{end}}</td>
           <td class="rule-actions">
-            <a href="/domain-rules?edit={{.Domain}}">Edit</a>
+            {{if or .Mine $.CanSetHousehold}}
+              <a href="/domain-rules?edit={{.Domain}}">Edit</a>
+            {{end}}
             {{if $.ReprocessAvailable}}
               {{/*
                 The control that was only ever a shell command. It queues exactly what
-                `tome reextract --target-version 0 --domain X` queues, through the same
-                function, so the button and the documented command cannot drift.
+                On the household's row this queues exactly what
+                `tome reextract --target-version 0 --domain X` queues, through the
+                same function, so the button and the documented command cannot drift.
+                On your own row it asks a different question — apply my rules to this
+                host — which has to reach articles you have no body of yet, because
+                having none is the ordinary state.
               */}}
               <form method="post" action="/domain-rules/reprocess">
                 <input type="hidden" name="domain" value="{{.Domain}}">
+                {{/*
+                  Reprocessing follows whose rule this row is. On the household's
+                  row an administrator reprocesses what everybody reads; a reader
+                  reprocesses their own copies of that host under the rules that
+                  apply to them, which may well be this very rule.
+                */}}
+                {{if and (not .Mine) $.CanSetHousehold}}
+                  <input type="hidden" name="for_household" value="true">
+                {{end}}
                 <button type="submit" title="Re-extract this domain's stored pages with the current rule">Reprocess</button>
               </form>
             {{end}}

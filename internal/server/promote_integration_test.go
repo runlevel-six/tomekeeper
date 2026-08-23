@@ -267,7 +267,7 @@ func TestPromotingAMutableBodyRestoresReextraction(t *testing.T) {
 
 	_, fetched := twoBodies(t, tr)
 
-	candidates, err := tr.store.System().ReextractCandidates(ctx, "0", "", 0, 100)
+	candidates, err := tr.store.System().ReextractCandidates(ctx, store.Household(), "0", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}
@@ -296,7 +296,7 @@ func TestPromotingAMutableBodyRestoresReextraction(t *testing.T) {
 	// reader who has promoted keeps the copy they chose and does not receive
 	// extraction improvements on it. Worth stating out loud, because it is the one
 	// thing this change costs somebody.
-	candidates, err = tr.store.System().ReextractCandidates(ctx, "0", "", 0, 100)
+	candidates, err = tr.store.System().ReextractCandidates(ctx, store.Household(), "0", "", 0, 100)
 	if err != nil {
 		t.Fatalf("ReextractCandidates() = %v", err)
 	}

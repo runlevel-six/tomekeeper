@@ -408,6 +408,18 @@ and it survives a restart because the queue lives in Postgres.
 
 See [Reprocess the archive](../how-to/reprocess-the-archive.md).
 
+**`--user NAME` reprocesses one reader's own bodies** instead of the household's.
+Without it, this brings forward the extraction every reader sees unless they have
+written a rule of their own — which is what it has always done.
+
+It reaches only bodies that reader already has. A reader without one is not missing
+anything: they read the household's, and a body of their own exists only where their
+rules differ. Giving them a private copy of every article in the archive is the
+opposite of what that is for. To *apply* a reader's rules to a host they have no
+bodies from, use **Reprocess** on their rule's row in the interface, which asks that
+question instead.
+
+
 ### `tome user`
 
 Manages accounts.

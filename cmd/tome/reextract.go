@@ -47,9 +47,17 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		"only reprocess articles from this host and its subdomains (default: every host)")
 	limit := fs.Int("limit", 0, "stop after queueing this many articles (0 means no limit)")
 	dryRun := fs.Bool("dry-run", false, "report what would be queued without queueing it")
+	username := fs.String("user", "",
+		"reprocess this reader's own bodies rather than the household's")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: tome reextract [--target-version V] [--domain HOST] [--limit N] [--dry-run]")
+		fmt.Fprintln(stderr,
+			"Usage: tome reextract [--target-version V] [--domain HOST] [--user NAME] [--limit N] [--dry-run]")
+		fmt.Fprintln(stderr, "\nWith no --user this brings the household's extraction forward: the")
+		fmt.Fprintln(stderr, "bodies every reader sees unless they have written a rule of their own.")
+		fmt.Fprintln(stderr, "With one, it brings that reader's own bodies forward and touches")
+		fmt.Fprintln(stderr, "nobody else's. It does not give them bodies they do not already have —")
+		fmt.Fprintln(stderr, "a reader without one reads the household's, which is the point.")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -88,9 +96,19 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		return exitFailure
 	}
 
+	owner := store.Household()
+	if *username != "" {
+		id, lookupErr := s.System().LookupUser(ctx, *username)
+		if lookupErr != nil {
+			return noSuchUser(stderr, "reextract", *username, lookupErr)
+		}
+		owner = store.Owned(id)
+	}
+
 	total, err := jobs.QueueReextraction(ctx, s, client, jobs.ReextractRequest{
 		Version: *targetVersion,
 		Domain:  *domain,
+		Owner:   owner,
 		Limit:   *limit,
 		DryRun:  *dryRun,
 		Progress: func(queued int) {
@@ -106,6 +124,13 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 	if *domain != "" {
 		scope = " under " + *domain
 	}
+	// Said in every outcome, because "queued 40 articles" reads identically
+	// whether it brought the archive forward or one reader's private copies, and
+	// those are very different things to have just done.
+	whose := "the household's bodies"
+	if *username != "" {
+		whose = *username + "'s own bodies"
+	}
 	noun := "articles"
 	if total == 1 {
 		noun = "article"
@@ -116,11 +141,12 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 		// Two quite different situations, and the reader needs to know which:
 		// nothing to reprocess, or nothing archived from that host at all — often
 		// a typo in the domain.
-		fmt.Fprintf(stdout, "nothing to do: no article%s has a mutable body at a version other than %s\n",
-			scope, *targetVersion)
+		fmt.Fprintf(stdout, "nothing to do: among %s, no article%s has a mutable body at a version other than %s\n",
+			whose, scope, *targetVersion)
 		fmt.Fprintln(stdout, "if that is unexpected, check the spelling; `tome archive stats` lists what is stored")
 	case total == 0:
-		fmt.Fprintf(stdout, "nothing to do: every mutable body is already at version %s\n", *targetVersion)
+		fmt.Fprintf(stdout, "nothing to do: every one of %s is already at version %s\n",
+			whose, *targetVersion)
 		// The overwhelmingly likely mistake, and one whose symptom reads like
 		// success: asking for the version everything already has, rather than the
 		// version you want it brought to.
@@ -130,10 +156,11 @@ func reextract(args []string, stdout, stderr io.Writer) int {
 					"would reprocess those %s bodies\n", extract.Version, *targetVersion)
 		}
 	case *dryRun:
-		fmt.Fprintf(stdout, "%d %s%s would be re-extracted (dry run, nothing queued)\n", total, noun, scope)
+		fmt.Fprintf(stdout, "%d %s%s of %s would be re-extracted (dry run, nothing queued)\n",
+			total, noun, scope, whose)
 	default:
-		fmt.Fprintf(stdout, "queued %d %s%s for re-extraction; run `tome worker` to process them\n",
-			total, noun, scope)
+		fmt.Fprintf(stdout, "queued %d %s%s of %s for re-extraction; run `tome worker` to process them\n",
+			total, noun, scope, whose)
 	}
 	return exitOK
 }

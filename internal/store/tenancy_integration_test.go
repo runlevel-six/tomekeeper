@@ -576,3 +576,89 @@ func TestTheSweepMatchesSubdomainsAndNotLookalikes(t *testing.T) {
 		t.Error("notexample.com was matched by a rule for example.com")
 	}
 }
+
+// A rule does not silently supersede an imported body, even for the reader who
+// wrote it.
+//
+// The existing reprocess test looked like it covered this and did not: an imported
+// article usually has no stored page, so it dropped out of the candidate list for
+// that reason alone. One imported and *later fetched* has both — a real state, since
+// importing queues a fetch — and would otherwise be replaced in that reader's view
+// by a rule that says nothing about this article in particular. The deliberate act
+// for a single body is promoting it.
+func TestARuleDoesNotSupersedeAnImportedBody(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	system := s.System()
+
+	const pageURL = "https://imported.example/story"
+	imported, err := s.ImportArticle(t.Context(), alice, store.ImportParams{
+		SourceName:   "wallabag",
+		SourceID:     "rule-vs-import",
+		URLCanonical: pageURL,
+		URLOriginal:  pageURL,
+		ContentHTML:  "<p>The only copy.</p>",
+		ContentText:  "The only copy.",
+		WordCount:    3,
+	})
+	if err != nil {
+		t.Fatalf("ImportArticle() = %v", err)
+	}
+
+	// Fetched afterwards, which is what the importer queues. Now it has both a
+	// stored page and an immutable body.
+	if err := s.RecordFetchSuccess(t.Context(), imported.ArticleID,
+		store.FetchedPage{SHA: "sha-import-fetch", Path: "articles/z/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+
+	// Proof the raw page is not what excludes it: an ordinary article on the same
+	// host, also fetched, is expected in the result below.
+	const otherURL = "https://imported.example/ordinary"
+	ordinary, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: otherURL, URLOriginal: otherURL,
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+	if err := s.RecordFetchSuccess(t.Context(), ordinary,
+		store.FetchedPage{SHA: "sha-ordinary", Path: "articles/z2/raw.html.gz"}); err != nil {
+		t.Fatalf("RecordFetchSuccess() = %v", err)
+	}
+
+	// And one with no stored page at all. There is nothing to extract from, so
+	// queueing it would produce a job whose only outcome is to record "no stored
+	// page" against an article that already says so.
+	const unfetchedURL = "https://imported.example/never-fetched"
+	unfetched, _, err := s.UpsertArticle(t.Context(), store.ArticleParams{
+		URLCanonical: unfetchedURL, URLOriginal: unfetchedURL,
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+
+	under, err := system.ArticlesUnderRule(t.Context(), store.Owned(alice), "imported.example", 50)
+	if err != nil {
+		t.Fatalf("ArticlesUnderRule() = %v", err)
+	}
+
+	var sawImported, sawOrdinary, sawUnfetched bool
+	for _, id := range under {
+		switch id {
+		case imported.ArticleID:
+			sawImported = true
+		case ordinary:
+			sawOrdinary = true
+		case unfetched:
+			sawUnfetched = true
+		}
+	}
+	if sawUnfetched {
+		t.Error("an article with no stored page was offered; there is nothing to extract from")
+	}
+	if sawImported {
+		t.Error("a rule would supersede an imported body in this reader's view")
+	}
+	if !sawOrdinary {
+		t.Error("the ordinary article was not offered; the test proves nothing about immutability")
+	}
+}
