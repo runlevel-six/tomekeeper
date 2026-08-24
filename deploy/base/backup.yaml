@@ -75,7 +75,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: backup
-              image: ghcr.io/runlevel-six/tomekeeper:v0.17.2
+              image: ghcr.io/runlevel-six/tomekeeper:v1.0.0
               args: ["backup", "--to", "/backups"]
               envFrom:
                 - configMapRef:

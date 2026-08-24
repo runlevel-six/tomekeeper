@@ -5,22 +5,26 @@ Notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Every release is a git tag `vX.Y.Z`, and the container image published for it
-carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v0.17.2` is the tag
-`v0.17.2`, and `tome version` inside it says `v0.17.2`. One identifier, everywhere,
+carries **the same string**: `ghcr.io/runlevel-six/tomekeeper:v1.0.0` is the tag
+`v1.0.0`, and `tome version` inside it says `v1.0.0`. One identifier, everywhere,
 so "what is running" has a single answer. See
 [Cut a release](docs/how-to/cut-a-release.md).
 
 ## What the numbers promise
 
-While the major version is `0`, the public interface is the HTTP routes, the CLI,
-the environment variables, and the archive on disk — not the Go packages, which are
-internal.
+The public interface is the HTTP routes, the CLI, the environment variables, and the
+archive on disk — not the Go packages, which are internal.
 
 | Bump | Means | Upgrading |
 |---|---|---|
-| **Patch** (`0.1.0` → `0.1.1`) | Fixes only. **Never a database migration.** | Change the tag and apply. Nothing else to do. |
-| **Minor** (`0.1.0` → `0.2.0`) | Features, and any release that adds a migration. May change defaults or remove a flag, with the removal noted here. | Run the migration Job, then apply. |
-| **Major** | Reserved for 1.0. The Fever API landed in 0.2.0, so what is left is **multi-user** — after which this table stops having a caveat. | — |
+| **Patch** (`1.0.0` → `1.0.1`) | Fixes only. **Never a database migration.** | Change the tag and apply. Nothing else to do. |
+| **Minor** (`1.0.0` → `1.1.0`) | Features, and any release that adds a migration. Nothing named above is removed or renamed. | Run the migration Job, then apply. |
+| **Major** (`1.0.0` → `2.0.0`) | Something named above changed in a way that can break a running deployment: a route, a flag, an environment variable, or the on-disk layout. Every such change is listed under **Removed** or **Changed** here, with what to do instead. | Read the notes first. |
+
+Before 1.0 this table carried a caveat — a minor release was allowed to remove a flag
+or change a default, because the shape of the thing was still being settled. It no
+longer is. `--since-version` and `article_content.fs_path` went in v0.16.0 for exactly
+that reason: it was the last chance to take them out cheaply.
 
 "A patch release never migrates" is the load-bearing half, and it is enforced by
 `scripts/check-release.sh` rather than remembered: it means a patch upgrade cannot
@@ -31,6 +35,10 @@ happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [v1.0.0] — 2026-08-24
 
 ### Added
 
@@ -1166,7 +1174,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.2...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.0...HEAD
+[v1.0.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.2...v1.0.0
 [v0.17.2]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.1...v0.17.2
 [v0.17.1]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.0...v0.17.1
 [v0.17.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.16.0...v0.17.0

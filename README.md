@@ -159,13 +159,19 @@ things that will confuse you once.
 Releases are git tags, and the container image carries the same string:
 
 ```
-ghcr.io/runlevel-six/tomekeeper:v0.17.2
+ghcr.io/runlevel-six/tomekeeper:v1.0.0
 ```
 
-That is the tag `v0.17.2`, it is what `tome version` reports inside the image, and it
+That is the tag `v1.0.0`, it is what `tome version` reports inside the image, and it
 is what `deploy/base/kustomization.yaml` pins. One identifier in git, in the
 registry, in a Deployment, and in a log line — and CI refuses to publish a version
 it has published before, so a version number always means one set of bytes.
+
+**1.0 means the interface is settled**, not that the software is finished. The HTTP
+routes, the CLI, the environment variables and the on-disk archive are what a version
+number promises about: a patch release never migrates, a minor release never removes or
+renames any of them, and anything that would is a major release with the change written
+down. What 1.0 does not promise is a roadmap or a cadence — see [Support](#support).
 
 | Tag | Points at |
 |---|---|
@@ -211,7 +217,8 @@ This is a personal project, published because it may be useful, not because it
 is a product.
 
 - **Supported:** it works for the maintainer's setup, and bug reports with
-  enough detail to reproduce are welcome.
+  enough detail to reproduce are welcome. Since 1.0, an upgrade that breaks one of
+  the interfaces above without saying so in the changelog is a bug.
 - **Not supported:** your deployment, your Postgres, your ingress. PRs are
   welcome and will be read; I will not debug an environment I cannot see.
 
