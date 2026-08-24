@@ -65,7 +65,21 @@ What is there:
   automatic overrules an import, because it may be the last copy there is.
 - **Keeping, and letting go.** Star or keep an article to protect its stored copy
   forever; optional retention releases the bodies of things you have read and did
-  not keep. Off by default.
+  not keep. Off by default, and each reader chooses their own window — the stored
+  copy goes only once *everybody* here has finished with it, so your choice never
+  costs anybody else an article.
+
+- **More than one reader.** Feeds, reading state, tags, highlights, retention and
+  search are each person's own, and nobody can see, change, or infer the existence of
+  anybody else's. An account starts with no password and gets one from a single-use
+  link, so nobody learns anybody's. Anybody can rename themselves, export their
+  archive, or delete their own account without asking an administrator.
+
+  **The archive underneath stays shared, and that is the interesting part.** One
+  poll, one stored page, and one copy of each image however many people hold it —
+  while the *body* belongs to the reader: write your own extraction rule for a site
+  and you change what you read there, not what anybody else does.
+
 - **Looking at it for hours.** Six palettes plus the neutral one it starts with,
   each following your system light/dark preference or pinned to one, chosen from a
   settings page. Optionally, articles mark themselves read as you scroll past them
@@ -84,8 +98,10 @@ What is there:
   instead — off by default, scaled to zero, and it refuses to load images, fonts and
   media while it does so.
 
-**Not built yet:** importing from read-later tools other than Wallabag, and more than
-one user account.
+**Not built yet:** importing from read-later tools other than Wallabag, and copying
+your backups off the machine for you — `tome backup` writes and verifies them, and
+piping one into `restic` or `rclone` is a documented one-liner rather than something
+this runs on your behalf.
 
 ## Quick start
 

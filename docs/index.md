@@ -7,15 +7,20 @@ stores the result as files on disk that outlive the application.
 
 The binary is `tome`.
 
-> **Status: early, and usable.** The service polls feeds, fetches the linked
-> pages politely, extracts readable bodies, localizes the images, writes each
-> article as a standalone page that opens in a browser with nothing running — and
-> serves a web interface to read it in, with full-text search across the whole
-> archive, browsing by category, and Kubernetes manifests that stand the whole
-> thing up including its database. It installs to a home screen, where it draws
-> its own navigation because a standalone window has none. Sections of this
-> documentation appear as the milestones that introduce them land; nothing here
-> describes behavior that does not exist.
+> **Status: 1.0.** The service polls feeds, fetches the linked pages politely,
+> extracts readable bodies, localizes the images, writes each article as a
+> standalone page that opens in a browser with nothing running — and serves a web
+> interface to read it in, with full-text search over titles and bodies, browsing
+> by category, and Kubernetes manifests that stand the whole thing up including its
+> database. It installs to a home screen, where it draws its own navigation because
+> a standalone window has none. Several people can read one archive without seeing
+> each other's, and `tome backup` writes both halves of it as one file that can
+> prove itself whole.
+>
+> 1.0 means the routes, the CLI, the environment variables and the on-disk archive
+> are settled — see [what the version numbers
+> promise](https://github.com/runlevel-six/tomekeeper/blob/master/CHANGELOG.md). It
+> does not mean finished. Nothing here describes behavior that does not exist.
 
 ## The four kinds of document
 

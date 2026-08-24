@@ -197,7 +197,7 @@ where the second copy lives is a decision about somebody's own network.
   used to revoke every session on every deploy, and the fix was to verify first and
   write nothing when nothing had changed.
 
-  **If your account was renamed before v0.18.0**, rename it again under Settings once
+  **If your account was renamed before v0.17.2**, rename it again under Settings once
   this release is deployed: that rewrites the Fever key to match, which is the half a
   mobile client cannot be told about.
 
