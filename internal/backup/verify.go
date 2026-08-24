@@ -20,11 +20,6 @@ type Report struct {
 	// recorded for them.
 	Verified int
 
-	// Unverifiable is the number of entries carried with no recorded hash to check
-	// against — index.html and meta.json. Counted rather than ignored, so the total
-	// adds up and nobody has to wonder which files were skipped.
-	Unverifiable int
-
 	// Absent names manifest entries the archive does not contain, and Corrupt names
 	// entries whose bytes do not hash to what was recorded. Either one means this is
 	// not a backup.
@@ -50,10 +45,7 @@ func (r Report) OK() bool { return len(r.Absent) == 0 && len(r.Corrupt) == 0 }
 // Summary is one line for a terminal.
 func (r Report) Summary() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d files verified against the hashes the archive recorded", r.Verified)
-	if r.Unverifiable > 0 {
-		fmt.Fprintf(&b, ", %d carried without one", r.Unverifiable)
-	}
+	fmt.Fprintf(&b, "%d entries verified against the hashes the archive recorded", r.Verified)
 	if len(r.Extra) > 0 {
 		fmt.Fprintf(&b, ", %d not in the manifest", len(r.Extra))
 	}
@@ -156,6 +148,15 @@ func Verify(r io.Reader) (*Report, error) {
 		return nil, fmt.Errorf("this archive is format version %d and this build understands %d; "+
 			"a newer tome wrote it", manifest.FormatVersion, FormatVersion)
 	}
+	// Refused rather than checked. A format 1 manifest recorded the database's hashes
+	// of the *fetched* bytes, and the files are stored gzipped and transcoded — so
+	// every comparison against one is meaningless, and reporting thousands of healthy
+	// files as corrupt is worse than saying plainly that this cannot be checked.
+	if manifest.FormatVersion < MinReadableFormat {
+		return nil, fmt.Errorf("this archive is format version %d, whose manifest recorded "+
+			"hashes of the original fetched bytes rather than of the stored files, so it cannot "+
+			"be verified; take a fresh backup with this build", manifest.FormatVersion)
+	}
 
 	for _, t := range manifest.Tables {
 		got, ok := tables[t.Entry]
@@ -182,10 +183,6 @@ func Verify(r io.Reader) (*Report, error) {
 		}
 		delete(found, f.Path)
 
-		if !f.Verifiable() {
-			report.Unverifiable++
-			continue
-		}
 		if got != f.SHA256 {
 			report.Corrupt = append(report.Corrupt, f.Path)
 			continue

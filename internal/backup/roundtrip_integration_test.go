@@ -353,3 +353,19 @@ func sha(t *testing.T, body string) string {
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
 }
+
+// mkParams and recordRaw are the two store calls the scale test needs.
+func mkParams(slug string) store.ArticleParams {
+	return store.ArticleParams{
+		URLCanonical: "https://example.com/" + slug,
+		URLOriginal:  "https://example.com/" + slug,
+		Title:        slug,
+	}
+}
+
+func (fx archiveFixture) recordRaw(ctx context.Context, id store.ArticleID, rel, body string) error {
+	sum := sha256.Sum256([]byte(body))
+	return fx.store.RecordFetchSuccess(ctx, id, store.FetchedPage{
+		SHA: hex.EncodeToString(sum[:]), Path: rel,
+	})
+}

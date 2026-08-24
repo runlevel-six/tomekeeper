@@ -15,13 +15,24 @@
 // So a backup here is a single stream containing the tables, the tree, and a manifest
 // that says what should be in it.
 //
-// **It can prove itself, which a copy cannot.** Every irreplaceable file already has
-// a hash recorded in the database — `assets.sha256` for an image, `articles.raw_blob_sha`
-// for a fetched page — so the manifest is not a promise this code makes, it is what the
-// archive already claims about itself. The 2026-08-20 restore drill is the argument:
-// a documented `kubectl run --rm -i` streaming a tar delivered 73.9 MB of 307 MB, 37
-// files of 8,946, and exit code 0. Verification is the difference between a copy and
-// a backup, and it took a hand-built checksum manifest to notice.
+// **It can prove itself, which a copy cannot.** The manifest records the SHA-256 of
+// every file as it went into the archive, so a verification compares the bytes that
+// arrived against the bytes that were read. The 2026-08-20 restore drill is the
+// argument: a documented `kubectl run --rm -i` streaming a tar delivered 73.9 MB of
+// 307 MB, 37 files of 8,946, and exit code 0. Verification is the difference between a
+// copy and a backup, and it took a hand-built checksum manifest to notice.
+//
+// **The database's hashes are not those hashes, and assuming they were was a bug.**
+// `articles.raw_blob_sha` is the SHA of the page as *fetched*, while what is stored is
+// that page gzipped; `assets.sha256` identifies the image that was downloaded, while
+// what is stored is a transcode of it. Format 1 recorded those in the manifest and
+// verification therefore reported 5,790 of 6,208 files as corrupt on the first real
+// archive it was pointed at — the files were fine and the comparison was meaningless.
+// Found by running it on 10,774 real files, which no fixture had done, because a
+// fixture writes bytes the test itself hashed.
+//
+// What the database's hashes are still good for is the other question: which files the
+// rows reference. That is what Missing reports, and it is why they are still read.
 //
 // **What it is not.** It is not an export: `tome export` is one reader's articles in a
 // portable, importable shape. This is the household's bytes, restorable onto a new
@@ -55,7 +66,15 @@ import (
 // Bumped when the layout changes in a way an older `tome restore` could not read.
 // Recorded in the manifest so a restore refuses a future archive by saying so rather
 // than by failing partway through one.
-const FormatVersion = 1
+//
+// 2 changed what the file hashes mean: the SHA of the bytes as stored, rather than the
+// database's SHA of what was originally fetched. A format 1 archive is refused by
+// verification rather than reported as corrupt, because its hashes cannot be compared
+// against anything — see the note at the top of this file.
+const FormatVersion = 2
+
+// MinReadableFormat is the oldest layout this build can verify or restore.
+const MinReadableFormat = 2
 
 // Names inside the archive. Fixed strings rather than derived, because a restore has
 // to find them in a stream it is reading once.
@@ -66,17 +85,17 @@ const (
 	blobPrefix   = "blobs/"
 )
 
-// Kind says what a file in the tree is, which decides whether it can be verified.
+// Kind describes what a file in the tree is. Every kind is verified; this is for
+// reading a manifest, and for saying what a missing file costs.
 const (
-	// KindAsset and KindRaw are the irreplaceable bytes, and the database records a
-	// hash for each: an image and a fetched page.
+	// KindAsset and KindRaw are the irreplaceable bytes: an image, and a page as it
+	// was fetched. A row in the database points at each of them.
 	KindAsset = "asset"
 	KindRaw   = "raw"
 
-	// KindDerived is everything extraction writes out of them — index.html and
-	// meta.json. Carried, because nothing regenerates them on demand today, but
-	// unverifiable: no hash for them is recorded anywhere, and inventing one here
-	// would only prove this code hashed what it just read.
+	// KindDerived is what extraction writes out of them — index.html and meta.json.
+	// Regenerable in principle, carried because nothing regenerates them on demand
+	// today.
 	KindDerived = "derived"
 )
 
@@ -119,13 +138,10 @@ type FileEntry struct {
 	Bytes int64  `json:"bytes"`
 	Kind  string `json:"kind"`
 
-	// SHA256 is what the database says this file's contents hash to, for the kinds
-	// where it says anything. Empty for a derived file.
-	SHA256 string `json:"sha256,omitempty"`
+	// SHA256 is the hash of this file's bytes as they went into the archive, which is
+	// what makes a verification a comparison rather than a restatement.
+	SHA256 string `json:"sha256"`
 }
-
-// Verifiable reports whether this entry can be checked against a recorded hash.
-func (f FileEntry) Verifiable() bool { return f.SHA256 != "" }
 
 // Options configure a backup.
 type Options struct {
@@ -296,7 +312,12 @@ func dumpTable(ctx context.Context, tx pgx.Tx, tw *tar.Writer, table string) (*T
 	}, nil
 }
 
-// expectedFiles is every tree path the snapshot records a hash for.
+// expectedFiles is every tree path the snapshot's rows point at.
+//
+// Read for one purpose: telling whether the tree still holds what the database
+// references. The hashes in those columns are of the bytes as *fetched* rather than as
+// stored — a page is stored gzipped, an image is stored transcoded — so they cannot be
+// compared against a file, and format 1 was wrong to try.
 func expectedFiles(ctx context.Context, tx pgx.Tx) (map[string]FileEntry, error) {
 	out := make(map[string]FileEntry)
 
@@ -393,15 +414,20 @@ func writeTree(ctx context.Context, tw *tar.Writer, opts Options, expected map[s
 			return nil, fmt.Errorf("reading %s: %w", rel, err)
 		}
 
-		entry := expected[rel]
-		if entry.Path == "" {
-			entry = FileEntry{Path: rel, Kind: KindDerived}
+		entry := FileEntry{Path: rel, Kind: KindDerived}
+		if known, ok := expected[rel]; ok {
+			entry.Kind = known.Kind
 		}
 		entry.Bytes = info.Size()
 
-		if err := copyFileEntry(tw, blobPrefix+rel, full, info); err != nil {
+		// Hashed as it is copied, in one pass over bytes already being read. The hash
+		// is of what goes into the archive, which is the only thing a verification can
+		// meaningfully compare against.
+		digest, err := copyFileEntry(tw, blobPrefix+rel, full, info)
+		if err != nil {
 			return nil, err
 		}
+		entry.SHA256 = digest
 		out = append(out, entry)
 
 		if opts.Progress != nil && (i+1)%500 == 0 {
@@ -414,10 +440,12 @@ func writeTree(ctx context.Context, tw *tar.Writer, opts Options, expected map[s
 	return out, nil
 }
 
-func copyFileEntry(tw *tar.Writer, name, full string, info fs.FileInfo) error {
+// copyFileEntry writes one file into the archive and returns the hash of what it
+// wrote.
+func copyFileEntry(tw *tar.Writer, name, full string, info fs.FileInfo) (string, error) {
 	f, err := os.Open(full) //nolint:gosec // a path under the archive root this was given
 	if err != nil {
-		return fmt.Errorf("opening %s: %w", full, err)
+		return "", fmt.Errorf("opening %s: %w", full, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -427,18 +455,21 @@ func copyFileEntry(tw *tar.Writer, name, full string, info fs.FileInfo) error {
 		Size:    info.Size(),
 		ModTime: info.ModTime(),
 	}); err != nil {
-		return fmt.Errorf("writing the header for %s: %w", name, err)
+		return "", fmt.Errorf("writing the header for %s: %w", name, err)
 	}
 	// Copied with the size already committed to the header, so a file being appended
-	// to underneath us would produce a short write rather than a corrupt archive.
-	n, err := io.Copy(tw, f)
+	// to underneath us produces a short write rather than a corrupt archive — and
+	// hashed in the same pass, because reading it twice to hash it would double the
+	// I/O of a backup for nothing.
+	sum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tw, sum), f)
 	if err != nil {
-		return fmt.Errorf("copying %s: %w", name, err)
+		return "", fmt.Errorf("copying %s: %w", name, err)
 	}
 	if n != info.Size() {
-		return fmt.Errorf("%s changed size while being copied: %d bytes of %d", name, n, info.Size())
+		return "", fmt.Errorf("%s changed size while being copied: %d bytes of %d", name, n, info.Size())
 	}
-	return nil
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func writeEntry(tw *tar.Writer, name string, body []byte) error {

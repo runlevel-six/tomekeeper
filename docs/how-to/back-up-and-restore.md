@@ -25,7 +25,7 @@ tome backup --to /backups
 
 ```
 wrote /backups/tome-1.tar
-438.6 MiB, schema 22: 12,904 rows across 15 tables, and 8,946 files
+383.8 MB, schema 22: 26178 rows across 15 tables, and 10774 files
 check it with: tome backup --verify /backups/tome-1.tar
 ```
 
@@ -50,8 +50,8 @@ tome backup --verify /backups/tome-1.tar
 ```
 
 ```
-438.6 MiB, written by tome v1.0.0 at 2026-08-24 03:17 UTC, schema 22
-8,961 files verified against the hashes the archive recorded, 1,788 carried without one
+383.8 MB, written by tome v1.0.1 at 2026-08-24 03:17 UTC, schema 22
+10789 entries verified against the hashes the archive recorded
 this archive is whole
 ```
 
@@ -59,14 +59,17 @@ this archive is whole
 is deliberate: "is this backup any good" has to be answerable on whatever machine the
 file ended up on, months later.
 
-It can answer because the archive does not take this program's word for anything. Every
-irreplaceable file already has a hash recorded in the database — `assets.sha256` for an
-image, `articles.raw_blob_sha` for a fetched page — and the manifest carries those, so
-verification compares the bytes against what the archive itself claimed before the copy
-was made. The files "carried without one" are the `index.html` and `meta.json` that
-extraction writes: present, and honestly reported as unverifiable, because no hash for
-them is recorded anywhere and inventing one here would only prove this code hashed what
-it had just read.
+The manifest records the SHA-256 of every entry as it went into the archive — every
+file and every table — so verification compares what arrived against what was read.
+Nothing is skipped and nothing is taken on trust.
+
+**It does not compare against the database's hashes, and v1.0.0 tried to.**
+`articles.raw_blob_sha` is the hash of a page as it was *fetched* while the file on disk
+is that page gzipped, and `assets.sha256` identifies a downloaded image while the file
+is a transcode of it. Comparing a stored file against either is meaningless: on the
+first real archive it was pointed at, 5,790 of 6,208 healthy files were reported as
+corrupt. Fixed in v1.0.1, which is also why an archive written by v1.0.0 refuses to
+verify rather than lying about itself — take a fresh one.
 
 Two failures it names precisely, because both have happened:
 
@@ -75,9 +78,10 @@ Two failures it names precisely, because both have happened:
   manifest names and the archive does not have.
 - **A file the archive itself had already lost.** If a prune or an expiry runs while a
   backup is being taken, the database can reference a file the tree no longer holds. The
-  manifest records those separately, so a faithful copy of an archive that is short a
-  file still verifies — and says which rows will restore without their bytes. A bad copy
-  and an incomplete archive are different faults and must not be confused.
+  manifest records those separately — this is what the database's hashes are still read
+  for — so a faithful copy of an archive that is short a file still verifies, while
+  saying which rows will restore without their bytes. A bad copy and an incomplete
+  archive are different faults and must not be confused.
 
 ## Schedule it
 
@@ -173,7 +177,7 @@ tome restore /backups/tome-1.tar
 ```
 
 ```
-restored 12,904 rows and 8,946 files (438.6 MiB) from an archive taken 2026-08-24 03:17 UTC at schema 22
+restored 26178 rows and 10774 files (340.0 MB) from an archive taken 2026-08-24 03:17 UTC at schema 22
 the job queue was not restored: the schedulers rebuild it within a minute of `tome worker` starting
 open an article with images before calling this done — that is the check the database alone cannot give you
 ```

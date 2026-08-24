@@ -626,12 +626,15 @@ The layout inside is a tar: a `README`, one gzipped `COPY` file per table under 
 the tree under `blobs/`, and `manifest.json` last — last because it records what was
 actually written, so verification is one streaming pass with no seeking.
 
-**The manifest carries a hash for every file the database records one for**:
-`assets.sha256` for an image, `articles.raw_blob_sha` for a fetched page. Verification
-therefore compares the copy against what the archive claimed about itself *before* it
-was made, rather than against something this program computed while copying. The
-`index.html` and `meta.json` files extraction writes are carried and reported as
-unverifiable, because no hash for them is recorded anywhere.
+**The manifest carries the SHA-256 of every entry as it was written** — each table and
+each file — so a verification compares the bytes that arrived against the bytes that
+were read, with nothing skipped.
+
+It deliberately does *not* use the database's hashes, which is what format 1 did and got
+wrong: `articles.raw_blob_sha` is the hash of a page as fetched while the stored file is
+that page gzipped, and `assets.sha256` identifies a downloaded image while the stored
+file is a transcode. Those columns are still read, for the one question they can answer —
+which files the rows point at, and therefore which are missing.
 
 **The order it works in is load-bearing.** The database snapshot is taken first, in a
 repeatable-read transaction, and the tree is walked after it — so every row in the

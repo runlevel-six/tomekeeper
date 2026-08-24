@@ -67,6 +67,14 @@ func Restore(ctx context.Context, pool *pgxpool.Pool, path string, opts RestoreO
 			"restore it with the version of tome that wrote it, or newer",
 			manifest.FormatVersion, FormatVersion)
 	}
+	// A format 1 archive holds the right files — only its manifest hashes were
+	// meaningless — so this refusal is deliberately about verification rather than
+	// about the data, and it says which flag gets you out of it.
+	if manifest.FormatVersion < MinReadableFormat && !opts.Force {
+		return nil, fmt.Errorf("this archive is format version %d, whose hashes cannot be "+
+			"verified; its files and tables are intact, so pass --force to restore it anyway",
+			manifest.FormatVersion)
+	}
 
 	var schema int64
 	if err := pool.QueryRow(ctx,

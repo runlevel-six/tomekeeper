@@ -36,7 +36,34 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Backup verification compared the wrong hashes, and said so loudly about healthy
+  files.** v1.0.0's manifest recorded what the *database* holds — `articles.raw_blob_sha`
+  and `assets.sha256` — and compared stored files against those. But a page is stored
+  gzipped while that column is the hash of the page as fetched, and an image is stored
+  transcoded while that column identifies the original download. So on the first real
+  archive it was pointed at, **5,790 of 6,208 files were reported corrupt and the archive
+  was called unusable.** The files were fine; the comparison was meaningless.
+
+  The manifest now records the SHA-256 of every entry as it is written, hashed in the
+  same pass that copies it. Verification therefore compares what arrived against what was
+  read — which is the failure it exists for — and **every entry is checkable** rather
+  than a third of them: 10,789 of 10,789 on the archive that exposed this.
+
+  The database's hashes are still read, for the one question they can answer: which files
+  the rows point at, and so which are missing.
+
+  **Archive format 2.** A v1.0.0 archive is refused by `--verify` rather than reported as
+  corrupt, since its hashes cannot be compared against anything; `tome restore --force`
+  will still load one, because its files and tables were always intact. Take a fresh
+  backup.
+
+  Found by running the thing on 10,774 real files, which no fixture had done — every
+  fixture wrote bytes the test itself had hashed. There is now one that stores a page
+  gzipped while recording the plaintext hash, exactly as the fetcher does, and it fails
+  if the old behavior comes back.
+
 
 ## [v1.0.0] — 2026-08-24
 
