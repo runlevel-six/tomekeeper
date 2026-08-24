@@ -61,4 +61,4 @@ patches:
 #   digest: sha256:...
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
-    newTag: v1.0.0
+    newTag: v1.0.1

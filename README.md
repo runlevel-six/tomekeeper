@@ -159,10 +159,10 @@ things that will confuse you once.
 Releases are git tags, and the container image carries the same string:
 
 ```
-ghcr.io/runlevel-six/tomekeeper:v1.0.0
+ghcr.io/runlevel-six/tomekeeper:v1.0.1
 ```
 
-That is the tag `v1.0.0`, it is what `tome version` reports inside the image, and it
+That is the tag `v1.0.1`, it is what `tome version` reports inside the image, and it
 is what `deploy/base/kustomization.yaml` pins. One identifier in git, in the
 registry, in a Deployment, and in a log line — and CI refuses to publish a version
 it has published before, so a version number always means one set of bytes.
