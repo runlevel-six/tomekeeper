@@ -62,6 +62,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "refetch":
 		return refetch(args[1:], stdout, stderr)
 
+	case "backup":
+		return backupCmd(args[1:], stdout, stderr)
+	case "restore":
+		return restoreCmd(args[1:], stdout, stderr)
+
 	case "prune":
 		return prune(args[1:], stdout, stderr)
 
@@ -117,6 +122,8 @@ Subcommands:
   import        Import a reading library exported from another system
   export        Write the archive as a file the import command reads back
   reextract     Re-extract stored pages at the current extractor version
+  backup        Write one archive holding the database and the file tree
+  restore       Load an archive written by backup, with the writers stopped
   user          Manage accounts: add, list, delete, set a password
   domain-rule   Manage per-domain extraction overrides
   archive       Report on what the archive holds

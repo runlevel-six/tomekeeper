@@ -107,6 +107,54 @@ jobs:
             exit 1
           fi
 
+      # The restore drill §8 asks for, on every build: a backup taken from a real
+      # database, restored into an empty one, and asserted to be the same archive.
+      # "A backup that has never been restored is not a backup" — and before this
+      # the only restore this project had ever done was by hand, once, against one
+      # night's dump.
+      #
+      # The round-trip test covers the format; this covers the *commands*, which is
+      # where both of the migrate bugs lived: the wiring was uncovered while the
+      # pieces it wires were well tested.
+      - name: Restore drill
+        env:
+          TOME_DATABASE_URL: postgres://tome:tome@localhost:5432/tome_drill?sslmode=disable
+          TOME_BLOB_ROOT: ${{ runner.temp }}/drill-blobs
+          TOME_USERNAME: drill
+          TOME_PASSWORD: drill-password
+        run: |
+          set -euo pipefail
+          go build -tags nodynamic -o "$RUNNER_TEMP/tome" ./cmd/tome
+
+          export PGPASSWORD=tome
+          psql -h localhost -U tome -d postgres -c 'DROP DATABASE IF EXISTS tome_drill'
+          psql -h localhost -U tome -d postgres -c 'CREATE DATABASE tome_drill'
+          mkdir -p "$TOME_BLOB_ROOT/articles/2026/08/drill"
+          printf 'the stored page' > "$TOME_BLOB_ROOT/articles/2026/08/drill/raw.html.gz"
+
+          "$RUNNER_TEMP/tome" migrate
+          "$RUNNER_TEMP/tome" backup --to "$RUNNER_TEMP/drill.tar"
+          "$RUNNER_TEMP/tome" backup --verify "$RUNNER_TEMP/drill.tar"
+
+          # Restore into a database that has never seen this archive, and into an
+          # empty tree, then assert the file came back byte for byte. That last
+          # assertion is the one the database alone cannot give you.
+          psql -h localhost -U tome -d postgres -c 'DROP DATABASE IF EXISTS tome_drill_restored'
+          psql -h localhost -U tome -d postgres -c 'CREATE DATABASE tome_drill_restored'
+          restored="$RUNNER_TEMP/drill-restored"
+          TOME_DATABASE_URL=postgres://tome:tome@localhost:5432/tome_drill_restored?sslmode=disable \
+            TOME_BLOB_ROOT="$restored" "$RUNNER_TEMP/tome" restore "$RUNNER_TEMP/drill.tar"
+          diff -r "$TOME_BLOB_ROOT" "$restored"
+
+          # And a truncated archive must be refused rather than restored. This is
+          # the failure that shipped once as a documented procedure: a copy that
+          # delivered 24% of the bytes and exited 0.
+          head -c $(( $(stat -c%s "$RUNNER_TEMP/drill.tar") / 2 )) "$RUNNER_TEMP/drill.tar" > "$RUNNER_TEMP/short.tar"
+          if "$RUNNER_TEMP/tome" backup --verify "$RUNNER_TEMP/short.tar"; then
+            echo "::error::a truncated archive verified as whole"
+            exit 1
+          fi
+
       # The real extraction corpus is third-party content and lives outside this
       # repository, so it is absent on contributor PRs and present only where
       # TOME_TEST_CORPUS_DIR is supplied. TestCorpus already fails when the

@@ -605,6 +605,74 @@ See the README in `internal/extract/testdata/pages/` for the file format, and
 [Reprocess the archive](../how-to/reprocess-the-archive.md) for applying an
 extraction change once it is made.
 
+### `tome backup`
+
+```
+tome backup [--to PATH] [--force] [--quiet]
+tome backup --verify PATH
+```
+
+Writes one archive holding both halves of the archive — every table, the whole file
+tree, and a manifest — or checks one that exists.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--to` | standard output | Where to write. **A directory means "you choose the name"**: `tome-N.tar`, rotating by day of the week, which is how a scheduled job rotates without a shell to expand `date` in. A file path writes exactly that. Either way it goes through a `.partial` file and is moved into place. |
+| `--force` | off | Replace the file named by `--to`. Meaningless without it, and unnecessary for a rotating slot. |
+| `--verify` | — | Check an archive and exit. **Needs no database and no configuration** — only the file. |
+| `--quiet` | off | Report nothing but failures. |
+
+The layout inside is a tar: a `README`, one gzipped `COPY` file per table under `db/`,
+the tree under `blobs/`, and `manifest.json` last — last because it records what was
+actually written, so verification is one streaming pass with no seeking.
+
+**The manifest carries a hash for every file the database records one for**:
+`assets.sha256` for an image, `articles.raw_blob_sha` for a fetched page. Verification
+therefore compares the copy against what the archive claimed about itself *before* it
+was made, rather than against something this program computed while copying. The
+`index.html` and `meta.json` files extraction writes are carried and reported as
+unverifiable, because no hash for them is recorded anywhere.
+
+**The order it works in is load-bearing.** The database snapshot is taken first, in a
+repeatable-read transaction, and the tree is walked after it — so every row in the
+archive refers to a file that existed when the snapshot was taken, and anything written
+during the walk is extra bytes rather than a row without its file. Files the snapshot
+references that the tree no longer holds — a prune or an expiry running mid-backup — are
+recorded under `missing`, so a faithful copy of an incomplete archive still verifies
+while saying which rows will restore without their bytes.
+
+Two things are deliberately absent. The job queue, because the schedulers rebuild it
+within a minute and a restored queue chases articles that may have been pruned; and
+`goose_db_version`, because a restore migrates before it loads.
+
+Adding a table to the schema without adding it here **fails the backup**, by name. A
+backup missing a table is the failure that is only discovered by the restore that needed
+it.
+
+### `tome restore`
+
+```
+tome restore PATH [--force] [--quiet]
+```
+
+Loads an archive: migrates the schema, replaces every table it carries in one
+transaction, resets the id sequences, then unpacks the tree.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--force` | off | Replace an archive this database already holds. Without it, a database with any articles in it is refused. |
+| `--quiet` | off | Report nothing but failures. |
+
+**Stop the writers first.** It truncates the tables it loads. That is also why this is a
+command and never a route in the web interface: nothing inside the application can
+arrange for the application to be stopped.
+
+It takes a path rather than reading standard input, unlike backup, which streams. The
+asymmetry is deliberate: the manifest is at the end of the archive, and reading it first
+is what lets every refusal happen before anything has changed.
+
+See [Back up and restore](../how-to/back-up-and-restore.md).
+
 ### `tome audit`
 
 ```

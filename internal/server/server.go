@@ -55,6 +55,12 @@ type Deps struct {
 	// rather than refusing to start.
 	Blobs blob.Store
 
+	// BlobRoot is the same tree as a path, which a backup needs and image serving
+	// does not: one walks the tree, the other asks it for a file by name. Empty means
+	// no backup can be taken, and the route says so rather than offering an archive
+	// with no files in it.
+	BlobRoot string
+
 	// Jobs queues work for the worker pool. Insert-only: the web interface enqueues
 	// re-extraction when somebody presses reprocess on a domain rule, and runs none
 	// of it — the same role `tome reextract` has.
@@ -92,6 +98,7 @@ type Server struct {
 	sessions  session.Store
 	search    store.SearchIndex
 	blobs     blob.Store
+	blobRoot  string
 	fetch     *httpclient.Client
 	jobs      *river.Client[pgx.Tx]
 	assetURLs *asseturl.Signer
@@ -109,7 +116,8 @@ func New(cfg *config.Config, log *slog.Logger, deps Deps, checks ...Check) *Serv
 	s := &Server{
 		log: log, cfg: cfg, checks: checks,
 		store: deps.Store, sessions: deps.Sessions,
-		search: deps.Search, blobs: deps.Blobs, fetch: deps.Fetch, jobs: deps.Jobs,
+		search: deps.Search, blobs: deps.Blobs, blobRoot: deps.BlobRoot,
+		fetch: deps.Fetch, jobs: deps.Jobs,
 		assetURLs: deps.AssetURLs,
 	}
 	if s.search == nil && s.store != nil {
@@ -185,6 +193,12 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 	mux.HandleFunc("POST /users", s.requireAdmin(s.handleCreateUser))
 	mux.HandleFunc("POST /users/{id}/link", s.requireAdmin(s.handleIssueSetupLink))
 	mux.HandleFunc("POST /users/{id}/delete", s.requireAdmin(s.handleDeleteUser))
+	// Both halves of the archive, as one file. Administrators only, because it is the
+	// household's bytes rather than one reader's: every reader's articles, and the
+	// fetched pages no account owns. **There is deliberately no restore here** — a
+	// restore replaces every table and needs the writers stopped, which nothing
+	// reachable from inside the running application can arrange.
+	mux.HandleFunc("GET /backup", s.requireAdmin(s.handleBackup))
 	mux.HandleFunc("POST /logout", s.handleLogout)
 
 	// Reading views. Every one of these goes through requireUser; that is the

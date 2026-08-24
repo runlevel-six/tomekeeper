@@ -85,6 +85,43 @@
     </tbody>
   </table>
 
+  {{/*
+    The whole archive as one file, offered here rather than beside the export in
+    Settings — and the two sentences below exist because those two downloads are
+    nothing like each other. An export is your reading, portable into another
+    reader. This is the household's bytes, restorable onto a new machine and
+    readable by nothing but this software.
+
+    There is no restore here on purpose: it replaces every table and needs the
+    writers stopped, which nothing inside a running server can arrange.
+  */}}
+  <section class="backup">
+    <h2>Backup</h2>
+    {{if .Backup.Available}}
+      <p class="note">
+        Every table and every stored file — the fetched pages and the images —
+        in one archive, with a hash recorded for each so it can be checked later.
+        This is the whole household's archive, not one reader's reading:
+        <a href="/export">Export</a> under Settings is the portable copy of what
+        <em>you</em> read.
+      </p>
+      <p>
+        <a href="/backup" download>Download {{.Backup.Filename}}</a>
+      </p>
+      <p class="note">
+        Check it wherever it lands, with no database and no configuration:
+        <code>tome backup --verify {{.Backup.Filename}}</code>. Restoring is
+        <code>tome restore</code> and stays a command — it replaces every table,
+        so the server and worker have to be stopped first.
+      </p>
+    {{else}}
+      <p class="note">
+        This instance has no archive tree configured, so there is nothing to back
+        up. <code>TOME_BLOB_ROOT</code> is where the files live.
+      </p>
+    {{end}}
+  </section>
+
   <section class="add">
     <h2>Add someone</h2>
     <p class="note">

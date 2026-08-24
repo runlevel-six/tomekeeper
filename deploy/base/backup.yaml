@@ -1,15 +1,20 @@
-# Nightly database dump.
+# Nightly backup: both halves, in one file, verified.
 #
-# This backs up the *index*, not the archive. The blob tree — the stored pages,
-# extracted bodies and images — is much larger and is not something a CronJob
-# inside the cluster should be shipping anywhere. Replicate it separately, with
-# something built for it (restic, rclone, an RBD mirror). What is here is the
-# part that is small, changes constantly, and is unrecoverable: which feeds you
-# subscribe to, what you have read, what you saved.
+# This used to dump the database only, with the blob tree left to "replicate it
+# separately, with something built for it". That was the honest description of a
+# gap: the tree is the part that cannot be rebuilt — a page fetched from a site
+# that has since changed or gone is gone with it — and the recipe for copying it
+# was a paragraph a person ran by hand, which had been run exactly once.
 #
-# The dump lands on its own volume rather than in the blob tree, so that a
-# restore never depends on the thing being restored, and so a runaway dump
-# cannot fill the archive.
+# `tome backup` writes both halves as one archive and records a hash for every
+# file the database records one for, so `tome backup --verify` can prove it is
+# whole. That matters because the failure this replaces was silent: a documented
+# `kubectl run --rm -i` streaming a tar delivered 24% of the bytes and exited 0.
+#
+# It runs the application's own image, which is what makes the same command work
+# here, under Compose, and on a laptop. The image is distroless — no shell — so
+# the rotating filename comes from pointing --to at a directory rather than from
+# expanding date(1) in a script.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -21,7 +26,12 @@ spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests:
-      storage: 5Gi
+      # Seven rotating archives, each holding the whole archive: the database
+      # (compressed, tens of megabytes) plus every byte of the tree (hundreds).
+      # Sized for an archive of a few thousand articles with room to grow — do
+      # the arithmetic before assuming it is enough, because unlike the old
+      # database-only dumps this scales with the images.
+      storage: 20Gi
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -44,38 +54,52 @@ spec:
       template:
         spec:
           restartPolicy: OnFailure
+          # The blob volume is ReadWriteOnce, so this has to land on the node
+          # already mounting it. Expressed rather than left to luck: on a
+          # single-node cluster it is free, and adding a second node without
+          # this would break the backup and nothing else.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: tomekeeper
+                      app.kubernetes.io/component: worker
+                  topologyKey: kubernetes.io/hostname
           securityContext:
             runAsNonRoot: true
-            runAsUser: 999
-            runAsGroup: 999
-            fsGroup: 999
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
             seccompProfile:
               type: RuntimeDefault
           containers:
-            - name: dump
-              image: postgres:16-alpine
+            - name: backup
+              image: ghcr.io/runlevel-six/tomekeeper:v0.17.2
+              args: ["backup", "--to", "/backups"]
+              envFrom:
+                - configMapRef:
+                    name: tomekeeper-config
               env:
-                - name: PGPASSWORD
+                # Composed the same way every other container here does it, so
+                # there is one place the connection string's shape is decided.
+                - name: POSTGRES_PASSWORD
                   valueFrom:
                     secretKeyRef: { name: tomekeeper, key: postgres-password }
-              command:
-                - sh
-                - -euc
-                - |
-                  # Custom format, because it is compressed and pg_restore can
-                  # pull a single table out of it. Written to a temporary name
-                  # and moved into place, so an interrupted dump never leaves a
-                  # truncated file that looks like a backup.
-                  day=$(date +%u)
-                  out=/backups/tome-$day.dump
-                  pg_dump -h postgres -U tome -d tome -Fc -f "$out.partial"
-                  mv "$out.partial" "$out"
-                  ls -lh /backups
+                - name: TOME_DATABASE_URL
+                  value: postgres://tome:$(POSTGRES_PASSWORD)@postgres:5432/tome?sslmode=disable
               volumeMounts:
                 - name: backups
                   mountPath: /backups
+                # Read-only: a backup reads the archive and must not be able to
+                # write into the thing it is copying.
+                - name: blobs
+                  mountPath: /var/lib/tomekeeper
+                  readOnly: true
               resources:
                 requests: { cpu: 50m, memory: 64Mi }
+                # The database half is buffered a table at a time and the tree is
+                # streamed, so this does not grow with the archive.
                 limits: { memory: 512Mi }
               securityContext:
                 allowPrivilegeEscalation: false
@@ -85,3 +109,6 @@ spec:
             - name: backups
               persistentVolumeClaim:
                 claimName: tomekeeper-backups
+            - name: blobs
+              persistentVolumeClaim:
+                claimName: tomekeeper-blobs

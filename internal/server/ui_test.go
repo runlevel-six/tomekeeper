@@ -208,6 +208,7 @@ func TestEveryTemplateClassIsStyledOrExempt(t *testing.T) {
 		"setpassword":     "page name; framed by .page",
 		"users":           "page name; framed by .page",
 		"add":             "section name on Accounts",
+		"backup":          "section name on Accounts, framed by .page",
 		"confirm":         "section name on Accounts",
 		"issued":          "section name on Accounts",
 		"explain-ladder":  "section name on the explanation",

@@ -32,7 +32,77 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`tome backup` writes both halves of the archive as one file, and can prove it is
+  whole.** Every table, every stored page and image, and a manifest recording a hash
+  for each file the database records one for — so `tome backup --verify` compares the
+  copy against what the archive claimed about itself before the copy was made. That
+  check needs no database and no configuration, only the file, because "is this backup
+  any good" has to be answerable on whatever machine it ended up on.
+
+  **This closes the last gap that could lose the archive.** Until now the automated
+  half was a database dump on Kubernetes and nothing else: the blob tree — the fetched
+  pages and images, the part that cannot be rebuilt once a site changes or goes — was a
+  paragraph in a how-to that a person ran by hand, and had been run once. Worse, the
+  documented way of running it silently produced a short copy: a `kubectl run --rm -i`
+  streaming a tar delivered 73.9 MB of 307 MB, 37 files of 8,946, and exit code 0.
+
+  It is a command in the binary rather than a recipe per platform, because an archive
+  runs under Kubernetes, under Compose, or from a systemd unit, and because the image is
+  distroless — no shell, no `tar` — so every recipe necessarily ran outside the
+  application in whatever the platform provided. **`--to` naming a directory means the
+  command picks the rotating filename itself**, which is how a scheduled job rotates
+  with no shell to expand `date` in. With no `--to` it streams to standard output, so
+  piping it into `restic` never lands a local copy at all.
+
+  **The order it works in is load-bearing.** The database snapshot is taken first, in a
+  repeatable-read transaction, and the tree is walked after it — so every row in the
+  archive refers to a file that existed when the snapshot was taken, and anything
+  written during the walk is extra bytes rather than a row without its file. The obvious
+  order produces exactly that inconsistency for every article fetched while the backup
+  runs.
+
+  Two things are deliberately left out, each for a stated reason. The job queue, because
+  a restored queue chases articles that may since have been pruned and the schedulers
+  rebuild it within a minute; and `goose_db_version`, because a restore migrates before
+  it loads. **A table added to the schema without being added to the backup fails the
+  backup, by name** — a backup missing a table is otherwise discovered only by the
+  restore that needed it.
+
+- **`tome restore`** loads one: it migrates the schema, replaces every table in one
+  transaction, resets the id sequences, and unpacks the tree. It refuses a database that
+  already holds articles unless `--force`, refuses an archive from a schema it cannot
+  reach, and refuses a format from a newer build — all before anything has changed.
+  Restoring stays a command and never becomes a route, because it needs the writers
+  stopped and nothing inside a running application can arrange that.
+
+- **A backup can be downloaded from the interface**, on the accounts page, for
+  administrators only. It is not the export, and the page says so: an export is your
+  reading, portable into another reader; a backup is the household's bytes. It streams,
+  so it costs the server constant memory whatever the archive weighs.
+
+- **Scheduled everywhere, not just on Kubernetes.** The nightly CronJob now runs
+  `tome backup` from the application's own image with the blob volume mounted
+  **read-only**; Compose gains a `backup` profile for `docker compose run --rm backup`;
+  and the how-to carries a systemd timer whose `ExecStartPost` verifies what it just
+  wrote, because a scheduled backup that is never verified is a scheduled hope.
+
+  The Kubernetes backups volume is **20Gi** in the manifests now, up from 5Gi: seven
+  rotating archives hold the whole archive rather than just the database. Do the
+  arithmetic for your own archive before assuming that is enough — it scales with the
+  images.
+
+- **The restore drill runs in CI**, which is what §8 has always asked for and what
+  nothing has ever done: back up a real database, restore it into an empty one, diff the
+  tree byte for byte, and assert that a truncated archive is refused. The round-trip test
+  covers the format; this covers the commands, which is where the last two bugs lived.
+
+**Off-host copies are still yours to arrange, and that is a limit rather than an
+omission.** One copy on the same disk as the archive protects against a mistake, not
+against the disk. `restic` and `rclone` do that job properly and the how-to shows both;
+where the second copy lives is a decision about somebody's own network.
+
 
 ## [v0.17.2] — 2026-08-23
 

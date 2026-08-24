@@ -96,6 +96,10 @@ func serve(args []string, stderr io.Writer) int {
 	// nil pointer, and putting that in an interface field yields an interface that
 	// is not nil while holding nothing — so the handler's nil check would pass and
 	// the first request would panic instead of returning a 404.
+	// The tree as a path as well as a store: a backup walks it, which the blob
+	// interface deliberately cannot express.
+	deps.BlobRoot = cfg.BlobRoot
+
 	if blobs, err := blob.NewFilesystem(cfg.BlobRoot); err != nil {
 		log.Warn("the archive directory is unavailable, so stored images will not load",
 			"blob_root", cfg.BlobRoot, "error", err)

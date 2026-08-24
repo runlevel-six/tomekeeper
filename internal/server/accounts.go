@@ -34,6 +34,11 @@ type usersPage struct {
 
 	// Confirm is the account a deletion is being asked about, or nil.
 	Confirm *store.AccountSummary
+
+	// Backup describes the download this page offers, which is the household's whole
+	// archive rather than one reader's articles — which is why it is here and not
+	// beside the export in Settings.
+	Backup backupSummary
 }
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +182,7 @@ func (s *Server) renderUsers(w http.ResponseWriter, r *http.Request, status int,
 		}
 	}
 	page.Accounts = accounts
+	page.Backup = s.backupSummaryFor()
 
 	// The delete confirmation is asked for by query parameter and answered from
 	// the list already loaded, so a stale id simply asks about nothing.

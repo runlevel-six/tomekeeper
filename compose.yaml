@@ -115,9 +115,38 @@ services:
     # all.
     mem_limit: ${TOME_WORKER_MEMORY:-2g}
 
+  # Both halves of the archive, in one verified file. Not a long-running service:
+  # it runs when asked, which is what a host cron entry or a systemd timer is for.
+  #
+  #     docker compose run --rm backup
+  #
+  # --to names a directory, so the file rotates by day of the week without needing
+  # a shell — the image is distroless and has no date(1) to expand. ./backups is a
+  # bind mount rather than a named volume on purpose: a backup you cannot find in
+  # your own filesystem is a backup you will not copy off this machine, and copying
+  # it off is the whole point. Check one with:
+  #
+  #     docker compose run --rm backup backup --verify /backups/tome-3.tar
+  backup:
+    profiles: ["backup"]
+    image: ${TOME_IMAGE:-ghcr.io/runlevel-six/tomekeeper:v0.17.2}
+    command: ["backup", "--to", "/backups"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      TOME_DATABASE_URL: postgres://tome:${POSTGRES_PASSWORD}@db:5432/tome?sslmode=disable
+      TOME_BLOB_ROOT: /var/lib/tomekeeper
+      TOME_LOG_FORMAT: ${TOME_LOG_FORMAT:-text}
+    volumes:
+      # Read-only: a backup reads the archive and has no business writing into the
+      # thing it is copying.
+      - blobs:/var/lib/tomekeeper:ro
+      - ./backups:/backups
+
 volumes:
   db-data:
-  # Every fetched page and every archived image. This is the larger half of the
-  # archive and the half no backup job here covers — see
-  # docs/how-to/back-up-and-restore.md.
+  # Every fetched page and every archived image: the larger half of the archive,
+  # and the half that cannot be rebuilt. The `backup` service above covers it —
+  # see docs/how-to/back-up-and-restore.md.
   blobs:
