@@ -201,26 +201,53 @@ func NewWorkerClient(d Deps) (*river.Client[pgx.Tx], error) {
 	return client, nil
 }
 
-// ApplyDomainRateLimits loads per-domain rate limits into the HTTP client.
+// ApplyDomainTransport loads the per-domain rate limits and User-Agent
+// overrides into the HTTP client.
 //
 // Called once at worker startup. A rule added later takes effect on the next
 // restart, which is acceptable for something edited by hand a few times a
 // year; the alternative is polling the table on every fetch.
-func ApplyDomainRateLimits(ctx context.Context, s *store.Store, c *httpclient.Client, log *slog.Logger) error {
+//
+// The user_agent column existed in the schema and in the store's types from the
+// beginning and was never sent to anyone — nor settable outside raw SQL, since
+// neither the rules page nor `tome domain-rule` offered it. This is where it
+// starts being applied, and the CLI grew the flag to match; a column that only
+// direct SQL can reach is a setting nobody can find.
+//
+// Both overrides key on the rule's exact domain rather than walking up the way
+// DomainRuleFor does, so a rule for example.com does not cover
+// www.example.com. That is the behavior the rate limits have always had; the
+// User-Agent matches it rather than inventing a second lookup that disagrees.
+func ApplyDomainTransport(
+	ctx context.Context,
+	s *store.Store,
+	c *httpclient.Client,
+	r *render.Renderer,
+	log *slog.Logger,
+) error {
 	rules, err := s.System().ListDomainRules(ctx)
 	if err != nil {
 		return err
 	}
 
-	var applied int
-	for _, r := range rules {
-		if r.RateLimitRPS > 0 {
-			c.SetHostRate(r.Domain, r.RateLimitRPS)
-			applied++
+	var rated, identified int
+	for _, rule := range rules {
+		if rule.RateLimitRPS > 0 {
+			c.SetHostRate(rule.Domain, rule.RateLimitRPS)
+			rated++
+		}
+		if rule.UserAgent != "" {
+			c.SetHostUserAgent(rule.Domain, rule.UserAgent)
+			// A nil Renderer is the ordinary deployment and ignores this.
+			r.SetHostUserAgent(rule.Domain, rule.UserAgent)
+			identified++
 		}
 	}
-	if applied > 0 {
-		log.Info("applied per-domain rate limits", "domains", applied)
+	if rated > 0 {
+		log.Info("applied per-domain rate limits", "domains", rated)
+	}
+	if identified > 0 {
+		log.Info("applied per-domain user agents", "domains", identified)
 	}
 	return nil
 }

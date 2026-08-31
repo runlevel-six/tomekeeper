@@ -56,6 +56,7 @@ Flags for set:
   --strip <css>           Selector to remove before extraction (repeatable)
   --requires-js           Mark the domain as needing a headless render
   --rate <rps>            Per-host request rate, overriding TOME_FETCH_RPS
+  --user-agent <string>   Identity sent to this domain, overriding the default
   --notes <text>          Why this rule exists
 
 Rules apply to subdomains: a rule for example.com covers blog.example.com
@@ -83,14 +84,15 @@ func domainRuleList(args []string, stdout, stderr io.Writer) int {
 		}
 
 		tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "DOMAIN\tSELECTOR\tSTRIP\tJS\tRATE\tNOTES")
+		fmt.Fprintln(tw, "DOMAIN\tSELECTOR\tSTRIP\tJS\tRATE\tUSER-AGENT\tNOTES")
 		for _, r := range rules {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				r.Domain,
 				orDash(r.ContentSelector),
 				orDash(strings.Join(r.StripSelectors, " ")),
 				yesNo(r.RequiresJS),
 				rateOrDash(r.RateLimitRPS),
+				orDash(r.UserAgent),
 				orDash(r.Notes))
 		}
 		_ = tw.Flush()
@@ -126,6 +128,7 @@ func domainRuleShow(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "  strip:    %s\n", orDash(strings.Join(rule.StripSelectors, ", ")))
 		fmt.Fprintf(stdout, "  requires js: %s\n", yesNo(rule.RequiresJS))
 		fmt.Fprintf(stdout, "  rate:     %s\n", rateOrDash(rule.RateLimitRPS))
+		fmt.Fprintf(stdout, "  user agent: %s\n", orDash(rule.UserAgent))
 		fmt.Fprintf(stdout, "  notes:    %s\n", orDash(rule.Notes))
 		return exitOK
 	})
@@ -144,6 +147,8 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 	selector := fs.String("selector", "", "CSS selector for the article body")
 	requiresJS := fs.Bool("requires-js", false, "the domain needs a headless render")
 	rate := fs.Float64("rate", 0, "per-host request rate in requests per second")
+	userAgent := fs.String("user-agent", "",
+		"identity sent to this domain, overriding the default")
 	notes := fs.String("notes", "", "why this rule exists")
 
 	var strip stripList
@@ -169,6 +174,7 @@ func domainRuleSet(args []string, stdout, stderr io.Writer) int {
 			StripSelectors:  strip,
 			RequiresJS:      *requiresJS,
 			RateLimitRPS:    *rate,
+			UserAgent:       *userAgent,
 			Notes:           *notes,
 		}); err != nil {
 			fmt.Fprintf(stderr, "tome domain-rule: %v\n", err)

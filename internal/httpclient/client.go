@@ -9,7 +9,10 @@
 //   - a per-host token bucket, so no single origin ever sees a burst
 //   - a global concurrency cap, so the machine cannot be the burst either
 //   - robots.txt, fetched once per host and cached
-//   - an honest, contactable User-Agent, with no browser spoofing
+//   - an honest, contactable User-Agent, never claiming to be a person at a
+//     browser. A domain rule may override it per host, for origins that filter
+//     on the shape of the string rather than on conduct — see SetHostUserAgent
+//     for what that concession is and where its line is.
 //   - retries that honor Retry-After, and that give up rather than insist
 //
 // The per-host limit is the one that matters most. A global limit protects
@@ -105,6 +108,11 @@ type Client struct {
 	limiters map[string]*rate.Limiter
 	robots   map[string]*robotsEntry
 
+	// userAgents overrides the identity sent to one host, from a domain rule.
+	// Empty for every host that has not been given one, which is nearly all of
+	// them.
+	userAgents map[string]string
+
 	// sleep and jitter are fields so that tests can make backoff instant and
 	// deterministic. Production uses the real clock and real randomness.
 	sleep  func(context.Context, time.Duration) error
@@ -197,6 +205,7 @@ func New(opts Options) *Client {
 		defaultRPS:  opts.DefaultRPS,
 		limiters:    make(map[string]*rate.Limiter),
 		robots:      make(map[string]*robotsEntry),
+		userAgents:  make(map[string]string),
 		sleep:       sleepCtx,
 		jitter:      defaultJitter,
 	}
@@ -233,6 +242,47 @@ func (c *Client) SetHostRate(host string, rps float64) {
 		return
 	}
 	c.limiters[host] = newLimiter(rps)
+}
+
+// SetHostUserAgent overrides the identity sent to one host, from a domain rule.
+//
+// Passing an empty string restores the default. Set at startup alongside the
+// per-host rate limits, for the same reason and with the same caveat: a rule
+// added later takes effect on the next restart.
+//
+// This is the deliberate exception to the no-spoofing rule in the package
+// comment, and it is narrow on purpose. Some origins now filter on the *shape*
+// of the User-Agent rather than on behavior — measured against arstechnica.com
+// on 2026-08-31, `tomekeeper/1.0.1 (+url)` was refused at the edge with a bare
+// 403 while `Mozilla/5.0 (compatible; SomeBot/1.0; +url)` was served, so the
+// filter rejects honesty rather than rejecting bots. The remedy is the
+// long-standing `Mozilla/5.0 (compatible; name/version; +url)` convention that
+// Googlebot and bingbot use, where the Mozilla token is vestigial and the
+// parenthetical still names the crawler and how to reach its operator.
+//
+// What must not happen here is a UA that claims to be a person at a browser.
+// The rule stays contactable-and-honest; the concession is only to the costume
+// the filter insists on, and only for the domains an operator has said it for.
+func (c *Client) SetHostUserAgent(host, ua string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if ua == "" {
+		delete(c.userAgents, host)
+		return
+	}
+	c.userAgents[host] = ua
+}
+
+// userAgentFor is the identity to send to a host: its override, or the default.
+func (c *Client) userAgentFor(host string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if ua, ok := c.userAgents[host]; ok {
+		return ua
+	}
+	return c.userAgent
 }
 
 // Get issues a GET request subject to robots.txt, rate limiting, and retries.
@@ -371,8 +421,10 @@ func (c *Client) attempt(ctx context.Context, req Request) (*http.Response, erro
 			httpReq.Header.Add(k, v)
 		}
 	}
-	// Set last so a caller cannot accidentally override the honest identity.
-	httpReq.Header.Set("User-Agent", c.userAgent)
+	// Set last so a caller cannot accidentally override the honest identity. A
+	// deliberate per-host override goes through SetHostUserAgent, which is
+	// configuration rather than a header a caller happened to pass.
+	httpReq.Header.Set("User-Agent", c.userAgentFor(httpReq.URL.Host))
 
 	resp, err := c.hc.Do(httpReq)
 	if err != nil {
@@ -438,7 +490,10 @@ func (c *Client) robotsAllows(ctx context.Context, target *url.URL) (bool, error
 	if path == "" {
 		path = "/"
 	}
-	return data.TestAgent(path, c.userAgent), nil
+	// Matched against the identity this host is actually sent, not the default:
+	// a host with an override would otherwise be tested under a name it never
+	// sees, and a site naming that name in robots.txt would go unhonored.
+	return data.TestAgent(path, c.userAgentFor(target.Host)), nil
 }
 
 func (c *Client) robotsData(ctx context.Context, target *url.URL) (*robotstxt.RobotsData, error) {

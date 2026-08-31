@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -468,5 +469,76 @@ func TestContextCancellation(t *testing.T) {
 
 	if _, err := c.Do(ctx, Request{URL: srv.URL + "/slow", SkipRobots: true}); err == nil { //nolint:bodyclose // asserts the call fails, so the discarded response is nil
 		t.Error("Do() = nil, want the canceled context to abandon the request")
+	}
+}
+
+func TestSetHostUserAgent(t *testing.T) {
+	c := New(Options{UserAgent: "tomekeeper/test", DefaultRPS: 1})
+
+	if got, want := c.userAgentFor("plain.example.com"), "tomekeeper/test"; got != want {
+		t.Errorf("userAgentFor(unoverridden host) = %q, want the default %q", got, want)
+	}
+
+	const disguised = "Mozilla/5.0 (compatible; tomekeeper/test; +https://example.com)"
+	c.SetHostUserAgent("picky.example.com", disguised)
+
+	if got := c.userAgentFor("picky.example.com"); got != disguised {
+		t.Errorf("userAgentFor(overridden host) = %q, want %q", got, disguised)
+	}
+	// The override is per host and must not leak to any other.
+	if got, want := c.userAgentFor("plain.example.com"), "tomekeeper/test"; got != want {
+		t.Errorf("userAgentFor(other host) = %q, want the default %q", got, want)
+	}
+
+	// An empty string restores the default, so clearing the field in a domain
+	// rule actually clears the override.
+	c.SetHostUserAgent("picky.example.com", "")
+	if got, want := c.userAgentFor("picky.example.com"), "tomekeeper/test"; got != want {
+		t.Errorf("userAgentFor after reset = %q, want the default %q", got, want)
+	}
+}
+
+// The override has to reach the wire, not just the lookup: the whole point is
+// what the origin is told.
+func TestPerHostUserAgentIsSent(t *testing.T) {
+	const disguised = "Mozilla/5.0 (compatible; tomekeeper/test; +https://example.com)"
+
+	var got struct {
+		robots  string
+		article string
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/robots.txt" {
+			got.robots = r.UserAgent()
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		got.article = r.UserAgent()
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, Options{MaxAttempts: 1, DefaultRPS: 100})
+
+	host, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parsing the test server URL: %v", err)
+	}
+	c.SetHostUserAgent(host.Host, disguised)
+
+	resp, err := c.Get(t.Context(), srv.URL+"/article", nil)
+	if err != nil {
+		t.Fatalf("Get() = %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if got.article != disguised {
+		t.Errorf("article User-Agent = %q, want %q", got.article, disguised)
+	}
+	// robots.txt too. A host that filters on the User-Agent refuses that file
+	// the same way it refuses an article, and being unable to read the rules is
+	// how a fetcher ends up ignoring them.
+	if got.robots != disguised {
+		t.Errorf("robots.txt User-Agent = %q, want %q", got.robots, disguised)
 	}
 }

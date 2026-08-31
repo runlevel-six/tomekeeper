@@ -36,7 +36,27 @@ happens, because it is the one change that wants a follow-up command
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- A domain rule's `user_agent` is now sent to that domain. The column has existed
+  since the table did and was never applied to a request, nor settable outside raw
+  SQL. It now reaches both the polite HTTP client and the headless renderer, so a
+  flagged domain is told the same thing however it is fetched, and `robots.txt` for
+  that host is requested under the same identity it is tested against.
+- `tome domain-rule set --user-agent <string>`, and the value in `list` and `show`.
+  Without the flag the command's replace-in-place upsert silently cleared any value
+  already stored.
+
+### Why you would use it
+
+Some origins filter on the *shape* of the User-Agent rather than on conduct. Measured
+against arstechnica.com on 2026-08-31: `tomekeeper/1.0.1 (+url)` was refused at the
+edge with a bare 403 while `Mozilla/5.0 (compatible; SomeBot/1.0; +url)` was served —
+the filter rejects honesty, not bots. The remedy is the long-standing
+`Mozilla/5.0 (compatible; name; +url)` convention Googlebot and bingbot use, where the
+Mozilla token is vestigial and the parenthetical still names the fetcher and how to
+reach its operator. The default identity is unchanged, and a rule that claims to be a
+person at a browser is still the wrong answer.
 
 ## [v1.0.1] — 2026-08-24
 

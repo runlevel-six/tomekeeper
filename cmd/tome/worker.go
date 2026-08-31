@@ -65,12 +65,6 @@ func worker(args []string, stderr io.Writer) int {
 	s := store.New(pool)
 	client := newHTTPClient(cfg)
 
-	// Per-domain rate limits come from domain rules, loaded once at startup.
-	if err := jobs.ApplyDomainRateLimits(ctx, s, client, log); err != nil {
-		log.Error("cannot load domain rules", "error", err)
-		return exitFailure
-	}
-
 	// The same User-Agent the polite client sends, so a site being rendered is told
 	// exactly what a site being fetched is told. Built from the same call rather than a
 	// second string, because two honest user agents that disagree are one dishonest one.
@@ -90,6 +84,19 @@ func worker(args []string, stderr io.Writer) int {
 	} else {
 		log.Info("headless rendering is available",
 			"browser", cfg.RenderBrowserURL, "concurrency", cfg.RenderConcurrency)
+	}
+
+	// Per-domain rate limits and User-Agent overrides come from domain rules,
+	// loaded once at startup.
+	//
+	// After the renderer is built, and given it, because a User-Agent override has
+	// to reach both: a flagged domain is fetched through the browser, so applying
+	// the override to the HTTP client alone would leave exactly those sites being
+	// told something different. One load, both destinations, no way for them to
+	// drift apart.
+	if err := jobs.ApplyDomainTransport(ctx, s, client, renderer, log); err != nil {
+		log.Error("cannot load domain rules", "error", err)
+		return exitFailure
 	}
 
 	riverClient, err := jobs.NewWorkerClient(jobs.Deps{

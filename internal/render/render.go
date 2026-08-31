@@ -52,6 +52,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -116,6 +118,54 @@ type Renderer struct {
 	userAgent string
 
 	timeout time.Duration
+
+	// mu guards userAgents, the per-host overrides from domain rules. Kept in step
+	// with the HTTP client's own overrides by the worker's startup, because a site
+	// rendered and the same site fetched must be told the same thing — two honest
+	// user agents that disagree are one dishonest one.
+	mu         sync.Mutex
+	userAgents map[string]string
+}
+
+// SetHostUserAgent overrides the identity sent to one host, from a domain rule.
+//
+// The mirror of the HTTP client's method of the same name, and populated from the
+// same rules at the same moment. Passing an empty string restores the default.
+func (r *Renderer) SetHostUserAgent(host, ua string) {
+	if r == nil {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.userAgents == nil {
+		r.userAgents = make(map[string]string)
+	}
+	if ua == "" {
+		delete(r.userAgents, host)
+		return
+	}
+	r.userAgents[host] = ua
+}
+
+// userAgentFor is the identity to send to a host: its override, or the default.
+//
+// A URL that will not parse falls back to the default rather than failing the
+// render: the caller has already fetched robots.txt for it, so it parsed once.
+func (r *Renderer) userAgentFor(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return r.userAgent
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if ua, ok := r.userAgents[parsed.Host]; ok {
+		return ua
+	}
+	return r.userAgent
 }
 
 // Options configure a Renderer.
@@ -213,7 +263,7 @@ func (r *Renderer) Render(ctx context.Context, url string) (Page, error) {
 	var html string
 	err := chromedp.Run(browserCtx,
 		fetch.Enable(),
-		emulation.SetUserAgentOverride(r.userAgent),
+		emulation.SetUserAgentOverride(r.userAgentFor(url)),
 		chromedp.Navigate(url),
 		// The document, after scripts have run, exactly as the browser holds it.
 		chromedp.OuterHTML("html", &html, chromedp.ByQuery),
