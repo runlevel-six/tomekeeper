@@ -103,9 +103,8 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 	if err := w.client.Permit(ctx, article.URLCanonical); err != nil {
 		if errors.Is(err, httpclient.ErrDisallowedByRobots) && !interrupted(ctx) {
 			log.Info("article disallowed by robots.txt, so it is not rendered either")
-			recCtx, cancel := recording(ctx)
-			defer cancel()
-			return w.store.RecordFetchFailure(recCtx, id, store.FetchSkipped, "disallowed by robots.txt")
+			return recordFetchFailure(ctx, w.store, id, store.FetchSkipped,
+				"disallowed by robots.txt", log)
 		}
 		return err
 	}
@@ -140,10 +139,8 @@ func (w *RenderArticleWorker) Work(ctx context.Context, job *river.Job[RenderArt
 		// The page's own failure. Recorded, so it lands in the attention queue where a
 		// site that needs a rule belongs.
 		log.Warn("render failed", "error", err)
-		recCtx, cancel := recording(ctx)
-		defer cancel()
-		return w.store.RecordFetchFailure(recCtx, id, store.FetchFailed,
-			"rendering: "+describe(err, "the render ran out of time"))
+		return recordFetchFailure(ctx, w.store, id, store.FetchFailed,
+			"rendering: "+describe(err, "the render ran out of time"), log)
 	}
 
 	raw := []byte(page.HTML)

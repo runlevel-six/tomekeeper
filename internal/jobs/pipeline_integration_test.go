@@ -306,9 +306,133 @@ func TestFetchFailureIsRecorded(t *testing.T) {
 		t.Errorf("FetchStatus = %q, want %q", article.FetchStatus, store.FetchFailed)
 	}
 
-	// Nothing was extracted, and that is the correct outcome.
+	// Nothing was extracted, and that is the correct outcome *because this
+	// article has no feed item behind it*. When one exists and carries a body,
+	// the feed's copy stands in — see TestFetchFailureFallsBackToTheFeedBody.
 	if _, err := s.CurrentContent(t.Context(), articleID, store.Household()); err == nil {
 		t.Error("a body was stored for an article that could not be fetched")
+	}
+}
+
+// A page that never arrived does not mean an article with nothing in it: the feed
+// that carried the article often carried its text too, and for a full-text feed it
+// is the whole thing. The ladder's fourth rung is written for exactly this, and
+// until the fetch worker enqueued an extraction for a failed fetch, nothing could
+// reach it — no sweep looks at an article with no stored page.
+func TestFetchFailureFallsBackToTheFeedBody(t *testing.T) {
+	_, s, alice := dbtest.SetupWithUser(t)
+	ctx := t.Context()
+
+	// Long enough to clear the ladder's floor, which is what a full-text feed
+	// carries and a two-line summary does not.
+	var (
+		imageFetches int32
+		srv          *httptest.Server
+	)
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/robots.txt":
+			http.NotFound(w, r)
+		case strings.HasSuffix(r.URL.Path, ".png"):
+			// The picture is served even though the article is not, which is the
+			// real shape of this: the filter sits in front of the pages, and the
+			// images come from a CDN that has never heard of it.
+			atomic.AddInt32(&imageFetches, 1)
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(testImagePNG(t))
+		default:
+			// What an edge filter does to a fetcher it does not like.
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer srv.Close()
+
+	feedBody := fmt.Sprintf(`<p>The feed carried the article in full, which is what a
+	subscription to a full-text feed buys. The page itself was refused at the
+	edge, so the only copy of these words that this archive will ever hold is
+	the one that arrived in the feed.</p>
+	<p><img src="%s/figure-1.png" alt="A figure the feed carried"></p>
+	<p>Storing it is strictly better than storing nothing, and it is the reason
+	the extraction ladder has a rung that needs no page at all.</p>`, srv.URL)
+
+	blobs, err := blob.NewFilesystem(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFilesystem() = %v", err)
+	}
+
+	feedID, _, err := s.UpsertFeed(ctx, alice, store.FeedParams{
+		FeedURL: srv.URL + "/feed.xml", Title: "A Full-Text Feed",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFeed() = %v", err)
+	}
+
+	articleID, _, err := s.UpsertArticle(ctx, store.ArticleParams{
+		URLCanonical: srv.URL + "/refused",
+	})
+	if err != nil {
+		t.Fatalf("UpsertArticle() = %v", err)
+	}
+	if _, err := s.InsertFeedItem(ctx, alice, store.FeedItemParams{
+		FeedID: feedID, ArticleID: articleID, GUID: "guid-refused", Content: feedBody,
+	}); err != nil {
+		t.Fatalf("InsertFeedItem() = %v", err)
+	}
+
+	client := httpclient.New(httpclient.Options{AllowPrivate: httpclient.LoopbackAllowance(),
+		UserAgent: "tomekeeper/test", MaxAttempts: 1, DefaultRPS: 100,
+	})
+
+	runPipeline(t, s, blobs, client, func(ctx context.Context, _ *river.Client[pgx.Tx]) {
+		waitFor(t, "the feed body to be extracted", func() bool {
+			_, err := s.CurrentContent(ctx, articleID, store.Household())
+			return err == nil
+		})
+		waitFor(t, "the feed body's image to be localized", func() bool {
+			a, err := s.GetArticle(ctx, articleID)
+			return err == nil && a.AssetsStatus == store.AssetsOK
+		})
+	})
+
+	// The fetch still failed, and still says so. Falling back to the feed must not
+	// paper over the fact that the page never arrived, because the attention queue
+	// is what sends somebody to write the domain rule that fixes it.
+	article, err := s.GetArticle(ctx, articleID)
+	if err != nil {
+		t.Fatalf("GetArticle() = %v", err)
+	}
+	if article.FetchStatus != store.FetchFailed {
+		t.Errorf("FetchStatus = %q, want %q", article.FetchStatus, store.FetchFailed)
+	}
+	if article.FetchError != "HTTP 403" {
+		t.Errorf("FetchError = %q, want %q", article.FetchError, "HTTP 403")
+	}
+
+	content, err := s.CurrentContent(ctx, articleID, store.Household())
+	if err != nil {
+		t.Fatalf("CurrentContent() = %v", err)
+	}
+	if content.ExtractorName != extract.NameFeedBody {
+		t.Errorf("ExtractorName = %q, want %q", content.ExtractorName, extract.NameFeedBody)
+	}
+	if !strings.Contains(content.Text, "full-text feed buys") {
+		t.Errorf("the stored body is not the feed's: %q", content.Text)
+	}
+
+	// The body's image was localized, so what is stored is the picture rather than a
+	// hotlink to somebody else's server — an archive of links being the thing this is
+	// all built to avoid. It works because extraction enqueues localization directly
+	// rather than going through assets_status, which RecordFetchFailure has by then
+	// settled to 'none'; asserted here because that is not obvious from either end,
+	// and a salvaged body is the one case where the two disagree.
+	if article.AssetsStatus != store.AssetsOK {
+		t.Errorf("AssetsStatus = %q, want %q", article.AssetsStatus, store.AssetsOK)
+	}
+	if got := atomic.LoadInt32(&imageFetches); got != 1 {
+		t.Errorf("the feed body's image was fetched %d times, want 1", got)
+	}
+	if strings.Contains(content.HTML, srv.URL) {
+		t.Errorf("the stored body still points at the origin: %q", content.HTML)
 	}
 }
 

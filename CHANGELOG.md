@@ -47,6 +47,20 @@ happens, because it is the one change that wants a follow-up command
   Without the flag the command's replace-in-place upsert silently cleared any value
   already stored.
 
+### Fixed
+
+- A fetch that fails now falls back to the feed's own body. The extraction ladder
+  has always had a rung for a page that never arrived — `viaFeedBody` runs when
+  there is no stored HTML — but nothing enqueued an extraction for a failed fetch,
+  and neither the re-extraction sweep nor `tome reextract --domain` will look at an
+  article with no stored page. The feed's copy was therefore unreachable by every
+  route. Applies to a robots.txt refusal too: that body came from a feed the reader
+  subscribed to, not from crawling the page.
+
+  The failure is still recorded, so the article still appears in the attention queue
+  with the reason it could not be fetched. Nothing overwrites a body that already
+  exists.
+
 ### Why you would use it
 
 Some origins filter on the *shape* of the User-Agent rather than on conduct. Measured
