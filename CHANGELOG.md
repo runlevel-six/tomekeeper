@@ -45,6 +45,14 @@ happens, because it is the one change that wants a follow-up command
   measure the table gives up: the queue's explanatory paragraph, and the feed
   page's import banner. The forms on the feed page were already bounded and do not
   move. The horizontal-scroll rule stays as the safety net for a phone.
+
+  An article's **explanation** and the **accounts** list had it too, through the
+  shared `.page` width. Both are named individually rather than widening `.page`,
+  since the rest of its pages — Settings above all — are prose and controls that
+  the measure is right for. The explanation gets the most room of any page here:
+  its ladder is seven columns ending in a sentence per row, and it is the page
+  somebody opens when something is already wrong, which is a bad moment to be
+  scrolling sideways to read the reason.
 - **"Edit" on a domain rule now lands on the form.** The form sits below the table,
   and the link carried no anchor — so pressing Edit reloaded the page, moved
   nothing, and looked like a dead control unless you knew to scroll. Every route to

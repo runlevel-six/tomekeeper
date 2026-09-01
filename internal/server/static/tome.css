@@ -1480,6 +1480,21 @@ kbd {
    to one of them stays with that page below. */
 .settings, .page { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
 
+/* The two .page pages that are mostly a table, widened the way .attention and
+   .feeds were and for the same reason: 46rem is a measure for prose, and a
+   measure is the wrong width for columns. Named individually rather than by
+   widening .page, because the rest of its pages — Settings above all — are
+   prose and controls that the measure is right for.
+
+   Explain gets the wider of the two. Its ladder is seven columns and the last
+   is a sentence per row ("1,234 characters, only 12% of the page's 9,876 —
+   under the 25% a body this short has to reach"), which is the widest thing any
+   table in this application holds; it is also the page somebody opens precisely
+   when something is already wrong, which is a bad moment to be scrolling
+   sideways to read the reason. */
+.page.explain { max-width: calc(64rem * var(--layout)); }
+.page.users { max-width: calc(58rem * var(--layout)); }
+
 /* Sections, and the rule between adjacent ones. Space alone is not enough on a page
    whose sections are each a heading over a control: the reader has to be able to see
    where one ends, because pressing the wrong button is the risk on all of these. */
