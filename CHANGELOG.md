@@ -34,7 +34,10 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
-## [Unreleased]
+## [v1.2.2] — 2026-09-01
+
+**No migration and no extractor change**, so this is a tag change and an apply.
+Every fix here is in the interface; nothing touches what is stored.
 
 ### Fixed
 
@@ -1325,6 +1328,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
 [Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[v1.2.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.1...v1.2.2
 [v1.2.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.0...v1.2.1
 [v1.2.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.1.0...v1.2.0
 [v1.1.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...v1.1.0
