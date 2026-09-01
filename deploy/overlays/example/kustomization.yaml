@@ -62,3 +62,27 @@ patches:
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
     newTag: v1.2.1
+
+# Who to contact about this fetcher.
+#
+# Deliberately absent from the base: it is a fact about who is running this, not
+# about the software, and a default here would put somebody else's contact
+# address on your requests. It belongs in your overlay, which is why it is one of
+# the things to fill in before deploying.
+#
+# It becomes the "+<url>" in `tomekeeper/<version> (+<url>)`, sent with every
+# outbound request. Unset — which is what you get if you delete this block — the
+# archive still identifies itself by name and version but offers no way to be
+# reached, and "who is hammering my server" then has no answer but an IP address.
+# Any real page of yours will do: a repository, an about page, a mailto.
+#
+# Merged rather than replaced, so the base keeps owning every other setting and a
+# key added by a future release is not silently dropped here.
+#
+# Keep it the same as the contact URL in any per-domain `user_agent` override you
+# write. One fetcher advertising two ways to be reached is worse than one.
+configMapGenerator:
+  - name: tomekeeper-config
+    behavior: merge
+    literals:
+      - TOME_CONTACT_URL=https://example.com/about
