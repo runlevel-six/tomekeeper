@@ -38,11 +38,13 @@ happens, because it is the one change that wants a follow-up command
 
 ### Fixed
 
-- **The attention queue was held to a reading measure.** Six columns of data were
-  capped at the same width as a paragraph of prose, so the table scrolled sideways
-  inside a narrow column on a window with room to spare. It now gets a width suited
-  to a table, and the explanatory paragraph above it keeps the measure the table
-  gives up. The horizontal-scroll rule stays as the safety net for a phone.
+- **The attention queue and the feed list were held to a reading measure.** Their
+  tables — six columns and five — were capped at the same width as a paragraph of
+  prose, so they scrolled sideways inside a narrow column on a window with room to
+  spare. Both now get a width suited to a table, while the prose on them keeps the
+  measure the table gives up: the queue's explanatory paragraph, and the feed
+  page's import banner. The forms on the feed page were already bounded and do not
+  move. The horizontal-scroll rule stays as the safety net for a phone.
 - **"Edit" on a domain rule now lands on the form.** The form sits below the table,
   and the link carried no anchor — so pressing Edit reloaded the page, moved
   nothing, and looked like a dead control unless you knew to scroll. Every route to

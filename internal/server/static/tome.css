@@ -366,7 +366,23 @@ a:focus-visible {
 h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
 h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 
-.stream, .search, .feeds, .reader { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
+.stream, .search, .reader { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
+
+/* The feed list is a table too, and had the same problem as the attention queue:
+   five columns held to the width of a paragraph. Narrower than .attention because
+   there are five columns rather than six and none of them is a URL — the health
+   column's error text is what actually wants the room.
+
+   The forms on this page do not widen with it. .add-feed, .unsubscribe and
+   .import-library each carry their own width already, which is why this is one
+   line rather than a set of them. */
+.feeds { max-width: calc(58rem * var(--layout)); margin: 0 auto; }
+
+/* The import banner is prose — an outcome, and sometimes a list of what could not
+   be stored — so it keeps the measure rather than running the width of the table.
+   Scoped to this page: .import-result is shared with six others whose containers
+   were never widened, and they should not move because this one did. */
+.feeds .import-result { max-width: var(--measure); }
 
 /* The attention queue is six columns of data, not prose, and it was held to the
    same reading measure as the article list until 2026-09-01. A measure is the
