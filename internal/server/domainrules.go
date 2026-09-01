@@ -118,7 +118,19 @@ type domainRuleOutcome struct {
 }
 
 func (s *Server) handleDomainRules(w http.ResponseWriter, r *http.Request) {
-	form := domainRuleForm{}
+	// On for an administrator, which is what the control's own description has
+	// always promised and what the code did not do.
+	//
+	// Unticked, an administrator editing the household's rule does not edit it:
+	// the save is scoped to them, so a selector change silently forks a private
+	// copy and leaves everybody on the old rule, and a fetch setting is refused
+	// outright because a reader may not hold one. Both were reachable by opening
+	// an existing rule and pressing save — the ordinary way to change one.
+	//
+	// Only the GET sets a default. A POST carries whatever the administrator
+	// actually chose, including the deliberate no.
+	account := signedInAccount(r)
+	form := domainRuleForm{ForHousehold: account.IsAdmin()}
 	editing := strings.TrimSpace(r.URL.Query().Get("edit"))
 
 	if editing != "" {
@@ -137,6 +149,10 @@ func (s *Server) handleDomainRules(w http.ResponseWriter, r *http.Request) {
 			// example.com's rule and save it back under the child — which would
 			// copy a rule rather than edit one, and leave the parent's unchanged.
 			form = formFor(rule)
+			// formFor describes a rule, and ownership is not one of its fields, so
+			// the default above has to be reapplied over it. Forgetting this is how
+			// pressing edit turned the control off again.
+			form.ForHousehold = account.IsAdmin()
 		}
 	}
 
@@ -185,7 +201,8 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 			s.renderDomainRules(w, r, http.StatusBadRequest, form.Domain, form,
 				&domainRuleOutcome{Problem: "Whether a page needs a browser, how fast it is " +
 					"fetched, and what this archive calls itself when it asks are the same for " +
-					"everyone — the page is fetched once. Only the selectors can be yours alone."})
+					"everyone — the page is fetched once. Tick “Apply this for everyone” to set " +
+					"one, or leave it off and change the selectors alone."})
 			return
 		}
 		s.log.Error("saving a domain rule failed", "domain", rule.Domain, "error", err)

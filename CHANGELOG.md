@@ -34,6 +34,21 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [Unreleased]
+
+### Fixed
+
+- **Editing a domain rule no longer forks it.** "Apply this for everyone" was
+  never ticked — not on a blank form, not when opening an existing rule — despite
+  its own description promising it is on for an administrator. So the ordinary way
+  to change the household's rule (press edit, change something, save) did not
+  change that rule: a selector edit silently saved a private copy and left
+  everybody on the old one, and a fetch setting was refused with a message that
+  did not name the control that would have allowed it. Now on by default for an
+  administrator, reapplied when a rule is loaded for editing, and the refusal says
+  which control to tick. A POST still carries whatever was actually chosen, so
+  turning it off deliberately works as before.
+
 ## [v1.2.0] — 2026-09-01
 
 **The extractor version is unchanged at 7 and there is no migration**, so nothing

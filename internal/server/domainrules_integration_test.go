@@ -608,3 +608,75 @@ func TestAReadersRuleRefusesAUserAgent(t *testing.T) {
 		t.Errorf("the refusal does not explain why:\n%s", body)
 	}
 }
+
+// Opening an existing household rule presents the ownership control already on.
+//
+// The bug this pins down: it did not, so the ordinary way to change a rule —
+// press edit, change something, save — did not change that rule. A selector edit
+// forked a private copy and left everybody on the old rule; a fetch setting was
+// refused outright, since a reader may not hold one. Both looked like the page
+// mangling a save that was in fact scoped somewhere the operator never asked for.
+func TestEditingAHouseholdRuleStaysTheHouseholdsRule(t *testing.T) {
+	rd, tr := readingFixture(t)
+
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":        {"example.com"},
+		"selector":      {"main"},
+		"for_household": {"true"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("seeding the household rule = %d\n%s", rec.Code, rec.Body.String())
+	}
+
+	// The control comes back on, so the obvious next action is the safe one.
+	edit := rd.body("/domain-rules?edit=example.com")
+	if !strings.Contains(edit, `name="for_household" value="true" checked`) {
+		t.Errorf("the ownership control is not on when editing the household's rule:\n%s", edit)
+	}
+
+	// And a fetch setting saves from that form rather than being refused, which is
+	// what an administrator adding a user agent to an existing rule actually does.
+	const agent = "Mozilla/5.0 (compatible; tomekeeper; +https://example.com)"
+	rec = rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":        {"example.com"},
+		"selector":      {"main"},
+		"user_agent":    {agent},
+		"for_household": {"true"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("saving the edited rule = %d\n%s", rec.Code, rec.Body.String())
+	}
+
+	// Exactly one rule for the domain, and it is still everybody's.
+	rules, err := tr.store.System().RulesVisibleTo(t.Context(), tr.alice)
+	if err != nil {
+		t.Fatalf("RulesVisibleTo() = %v", err)
+	}
+	var found int
+	for _, r := range rules {
+		if r.Domain != "example.com" {
+			continue
+		}
+		found++
+		if r.Mine {
+			t.Error("editing the household's rule forked a private copy")
+		}
+		if r.UserAgent != agent {
+			t.Errorf("user agent = %q, want %q", r.UserAgent, agent)
+		}
+	}
+	if found != 1 {
+		t.Errorf("found %d rules for example.com, want 1", found)
+	}
+}
+
+// A blank form offers the same default, so a new rule an administrator writes is
+// everybody's unless they say otherwise.
+func TestTheBlankRuleFormDefaultsToTheHousehold(t *testing.T) {
+	rd, _ := readingFixture(t)
+
+	body := rd.body("/domain-rules")
+	if !strings.Contains(body, `name="for_household" value="true" checked`) {
+		t.Errorf("the ownership control is not on by default for an administrator:\n%s", body)
+	}
+}
