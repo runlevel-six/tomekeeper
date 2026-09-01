@@ -78,6 +78,12 @@
             {{if .ContentSelector}}<code>{{.ContentSelector}}</code>{{else}}<span class="reason">none</span>{{end}}
             {{if .Strip}}<span class="reason">strips <code>{{.Strip}}</code></span>{{end}}
             {{if .RateLimitRPS}}<span class="reason">{{.RateLimitRPS}} requests/second</span>{{end}}
+            {{/*
+              The string itself is long enough to wreck the column, and the fact that
+              one is set is what a reader of this table wants; the whole value is a
+              hover away, and the edit form shows it in full.
+            */}}
+            {{if .UserAgent}}<span class="reason" title="{{.UserAgent}}">custom user agent</span>{{end}}
           </td>
           <td class="num">{{if .Articles}}{{.Articles}}{{end}}</td>
           <td class="rule-actions">
@@ -163,6 +169,24 @@
         <p class="hint-inline">
           Fractional values are the useful ones: 0.5 is one request every two seconds.
           Read once when the worker starts, so a change here needs a worker restart.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="rule-user-agent">User agent</label>
+        <input type="text" id="rule-user-agent" name="user_agent" autocomplete="off"
+               placeholder="leave blank for the default"
+               value="{{.Form.UserAgent}}">
+        <p class="hint-inline">
+          What this archive calls itself when it asks this site for a page. Leave it
+          blank unless the site refuses the default: some hosts reject anything that
+          does not look like a browser, whatever it says about itself. The form that
+          gets through and stays honest is
+          <code>Mozilla/5.0 (compatible; tomekeeper; +https://your.contact)</code> —
+          the convention Googlebot uses, where the parenthesis still names who is
+          asking. Do not put a real browser's string here; that is a lie to somebody
+          whose server you are using. Read once when the worker starts, so a change
+          here needs a worker restart.
         </p>
       </div>
 

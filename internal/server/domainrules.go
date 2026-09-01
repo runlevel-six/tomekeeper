@@ -90,6 +90,10 @@ type domainRuleForm struct {
 	Rate            string
 	RequiresJS      bool
 
+	// UserAgent overrides the identity sent to this domain. A fetch setting, so
+	// the household's alone — see ErrReaderRuleFetchSettings.
+	UserAgent string
+
 	// ForHousehold asks for the rule everybody gets rather than this reader's own.
 	// Ignored for anybody who is not an administrator.
 	ForHousehold bool
@@ -153,6 +157,7 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 		Strip:           r.PostFormValue("strip"),
 		Notes:           strings.TrimSpace(r.PostFormValue("notes")),
 		Rate:            strings.TrimSpace(r.PostFormValue("rate")),
+		UserAgent:       strings.TrimSpace(r.PostFormValue("user_agent")),
 		RequiresJS:      r.PostFormValue("requires_js") != "",
 		// Only an administrator may write the rule everybody gets. Read from the
 		// account rather than from the form alone, so a hand-crafted POST cannot
@@ -178,9 +183,9 @@ func (s *Server) handleSaveDomainRule(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrReaderRuleFetchSettings) {
 			s.renderDomainRules(w, r, http.StatusBadRequest, form.Domain, form,
-				&domainRuleOutcome{Problem: "Whether a page needs a browser, and how fast it is " +
-					"fetched, are the same for everyone — the page is fetched once. Only the " +
-					"selectors can be yours alone."})
+				&domainRuleOutcome{Problem: "Whether a page needs a browser, how fast it is " +
+					"fetched, and what this archive calls itself when it asks are the same for " +
+					"everyone — the page is fetched once. Only the selectors can be yours alone."})
 			return
 		}
 		s.log.Error("saving a domain rule failed", "domain", rule.Domain, "error", err)
@@ -379,6 +384,7 @@ func formFor(rule store.DomainRule) domainRuleForm {
 		Strip:           strings.Join(rule.StripSelectors, "\n"),
 		Notes:           rule.Notes,
 		RequiresJS:      rule.RequiresJS,
+		UserAgent:       rule.UserAgent,
 	}
 	if rule.RateLimitRPS > 0 {
 		form.Rate = strconv.FormatFloat(rule.RateLimitRPS, 'g', -1, 64)
@@ -398,6 +404,7 @@ func (f domainRuleForm) rule() (store.DomainRule, string) {
 		ContentSelector: f.ContentSelector,
 		Notes:           f.Notes,
 		RequiresJS:      f.RequiresJS,
+		UserAgent:       f.UserAgent,
 	}
 
 	if rule.Domain == "" {
@@ -428,9 +435,9 @@ func (f domainRuleForm) rule() (store.DomainRule, string) {
 	}
 
 	if rule.ContentSelector == "" && len(rule.StripSelectors) == 0 &&
-		!rule.RequiresJS && rule.RateLimitRPS == 0 {
+		!rule.RequiresJS && rule.RateLimitRPS == 0 && rule.UserAgent == "" {
 		return store.DomainRule{}, "That rule would do nothing. Give a content selector, " +
-			"something to strip, a rate, or mark the site as needing JavaScript."
+			"something to strip, a rate, a user agent, or mark the site as needing JavaScript."
 	}
 
 	return rule, ""

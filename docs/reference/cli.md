@@ -520,6 +520,7 @@ Flags for `set`:
 | `--strip <css>` | Selector removed before extraction. Repeatable. |
 | `--rate <rps>` | Per-host request rate, overriding `TOME_FETCH_RPS`. |
 | `--requires-js` | Marks the domain as needing a headless render. No effect until headless rendering exists. |
+| `--user-agent <string>` | Identity sent to this domain instead of the default. Read once at worker startup, so a change needs a restart. |
 | `--notes <text>` | Why the rule exists. |
 
 Rules apply to subdomains: a rule for `example.com` covers `blog.example.com`

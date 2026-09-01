@@ -303,7 +303,7 @@ Per-domain extraction overrides.
 | `content_selector` | `text` | CSS selector for the article body. Overrides the heuristics and the ratio check. |
 | `strip_selectors` | `text[]` | Removed before extraction. |
 | `requires_js` | `boolean` | Needs a headless render. **Household only.** |
-| `user_agent` | `text` | Reserved; not yet read. **Household only.** |
+| `user_agent` | `text` | Identity sent to this domain instead of the default, loaded into the HTTP client and the renderer at worker startup. For origins that filter on the *shape* of the User-Agent rather than on conduct. **Household only.** |
 | `rate_limit_rps` | `numeric` | Per-host request rate, loaded into the HTTP client at worker startup. **Household only.** |
 | `ruleset_key` | `text` | The extraction half of this rule, hashed. A body whose own `ruleset_key` differs from this is one the rule would no longer produce, which is how a sweep finds work nobody queued. Written by the store from the same function that stamps a body, so the two sides cannot drift. |
 | `notes` | `text` | Why the rule exists. |

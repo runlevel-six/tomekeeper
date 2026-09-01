@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -539,5 +540,71 @@ func TestAReadersRuleIsSavedAgainstThem(t *testing.T) {
 	if mine.ContentSelector != "main.mine" || !mine.FromReader {
 		t.Errorf("the reader's effective selector = %q (own: %v), want their own",
 			mine.ContentSelector, mine.FromReader)
+	}
+}
+
+// The User-Agent is the third fetch setting, and the one nobody could reach: it was
+// in the schema and in the store's types from the beginning, settable only by
+// somebody willing to write SQL against the archive's own database.
+func TestDomainRuleFormSavesAUserAgent(t *testing.T) {
+	rd, tr := readingFixture(t)
+
+	const agent = "Mozilla/5.0 (compatible; tomekeeper; +https://example.com/tomekeeper)"
+
+	// A user agent on its own, with no selector and nothing to strip. That has to be
+	// a rule the form accepts: a site that refuses the default identity is usually a
+	// site whose markup the extractors handle perfectly well.
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":        {"picky.example"},
+		"user_agent":    {agent},
+		"notes":         {"refuses anything that does not look like a browser"},
+		"for_household": {"true"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /domain-rules = %d, want 200\n%s", rec.Code, rec.Body.String())
+	}
+
+	rule, err := tr.store.System().DomainRuleFor(t.Context(), "picky.example")
+	if err != nil {
+		t.Fatalf("DomainRuleFor() = %v", err)
+	}
+	if rule.UserAgent != agent {
+		t.Errorf("user agent = %q, want %q", rule.UserAgent, agent)
+	}
+
+	// The table says one is set without printing the whole string into the column.
+	if body := rd.body("/domain-rules"); !strings.Contains(body, "custom user agent") {
+		t.Errorf("the table does not show that a user agent is set:\n%s", body)
+	}
+
+	// And the edit form loads it back, so changing something else does not silently
+	// clear it — the trap the CLI's replace-in-place upsert had.
+	//
+	// Unescaped before comparing, because html/template writes the '+' in a contact
+	// URL as &#43; inside an attribute. The browser decodes it and the field holds
+	// the right string; an assertion against the raw text would fail on correct
+	// output, which is exactly what it did when this was written.
+	edit := html.UnescapeString(rd.body("/domain-rules?edit=picky.example"))
+	if !strings.Contains(edit, agent) {
+		t.Errorf("the edit form does not load the stored user agent:\n%s", edit)
+	}
+}
+
+// A reader may not set one, for the same reason they may not ask for a browser:
+// the page is fetched once, so the identity it is fetched under is everybody's.
+func TestAReadersRuleRefusesAUserAgent(t *testing.T) {
+	rd, _ := readingFixture(t)
+
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain":     {"picky.example"},
+		"selector":   {"main"},
+		"user_agent": {"Mozilla/5.0 (compatible; tomekeeper; +https://example.com)"},
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST a reader rule with a user agent = %d, want %d",
+			rec.Code, http.StatusBadRequest)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "fetched once") {
+		t.Errorf("the refusal does not explain why:\n%s", body)
 	}
 }

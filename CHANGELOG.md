@@ -34,6 +34,17 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [Unreleased]
+
+### Added
+
+- A **User agent** field on the domain rules page, beside the rate and the
+  needs-JavaScript flag, and a marker in the rules table when one is set. v1.1.0
+  made the setting real but left it reachable only from the CLI or raw SQL, which
+  is not somewhere most people will look. Like the other two fetch settings it is
+  the household's — a reader's own rule may still set selectors only, since the
+  page is fetched once.
+
 ## [v1.1.0] — 2026-09-01
 
 **The extractor version is unchanged at 7, and there is no migration**, so nothing

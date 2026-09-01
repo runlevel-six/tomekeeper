@@ -180,6 +180,7 @@ documented now.
 | `--strip` | Selector removed before extraction. Repeat for several. |
 | `--rate` | Per-host requests per second, overriding `TOME_FETCH_RPS`. Use it for a site that has asked you to slow down. |
 | `--requires-js` | Marks the domain as needing a headless render. Has no effect until headless rendering exists. |
+| `--user-agent` | What this archive calls itself when it asks this site for a page. See [When a site refuses the default identity](#when-a-site-refuses-the-default-identity). |
 | `--notes` | Why this rule exists. Write something; you will not remember. |
 
 Rules apply to subdomains. A rule for `example.com` covers `blog.example.com`
@@ -196,8 +197,54 @@ blog.example.com (matched by the rule for example.com)
   strip:    .promo, .newsletter-signup
   requires js: no
   rate:     -
+  user agent: -
   notes:    body is in a data-role attribute; promos are inline in the flow
 ```
+
+## When a site refuses the default identity
+
+Some origins filter on the *shape* of the User-Agent rather than on what a fetcher
+does. The symptom is a whole host going from fetching cleanly to `HTTP 403` at once,
+with nothing in their `robots.txt` to explain it and the feed still polling fine —
+because the filter sits in front of the pages, not the feed.
+
+Check before assuming. If a browser string is served and an honest one is not, it is
+this:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -A 'tomekeeper/1.0.0' https://example.com/an-article/
+curl -s -o /dev/null -w '%{http_code}\n' -A 'Mozilla/5.0 (compatible; Example/1.0; +https://example.com)' https://example.com/an-article/
+```
+
+If the first is 403 and the second is 200, the filter is rejecting honesty rather
+than rejecting robots, and a per-domain identity gets past it without pretending to
+be a person:
+
+```sh
+tome domain-rule set \
+  --user-agent 'Mozilla/5.0 (compatible; tomekeeper; +https://your.contact)' \
+  --notes 'refuses anything without a browser-shaped user agent' \
+  example.com
+```
+
+That is the long-standing convention Googlebot and bingbot use: the `Mozilla/5.0`
+token is vestigial and the parenthesis still says who is asking and how to reach
+them. **Do not put a real browser's string here.** A rate limit and a contact URL
+are what make an archiver welcome on somebody else's server, and a fetcher that
+claims to be a person has given up both.
+
+Leave the version out. The field is a fixed string, so one that names a version
+starts lying about it at the next upgrade — and the default identity, which every
+other host still gets, carries the version already.
+
+Two things this needs that a selector does not:
+
+- **A worker restart.** Per-domain identities are read once at startup, the same as
+  rate limits.
+- **A re-fetch, not a reprocess.** A recorded fetch failure is never retried, so the
+  articles that already failed need asking for by hand — see
+  [Articles that never fetched](#articles-that-never-fetched). Reprocessing does
+  nothing for them; there is no stored page to reprocess.
 
 ## Apply it to what is already stored
 
@@ -218,6 +265,22 @@ can affect — on a large archive the difference is minutes against hours.
 That re-runs extraction **from the stored pages** — no requests to the site.
 See [Reprocess the archive](reprocess-the-archive.md) for other ways to narrow
 it.
+
+### Articles that never fetched
+
+Reprocessing cannot help an article whose page never arrived: there is nothing
+stored to extract from, and a recorded fetch failure is never retried. A rule that
+changes how a page is *fetched* — a user agent, a rate, a headless render — needs
+those articles asked for again:
+
+```sh
+tome refetch 517626 519293        # says what it would queue
+tome refetch --yes 517626 519293  # queues it
+```
+
+The ids are in **Attention**, and in the `fetch_error` column of any article listing.
+`refetch` reports by default and acts only with `--yes`, because every article in the
+list is a request to somebody else's server.
 
 ## Check the result
 
