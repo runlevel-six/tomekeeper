@@ -1098,7 +1098,7 @@ func (s *Server) handleAttention(w http.ResponseWriter, r *http.Request) {
 		row := attentionRow{NeedsAttention: item}
 		if host, ok := hostOf(item.URLCanonical); ok {
 			row.Host = host
-			row.RulePath = "/domain-rules?edit=" + url.QueryEscape(host)
+			row.RulePath = "/domain-rules?edit=" + url.QueryEscape(host) + "#rule-form"
 		}
 		page.Items = append(page.Items, row)
 	}

@@ -228,6 +228,33 @@ goes wrong otherwise, from an outage on 2026-08-20:
   `newTag` changes the Deployments' specs, so the apply rolls them itself, and the
   Job and the pods are the same bytes by construction.
 
+### "field is immutable"
+
+Skip the delete and apply inside the Job's ten-minute TTL window, and the apply
+ends with several hundred characters of Go struct followed by:
+
+```
+The Job "tomekeeper-migrate" is invalid: spec.template: ... : field is immutable
+```
+
+That is Kubernetes refusing to change an existing Job's pod template, which is
+immutable by design. It appears whenever the template differs from the Job still
+sitting there — a new image tag, or a ConfigMap whose content hash moved.
+
+**Nothing is broken, and the apply was not wasted.** Read the lines above the
+error: everything else was applied, and `deployment.apps/... configured` means the
+Deployments took the change and are rolling. Only the Job was refused. Run the
+delete and apply again to get it:
+
+```bash
+kubectl -n tomekeeper delete job tomekeeper-migrate --ignore-not-found
+kubectl apply -k deploy/overlays/local
+```
+
+If the release carried no migration — the changelog says so, and `tome version`
+against the running pods agrees with the tag — there was nothing for the Job to do
+and the failed apply cost you nothing but the message.
+
 Since the `await-schema` initContainer landed, a mis-ordered deploy degrades
 rather than breaks: the pods wait in `Init` with the reason in their logs instead
 of crash-looping. Check that first when a deploy appears stuck.

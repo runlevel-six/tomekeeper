@@ -476,7 +476,9 @@ func TestAttentionLinksToTheRuleForm(t *testing.T) {
 	if !strings.Contains(body, "A page that would not extract") {
 		t.Fatalf("the failed article is not in the queue:\n%s", body)
 	}
-	if !strings.Contains(body, "/domain-rules?edit=troublesome.example.org") {
+	// With the anchor: the form is below the table, so a link without it lands at
+	// the top of the page and appears to have done nothing.
+	if !strings.Contains(body, "/domain-rules?edit=troublesome.example.org#rule-form") {
 		t.Errorf("the row does not link to a rule for its host:\n%s", body)
 	}
 }
@@ -678,5 +680,30 @@ func TestTheBlankRuleFormDefaultsToTheHousehold(t *testing.T) {
 	body := rd.body("/domain-rules")
 	if !strings.Contains(body, `name="for_household" value="true" checked`) {
 		t.Errorf("the ownership control is not on by default for an administrator:\n%s", body)
+	}
+}
+
+// Edit has to land on the form, which sits below the table.
+//
+// Without the anchor the link reloaded the page, moved the viewport nowhere, and
+// read as a dead control unless you already knew the form was further down. The
+// target has to exist as well as be linked to, so both halves are asserted: an
+// anchor pointing at no element is the same dead link with extra characters.
+func TestEditLinksLandOnTheRuleForm(t *testing.T) {
+	rd, _ := readingFixture(t)
+
+	rec := rd.do(http.MethodPost, "/domain-rules", url.Values{
+		"domain": {"example.com"}, "selector": {"main"}, "for_household": {"true"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("seeding the rule = %d\n%s", rec.Code, rec.Body.String())
+	}
+
+	body := rd.body("/domain-rules")
+	if !strings.Contains(body, `href="/domain-rules?edit=example.com#rule-form"`) {
+		t.Errorf("the edit link does not carry the anchor:\n%s", body)
+	}
+	if !strings.Contains(body, `id="rule-form"`) {
+		t.Errorf("nothing on the page answers to #rule-form:\n%s", body)
 	}
 }

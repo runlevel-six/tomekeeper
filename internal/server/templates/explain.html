@@ -24,7 +24,7 @@
               <span class="badge">yours</span> Your own rule for <code>{{.Rule.Domain}}</code>.
             {{else}}
               <span class="badge">everyone</span> The household's rule for <code>{{.Rule.Domain}}</code>.
-              <a href="/domain-rules?edit={{.Rule.Domain}}">Write your own</a> to change
+              <a href="/domain-rules?edit={{.Rule.Domain}}#rule-form">Write your own</a> to change
               only what you read.
             {{end}}
           </p>
@@ -38,7 +38,7 @@
         {{else}}
           <p class="note">
             No rule applies to this host, so the general heuristics decide.
-            <a href="/domain-rules?edit={{.Article.Host}}">Write one</a> if they are
+            <a href="/domain-rules?edit={{.Article.Host}}#rule-form">Write one</a> if they are
             choosing the wrong part of the page.
           </p>
         {{end}}

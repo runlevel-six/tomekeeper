@@ -366,7 +366,25 @@ a:focus-visible {
 h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
 h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
 
-.stream, .search, .feeds, .attention, .reader { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
+.stream, .search, .feeds, .reader { max-width: calc(46rem * var(--layout)); margin: 0 auto; }
+
+/* The attention queue is six columns of data, not prose, and it was held to the
+   same reading measure as the article list until 2026-09-01. A measure is the
+   right width for a paragraph and the wrong one for a table: the table has
+   `overflow-x: auto` so it stayed usable, but it meant scrolling sideways inside
+   a narrow column on a window with room to spare, which reads as the page being
+   broken rather than as a deliberate measure.
+
+   Wider than .rules because there are six columns here against four, and one of
+   them is a URL. The overflow rule stays as the safety net for a phone; this
+   only decides how often it is needed. */
+.attention { max-width: calc(64rem * var(--layout)); margin: 0 auto; }
+
+/* The prose above the table keeps the measure the table gives up. Widening the
+   container would otherwise stretch the explanatory paragraph to 1300px, which
+   is the readability problem the measure exists to prevent — the same split
+   .rules already makes with its .note. */
+.attention .hint { max-width: var(--measure); }
 
 .badge {
   display: inline-block;

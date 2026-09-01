@@ -88,7 +88,7 @@
           <td class="num">{{if .Articles}}{{.Articles}}{{end}}</td>
           <td class="rule-actions">
             {{if or .Mine $.CanSetHousehold}}
-              <a href="/domain-rules?edit={{.Domain}}">Edit</a>
+              <a href="/domain-rules?edit={{.Domain}}#rule-form">Edit</a>
             {{end}}
             {{if $.ReprocessAvailable}}
               {{/*
@@ -131,7 +131,10 @@
     </p>
   {{end}}
 
-  <section class="rule-form">
+  {{/* The anchor every "edit" link ends with. The form is below the table, so
+       without it pressing Edit reloaded the page, moved nothing, and looked like
+       a dead link unless you already knew to scroll. */}}
+  <section class="rule-form" id="rule-form">
     <h2>{{if .Editing}}Edit {{.Editing}}{{else}}Add a rule{{end}}</h2>
 
     <form method="post" action="/domain-rules">

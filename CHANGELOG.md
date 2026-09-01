@@ -34,6 +34,29 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [Unreleased]
+
+### Fixed
+
+- **The attention queue was held to a reading measure.** Six columns of data were
+  capped at the same width as a paragraph of prose, so the table scrolled sideways
+  inside a narrow column on a window with room to spare. It now gets a width suited
+  to a table, and the explanatory paragraph above it keeps the measure the table
+  gives up. The horizontal-scroll rule stays as the safety net for a phone.
+- **"Edit" on a domain rule now lands on the form.** The form sits below the table,
+  and the link carried no anchor — so pressing Edit reloaded the page, moved
+  nothing, and looked like a dead control unless you knew to scroll. Every route to
+  it carries the anchor now: the rules table, both links on an article's
+  explanation, and the per-row link from the attention queue and the audit.
+
+### Documentation
+
+- **Install on Kubernetes** now says what the `field is immutable` error on
+  `tomekeeper-migrate` means — that it is Kubernetes refusing to change an existing
+  Job's pod template, that the rest of the apply succeeded and the Deployments did
+  roll, and that the remedy is the documented delete-then-apply. The correct
+  sequence was already there; what it looks like when you skip it was not.
+
 ## [v1.2.1] — 2026-09-01
 
 **No migration and no extractor change**, so this is a tag change and an apply.

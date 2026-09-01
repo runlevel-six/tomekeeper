@@ -103,7 +103,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		row := auditSuspectRow{SuspectBody: b}
 		if host, ok := hostOf(b.URL); ok {
 			row.Host = host
-			row.RulePath = "/domain-rules?edit=" + url.QueryEscape(host)
+			row.RulePath = "/domain-rules?edit=" + url.QueryEscape(host) + "#rule-form"
 		}
 		page.Suspect = append(page.Suspect, row)
 	}
