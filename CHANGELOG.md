@@ -34,7 +34,15 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
-## [Unreleased]
+## [v1.1.0] — 2026-09-01
+
+**The extractor version is unchanged at 7, and there is no migration**, so nothing
+here needs `tome reextract` and the upgrade is the migration Job plus an apply.
+
+Articles that already failed to fetch are the exception, and they need asking for
+by hand: a recorded fetch failure is never retried, so neither a new User-Agent nor
+the feed-body fallback reaches one on its own. `tome refetch --yes <ids>` runs both
+for them.
 
 ### Added
 
@@ -1240,6 +1248,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
 [Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[v1.1.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...v1.1.0
 [v1.0.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.0...v1.0.1
 [v1.0.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.2...v1.0.0
 [v0.17.2]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.1...v0.17.2
