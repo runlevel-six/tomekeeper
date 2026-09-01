@@ -34,7 +34,11 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
-## [Unreleased]
+## [v1.2.0] — 2026-09-01
+
+**The extractor version is unchanged at 7 and there is no migration**, so nothing
+here needs `tome reextract`. A rule saved through the new field still takes effect
+at the next worker start, the same as one written by the CLI.
 
 ### Added
 
@@ -44,6 +48,18 @@ happens, because it is the one change that wants a follow-up command
   is not somewhere most people will look. Like the other two fetch settings it is
   the household's — a reader's own rule may still set selectors only, since the
   page is fetched once.
+
+### Documentation
+
+- **How to add a domain rule** gained *When a site refuses the default identity* —
+  how to tell a User-Agent shape filter from a real robots refusal before writing a
+  rule for it, and why the value should carry no version number.
+- The same page's *Apply it to what is already stored* covered `tome reextract`
+  only, which makes no requests and so can do nothing for an article whose page
+  never arrived. It now says how to re-fetch those, which is the step a rule about
+  *fetching* actually needs.
+- `user_agent` in the data model reference said "Reserved; not yet read". It has
+  been read since v1.1.0.
 
 ## [v1.1.0] — 2026-09-01
 
@@ -1259,6 +1275,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
 [Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[v1.2.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.1.0...v1.2.0
 [v1.1.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...v1.1.0
 [v1.0.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.0...v1.0.1
 [v1.0.0]: https://github.com/runlevel-six/tomekeeper/compare/v0.17.2...v1.0.0
