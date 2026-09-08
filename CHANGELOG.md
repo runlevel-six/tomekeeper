@@ -34,11 +34,12 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
-## Unreleased
+## [v1.3.0] — 2026-09-08
 
-**Adds migration 00023**, so this is a minor release when it is cut: run the
-migration Job, then apply. No extractor change — nothing stored is re-derived, and
-the migration backfills the new column from the bodies already on disk.
+**Adds migration 00023**, so this is a minor release: run the migration Job, then
+apply. No extractor change — nothing stored is re-derived, and the migration
+backfills the new column from the bodies already on disk. On an archive of 12,304
+stored bodies that backfill writes 7,587 rows and takes a few seconds.
 
 ### Added
 
@@ -1368,6 +1369,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
 [Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[v1.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.2...v1.3.0
 [v1.2.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.1...v1.2.2
 [v1.2.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.0...v1.2.1
 [v1.2.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.1.0...v1.2.0
