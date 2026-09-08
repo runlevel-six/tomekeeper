@@ -1,6 +1,7 @@
 package asset_test
 
 import (
+	"path"
 	"strings"
 	"testing"
 
@@ -220,4 +221,58 @@ func TestLocalizeBodyWithNoImages(t *testing.T) {
 	if !strings.Contains(got, "Just words") {
 		t.Errorf("the body was damaged:\n%s", got)
 	}
+}
+
+// The body's lead image is the first one this archive actually holds.
+//
+// Document order is decided here because it is decided nowhere else: the resolver
+// is handed one URL at a time and what it fetched is a map, which has no order. The
+// list showing a thumbnail depends on this being the picture at the top of the
+// article rather than whichever image happened to resolve first.
+func TestLocalizeReportsTheLeadImage(t *testing.T) {
+	t.Run("the first image, in document order", func(t *testing.T) {
+		body := `<p>Text</p><img src="https://example.com/one.jpg">` +
+			`<p>More</p><img src="https://example.com/two.jpg">`
+
+		_, outcome := asset.Localize(body, func(src string) (string, bool) {
+			return "assets/" + strings.TrimSuffix(path.Base(src), ".jpg") + ".avif", true
+		})
+
+		if outcome.Lead != "assets/one.avif" {
+			t.Errorf("Lead = %q, want the first image", outcome.Lead)
+		}
+	})
+
+	// A reference that could not be brought into the archive keeps pointing at the
+	// origin, and a list must never show one: that is the hotlink localizing images
+	// exists to prevent. So the lead is the first *localized* image, not the first
+	// reference.
+	t.Run("skipping one that could not be localized", func(t *testing.T) {
+		body := `<img src="https://example.com/broken.jpg">` +
+			`<img src="https://example.com/good.jpg">`
+
+		_, outcome := asset.Localize(body, func(src string) (string, bool) {
+			if strings.Contains(src, "broken") {
+				return "", false
+			}
+			return "assets/good.avif", true
+		})
+
+		if outcome.Lead != "assets/good.avif" {
+			t.Errorf("Lead = %q, want the first image that was localized", outcome.Lead)
+		}
+	})
+
+	t.Run("empty when nothing was localized", func(t *testing.T) {
+		body := `<p>No pictures here at all.</p>`
+
+		_, outcome := asset.Localize(body, func(string) (string, bool) {
+			t.Error("the resolver was called for a body with no images")
+			return "", false
+		})
+
+		if outcome.Lead != "" {
+			t.Errorf("Lead = %q, want empty", outcome.Lead)
+		}
+	})
 }

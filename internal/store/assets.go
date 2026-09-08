@@ -137,17 +137,25 @@ func (s *Store) SetAssetsStatus(ctx context.Context, id ArticleID, status string
 	return nil
 }
 
-// UpdateContentHTML replaces the body of an article's current content row.
+// UpdateContentHTML replaces the body of an article's current content row, and
+// records which stored image the body leads with.
 //
 // Used after localization, which rewrites image references from origin URLs to
 // archive paths. Only the current row is touched: superseded bodies are kept
 // as a record of what an earlier extractor produced, and rewriting them would
 // destroy that.
-func (s *Store) UpdateContentHTML(ctx context.Context, id ArticleID, owner *UserID, html string) error {
+//
+// leadImageSHA is the content address of the first image the rewritten body shows,
+// empty when it shows none. Written here rather than by a call of its own because
+// it is derived from this HTML: the two must change together or a list would show
+// the thumbnail of a picture the body no longer contains.
+func (s *Store) UpdateContentHTML(
+	ctx context.Context, id ArticleID, owner *UserID, html, leadImageSHA string,
+) error {
 	if _, err := s.pool.Exec(ctx, `
-		UPDATE article_content SET content_html = $2
+		UPDATE article_content SET content_html = $2, lead_image_sha = NULLIF($4, '')
 		WHERE article_id = $1 AND is_current
-		  AND user_id IS NOT DISTINCT FROM $3`, id, html, owner); err != nil {
+		  AND user_id IS NOT DISTINCT FROM $3`, id, html, owner, leadImageSHA); err != nil {
 		return fmt.Errorf("updating the body of article %d: %w", id, err)
 	}
 	return nil

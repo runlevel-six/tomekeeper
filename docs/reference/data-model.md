@@ -197,6 +197,7 @@ itself. Extraction quality only improves, so bodies are regenerable.
 | `word_count` | `int` | |
 | `is_current` | `boolean` | At most one current row per article, enforced by a partial unique index. |
 | `extracted_at` | `timestamptz` | |
+| `lead_image_sha` | `text` | The first picture this body shows, referencing `assets`, `NULL` for a body that shows none. Written by localization in the same statement as `content_html`, since it is derived from it. See **Thumbnails** below. |
 | `tsv` | `tsvector` | Generated from `content_text`. Bodies only — a title has its own column on `articles`, since a generated column may read no other table. |
 
 Indexes: `article_content_current_idx`, a unique index on
@@ -205,7 +206,30 @@ Indexes: `article_content_current_idx`, a unique index on
 `article_content_tsv_idx`, a GIN index on `tsv`;
 `article_content_version_idx` on `(extractor_version) WHERE is_current AND NOT
 immutable`, which is what keeps `tome reextract` from scanning
-the whole archive.
+the whole archive; and `article_content_lead_image_idx` on `lead_image_sha`, which
+is the referencing side of that foreign key rather than a read path — without it,
+deleting an image scans every body to prove none names it.
+
+#### Thumbnails
+
+`lead_image_sha` exists so that a list of fifty headlines can show fifty pictures
+without reading fifty bodies. The answer is already in `content_html` — the first
+`src="/assets/…"` in it — and reading it there was measured on the live archive
+against the unread list's own query: **114ms without, 460ms with**. `content_html`
+is stored out of line, so a regular expression over it drags every body of the page
+off disk to look at its first hundred bytes. It is derived once, when it changes,
+instead.
+
+It is **the first picture, in document order, that was localized** — not the largest
+or the one a heuristic likes. That is what a publisher means by a lead image, and on
+the live archive the two rules disagree for 601 of 2,255 illustrated articles.
+A reference that could not be brought into the archive is skipped, because a list
+must never load an image from the site it came from.
+
+It hangs off the body rather than the article because bodies are per-reader: two
+extractions of one page can legitimately lead with different pictures, a superseded
+body keeps the one it had, and promoting an older copy brings its thumbnail back
+with it.
 
 #### Search covers titles and bodies
 

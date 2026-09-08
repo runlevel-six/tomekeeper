@@ -158,6 +158,12 @@ type StreamItem struct {
 	FeedTitle    string
 	HasBody      bool
 
+	// ThumbnailPath is the store-relative path of the picture this article leads
+	// with, empty when there is none. It names an archived image, never an origin
+	// URL: a list that hotlinked would tell every publisher which of their pages a
+	// reader has in front of them, which is the thing localizing images prevents.
+	ThumbnailPath string
+
 	// FetchStatus distinguishes "nothing was extracted from this page" from
 	// "nothing has looked at this page yet". A page saved by hand is the second
 	// for as long as it takes the worker to reach it, and reporting that as a
@@ -452,9 +458,10 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 		       COALESCE(c.word_count, 0), left(COALESCE(c.content_text, ''), ` +
 		strconv.Itoa(ExcerptLength) + `), (c.id IS NOT NULL),
 		       COALESCE(st.read, false), COALESCE(st.starred, false), COALESCE(st.kept, false),
-		       COALESCE(feed.title, '')
+		       COALESCE(feed.title, ''), COALESCE(thumb.fs_path, '')
 		FROM articles a
 		` + ownedBody + `
+		` + leadImage + `
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		-- One feed title per article, chosen deterministically. A syndicated story
 		-- reaches the reader through whichever of their feeds saw it first, and
@@ -484,7 +491,7 @@ func (s *Store) Stream(ctx context.Context, userID UserID, q StreamQuery) ([]Str
 			&it.URLCanonical, &it.PublishedAt, &it.FirstSeenAt, &it.SortAt,
 			&it.AssetsStatus, &it.FetchStatus, &it.FetchError,
 			&it.WordCount, &it.Excerpt, &it.HasBody,
-			&it.Read, &it.Starred, &it.Kept, &it.FeedTitle,
+			&it.Read, &it.Starred, &it.Kept, &it.FeedTitle, &it.ThumbnailPath,
 		); err != nil {
 			return nil, fmt.Errorf("scanning a stream row: %w", err)
 		}

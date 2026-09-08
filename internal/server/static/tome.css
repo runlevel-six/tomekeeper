@@ -520,6 +520,50 @@ h2 { font-size: 1.15rem; margin: 0 0 0.35rem; line-height: 1.35; }
   border-bottom: 1px solid var(--rule);
   border-left: 3px solid transparent;
 }
+
+/* A row with a picture is the picture and everything else, side by side.
+
+   Flex on the row rather than a grid with a reserved column, because most rows have
+   no picture: 2,271 of 3,752 articles in the archive this was measured against carry
+   an archived image, so a reserved column would leave a third of every list as empty
+   gutter. A row without one simply uses the full width. */
+.entry, .result { display: flex; align-items: flex-start; gap: 0.9rem; }
+
+/* min-width: 0 is what stops a long unbroken title or URL from pushing the picture
+   off the row — a flex item's default minimum is its content, not zero. */
+.entry-text, .result-text { flex: 1 1 auto; min-width: 0; }
+
+/* The thumbnail itself.
+
+   Square and cropped rather than letterboxed to each image's own shape: the rows
+   have to line up down the left edge for a list to be scannable, and a column of
+   pictures at eleven different heights is the thing that makes a feed reader look
+   like a shop.
+
+   Sized in rem, so it follows the reader's text-size setting like everything else —
+   a thumbnail fixed in pixels next to enlarged text is a thumbnail that shrinks
+   every time somebody needs the text bigger. */
+.thumb {
+  flex: 0 0 auto;
+  display: block;
+  line-height: 0;
+}
+.thumb img {
+  width: 5.25rem;
+  height: 5.25rem;
+  object-fit: cover;
+  border-radius: 3px;
+  /* The picture is up to 1600px on its longest edge and is being drawn at a
+     twentieth of that, so it is shown at the size it is stored, unscaled, until it
+     loads: a bare <img> has no height before its bytes arrive, and fifty rows
+     jumping as their pictures land is worse than no pictures at all. */
+  background: var(--rule);
+}
+/* Read rows recede, and their pictures recede with them. Without this the one part
+   of a read row that stays at full strength is the picture, which is the opposite of
+   what the dimmed headline is saying. */
+.entry.is-read .thumb img,
+.result.is-read .thumb img { opacity: 0.55; }
 .entry.is-read h2 a { color: var(--ink-soft); font-weight: normal; }
 .entry.is-selected {
   border-left-color: var(--accent);
@@ -1465,6 +1509,11 @@ kbd {
   /* The last row's rule would otherwise land alongside the tab bar's own top
      border and read as a double line. */
   .stream .entry:last-of-type { border-bottom: 0; }
+
+  /* A narrower row has less to spare, and the headline is what the reader is
+     scanning. Still comfortably above the 44px a thumb needs to hit it. */
+  .thumb img { width: 4rem; height: 4rem; }
+  .entry, .result { gap: 0.7rem; }
 }
 
 /* Pages that are a document with sections rather than a list of articles:

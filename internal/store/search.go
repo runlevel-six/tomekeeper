@@ -69,6 +69,11 @@ type SearchResult struct {
 
 	Read    bool
 	Starred bool
+
+	// ThumbnailPath is the store-relative path of the picture this article leads
+	// with, empty when there is none — the same image the stream shows, chosen the
+	// same way, because a result and a row are the same article seen twice.
+	ThumbnailPath string
 }
 
 // searchConfig is the text search configuration, hardcoded to english.
@@ -129,7 +134,8 @@ func (p *PostgresSearch) Query(ctx context.Context, userID UserID, q SearchQuery
 	for rows.Next() {
 		var r SearchResult
 		if err := rows.Scan(&r.ArticleID, &r.Title, &r.SiteName, &r.URLCanonical,
-			&r.FeedTitle, &r.Rank, &r.Snippet, &r.Read, &r.Starred); err != nil {
+			&r.FeedTitle, &r.Rank, &r.Snippet, &r.Read, &r.Starred,
+			&r.ThumbnailPath); err != nil {
 			return nil, fmt.Errorf("scanning a search result: %w", err)
 		}
 		out = append(out, r)
@@ -233,11 +239,13 @@ func (p *PostgresSearch) statement(userID UserID, q SearchQuery) (string, []any)
 		       -- snippet either way.
 		       COALESCE(ts_headline($3, c.content_text, q.tsq,
 		           'StartSel=[[hl]], StopSel=[[/hl]], MaxWords=40, MinWords=20, MaxFragments=2, FragmentDelimiter=" … "'), ''),
-		       COALESCE(st.read, false), COALESCE(st.starred, false)
+		       COALESCE(st.read, false), COALESCE(st.starred, false),
+		       COALESCE(thumb.fs_path, '')
 		FROM hits h
 		CROSS JOIN q
 		JOIN articles a ON a.id = h.article_id
 		` + ownedBody + `
+		` + leadImage + `
 		LEFT JOIN article_state st ON st.article_id = a.id AND st.user_id = $1
 		LEFT JOIN LATERAL (
 			SELECT f3.title FROM feed_items fi3 JOIN feeds f3 ON f3.id = fi3.feed_id

@@ -24,23 +24,36 @@
         {{range .Results}}
         <li class="result{{if .Read}} is-read{{end}}">
           {{/*
-            Carries the search back to the article page, so leaving a result
-            returns to these results rather than to an empty form. It grants no
-            previous/next: results are ranked by relevance, which is not a reading
-            order, and pretending otherwise would make Next mean "the next best
-            match", which nobody wants while reading.
+            The same thumbnail the reading lists show, chosen by the same rule and
+            served from the same archive — see the stream row for why it is a second
+            link that carries no text.
           */}}
-          <h2><a href="/articles/{{.ArticleID}}?from={{$.From}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a></h2>
-          <p class="meta">
-            {{if .FeedTitle}}<span class="source">{{.FeedTitle}}</span>{{else if .SiteName}}<span class="source">{{.SiteName}}</span>{{end}}
-            {{if .Starred}}<span class="starred" title="Starred">★</span>{{end}}
-          </p>
-          {{/*
-            The snippet is HTML because Postgres wraps the matched terms in <mark>.
-            ts_headline builds it from the stored plain text, so <mark> is the only
-            markup it can contain — see the note on SearchResult.Snippet.
-          */}}
-          <p class="snippet">{{.Snippet | snippet}}</p>
+          {{if .ThumbnailPath}}
+            <a class="thumb" href="/articles/{{.ArticleID}}?from={{$.From}}"
+               tabindex="-1" aria-hidden="true"><img src="/{{.ThumbnailPath}}" alt=""
+               loading="lazy" decoding="async"></a>
+          {{end}}
+
+          <div class="result-text">
+            {{/*
+              Carries the search back to the article page, so leaving a result
+              returns to these results rather than to an empty form. It grants no
+              previous/next: results are ranked by relevance, which is not a reading
+              order, and pretending otherwise would make Next mean "the next best
+              match", which nobody wants while reading.
+            */}}
+            <h2><a href="/articles/{{.ArticleID}}?from={{$.From}}">{{if .Title}}{{.Title}}{{else}}(untitled){{end}}</a></h2>
+            <p class="meta">
+              {{if .FeedTitle}}<span class="source">{{.FeedTitle}}</span>{{else if .SiteName}}<span class="source">{{.SiteName}}</span>{{end}}
+              {{if .Starred}}<span class="starred" title="Starred">★</span>{{end}}
+            </p>
+            {{/*
+              The snippet is HTML because Postgres wraps the matched terms in <mark>.
+              ts_headline builds it from the stored plain text, so <mark> is the only
+              markup it can contain — see the note on SearchResult.Snippet.
+            */}}
+            <p class="snippet">{{.Snippet | snippet}}</p>
+          </div>
         </li>
         {{end}}
       </ol>

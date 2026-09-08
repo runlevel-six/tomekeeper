@@ -1209,6 +1209,16 @@ Which lists may be marked, and why it is a short list:
 Anything else — an unknown token, a feed belonging to somebody else, a list that
 must not be marked — is `404`, the same nothing in every case.
 
+**A `GET` that names no list at all is different, and redirects to Unread.** The
+`POST` renders its result in place, so `/mark-read` is the address left in the bar
+after a mark, and it is the address a browser returns to when it restores a session
+or the reader reloads the next morning. That request carries no list and nothing
+here remembers one, so there is no question to ask and no page to render — but a
+`404` in front of somebody whose last action succeeded is a wall, and installed as a
+web app it is a wall with no back button. A `POST` naming no list is still a `404`:
+"mark nothing read" has no honest answer, and answering a request to change the
+archive with a page would be a stranger one.
+
 **There are two places to reach it, and they are the same request.** The quiet
 control beside the heading, and a louder one at the end of the list — because the
 end of a list is where a reader has actually finished, and the control at the top is

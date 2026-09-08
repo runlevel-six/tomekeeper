@@ -53,6 +53,16 @@ const ownedBody = `
 	LEFT JOIN article_content c
 	    ON c.article_id = a.id AND c.is_current AND ` + preferredBody
 
+// leadImage joins the picture a body leads with, aliased `thumb`, to the body
+// `ownedBody` selected. Both lists that show thumbnails embed it, so the reader
+// whose body is shown is necessarily the reader whose thumbnail is shown.
+//
+// LEFT JOIN because an article need not have a picture — two of every five in the
+// archive this was measured against have none — and an inner join would drop every
+// one of them out of the list rather than showing it without a thumbnail.
+const leadImage = `
+	LEFT JOIN assets thumb ON thumb.sha256 = c.lead_image_sha`
+
 // There is deliberately no inner-join form of this any more. Search had one, on the
 // grounds that an article with no body has nothing to match against — which stopped
 // being true when titles were indexed in 00022, and had always made the articles this

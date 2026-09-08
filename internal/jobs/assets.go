@@ -148,13 +148,24 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 
 	log := w.log.With("article_id", job.Args.ArticleID, "url", article.URLCanonical)
 
-	localized, outcome := asset.Localize(content.HTML, w.resolver(ctx, id, article.URLCanonical, log))
+	// Filled in by the resolver as it stores each image, so that the path Localize
+	// reports as this body's lead can be turned back into the content address the
+	// body row records. The resolver is the only place both are in hand at once.
+	addresses := map[string]string{}
+
+	localized, outcome := asset.Localize(content.HTML,
+		w.resolver(ctx, id, article.URLCanonical, addresses, log))
 
 	if outcome.Found > 0 {
 		// The same slot the body was read from just above. Localization rewrites
 		// image URLs inside a body it already has in hand, so writing anywhere else
 		// would put one reader's rewritten HTML over another's extraction.
-		if err := w.store.UpdateContentHTML(ctx, id, owner, localized); err != nil {
+		//
+		// The lead image goes with the HTML in one statement: it is derived from
+		// this markup, and a body written without it would show a thumbnail of a
+		// picture it no longer contains until something happened to run again.
+		if err := w.store.UpdateContentHTML(ctx, id, owner, localized,
+			addresses[outcome.Lead]); err != nil {
 			return err
 		}
 	}
@@ -200,7 +211,8 @@ func (w *LocalizeAssetsWorker) Work(ctx context.Context, job *river.Job[Localize
 // It fetches, processes, stores, and records — everything except deciding
 // which references exist, which is Localize's job.
 func (w *LocalizeAssetsWorker) resolver(
-	ctx context.Context, id store.ArticleID, articleURL string, log *slog.Logger,
+	ctx context.Context, id store.ArticleID, articleURL string,
+	addresses map[string]string, log *slog.Logger,
 ) asset.Resolver {
 	// Within one article the same image often appears several times. Caching
 	// here keeps the resolver from asking the origin twice for a picture it
@@ -212,7 +224,7 @@ func (w *LocalizeAssetsWorker) resolver(
 			return path, path != ""
 		}
 
-		path, err := w.localize(ctx, id, articleURL, sourceURL)
+		path, sha, err := w.localize(ctx, id, articleURL, sourceURL)
 		if err != nil {
 			if reason, skipped := asset.IsSkipped(err); skipped {
 				// A deliberate skip is not a failure. A tracking pixel left as
@@ -228,27 +240,28 @@ func (w *LocalizeAssetsWorker) resolver(
 		}
 
 		seen[sourceURL] = path
+		addresses[path] = sha
 		return path, true
 	}
 }
 
 // localize resolves one image and links it to this article, returning its
-// store-relative path.
+// store-relative path and its content address.
 func (w *LocalizeAssetsWorker) localize(
 	ctx context.Context, id store.ArticleID, articleURL, sourceURL string,
-) (string, error) {
+) (string, string, error) {
 	stored, err := w.resolve(ctx, articleURL, sourceURL)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// Linking stays outside the single-flight below: ten articles sharing one
 	// image need one fetch and ten links, so this is the part that must run once
 	// per caller rather than once per URL.
 	if err := w.store.LinkAsset(ctx, id, stored.SHA256); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return stored.FSPath, nil
+	return stored.FSPath, stored.SHA256, nil
 }
 
 // process transcodes one image, waiting for a transcoding slot first.

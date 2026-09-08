@@ -97,52 +97,78 @@
     hx-get="{{$.NextPage}}" hx-trigger="revealed" hx-swap="afterend"
   {{end}}>
   {{/*
-    The list travels with the link. That is what lets the article page offer a way
-    back to here and a next article — neither of which the browser can work out,
-    and the first of which does not otherwise exist at all in an installed app
-    with no back button.
+    The picture the article leads with, when it has one and its images have been
+    archived. Beside the headline rather than above it, because the row has to stay
+    scannable: a list is read down the left edge, and a full-width picture per entry
+    turns fifty rows into fifty screenfuls.
+
+    Its own link to the same article, so the obvious tap target works — and
+    aria-hidden with tabindex="-1" so that it is exactly one link for anybody
+    reading with a keyboard or a screen reader. Empty alt for the same reason: the
+    headline immediately after it is the text, and a thumbnail described as well
+    would be read out twice.
+
+    src points into this archive, never at the origin. Every image here was fetched
+    once and stored; a list that hotlinked would tell every publisher which of their
+    pages a reader has on screen right now, which is precisely what localizing them
+    prevents. Lazy, because a long list holds more pictures than a reader will ever
+    scroll past.
   */}}
-  <h2><a href="/articles/{{$item.ArticleID}}{{if $.From}}?from={{$.From}}{{end}}">{{displayTitle $item.Title $item.URLCanonical}}</a></h2>
+  {{if $item.ThumbnailPath}}
+    <a class="thumb" href="/articles/{{$item.ArticleID}}{{if $.From}}?from={{$.From}}{{end}}"
+       tabindex="-1" aria-hidden="true"><img src="/{{$item.ThumbnailPath}}" alt=""
+       loading="lazy" decoding="async"></a>
+  {{end}}
 
-  <p class="meta">
-    {{if $item.FeedTitle}}<span class="source">{{$item.FeedTitle}}</span>{{else if $item.SiteName}}<span class="source">{{$item.SiteName}}</span>{{end}}
-    {{if $item.Author}}<span class="byline">{{$item.Author}}</span>{{end}}
-    <time datetime="{{$item.SortAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since $item.SortAt}}</time>
-    {{with readingTime $item.WordCount}}<span class="length">{{.}}</span>{{end}}
+  <div class="entry-text">
     {{/*
-      One badge for the whole archiving state, because "is this worth opening
-      yet" is one question. An article whose images are still queued renders as
-      blank rectangles — the content security policy blocks the origin site's
-      copies — and looks broken rather than unfinished.
+      The list travels with the link. That is what lets the article page offer a way
+      back to here and a next article — neither of which the browser can work out,
+      and the first of which does not otherwise exist at all in an installed app
+      with no back button.
     */}}
-    {{if not $item.HasBody}}
-      {{if eq $item.FetchStatus "pending"}}
-        {{/*
-          Pending with a reason is not the same as pending without one, and this badge
-          said "queued" for both until 2026-08-21. An article waiting for a headless
-          browser nobody has deployed is retried every minute and fails every time; the
-          tooltip claiming the worker had not reached it yet was the opposite of true.
-        */}}
-        {{if $item.FetchError}}
-          <span class="badge warn" title="{{$item.FetchError}}">waiting</span>
+    <h2><a href="/articles/{{$item.ArticleID}}{{if $.From}}?from={{$.From}}{{end}}">{{displayTitle $item.Title $item.URLCanonical}}</a></h2>
+
+    <p class="meta">
+      {{if $item.FeedTitle}}<span class="source">{{$item.FeedTitle}}</span>{{else if $item.SiteName}}<span class="source">{{$item.SiteName}}</span>{{end}}
+      {{if $item.Author}}<span class="byline">{{$item.Author}}</span>{{end}}
+      <time datetime="{{$item.SortAt.Format "2006-01-02T15:04:05Z07:00"}}">{{since $item.SortAt}}</time>
+      {{with readingTime $item.WordCount}}<span class="length">{{.}}</span>{{end}}
+      {{/*
+        One badge for the whole archiving state, because "is this worth opening
+        yet" is one question. An article whose images are still queued renders as
+        blank rectangles — the content security policy blocks the origin site's
+        copies — and looks broken rather than unfinished.
+      */}}
+      {{if not $item.HasBody}}
+        {{if eq $item.FetchStatus "pending"}}
+          {{/*
+            Pending with a reason is not the same as pending without one, and this badge
+            said "queued" for both until 2026-08-21. An article waiting for a headless
+            browser nobody has deployed is retried every minute and fails every time; the
+            tooltip claiming the worker had not reached it yet was the opposite of true.
+          */}}
+          {{if $item.FetchError}}
+            <span class="badge warn" title="{{$item.FetchError}}">waiting</span>
+          {{else}}
+            <span class="badge pending" title="The worker has not reached this page yet">queued</span>
+          {{end}}
         {{else}}
-          <span class="badge pending" title="The worker has not reached this page yet">queued</span>
+          <span class="badge bad" title="Nothing was extracted from this page">no body</span>
         {{end}}
+      {{else if eq $item.AssetsStatus "pending"}}
+        <span class="badge pending" title="The text is here; its images are still being archived">images pending</span>
+      {{else if eq $item.AssetsStatus "partial"}}
+        <span class="badge warn" title="Some images could not be archived and are not shown">images incomplete</span>
       {{else}}
-        <span class="badge bad" title="Nothing was extracted from this page">no body</span>
+        <span class="badge ok" title="Text and images are archived; this reads offline">complete</span>
       {{end}}
-    {{else if eq $item.AssetsStatus "pending"}}
-      <span class="badge pending" title="The text is here; its images are still being archived">images pending</span>
-    {{else if eq $item.AssetsStatus "partial"}}
-      <span class="badge warn" title="Some images could not be archived and are not shown">images incomplete</span>
-    {{else}}
-      <span class="badge ok" title="Text and images are archived; this reads offline">complete</span>
-    {{end}}
-  </p>
+    </p>
 
-  {{if $item.Excerpt}}<p class="excerpt">{{$item.Excerpt}}</p>{{end}}
+    {{if $item.Excerpt}}<p class="excerpt">{{$item.Excerpt}}</p>{{end}}
 
-  {{template "actions" (actionsOf $item)}}
+    {{template "actions" (actionsOf $item)}}
+  </div>
 </article>
 {{end}}
 

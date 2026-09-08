@@ -34,6 +34,46 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## Unreleased
+
+**Adds migration 00023**, so this is a minor release when it is cut: run the
+migration Job, then apply. No extractor change — nothing stored is re-derived, and
+the migration backfills the new column from the bodies already on disk.
+
+### Added
+
+- **Every list of articles shows the picture the article leads with.** Unread,
+  Everything, a feed, a tag, a category, Saved, Starred and the search results, all
+  from the row's left edge. The picture is the one this archive already holds: the
+  first image in the reader's own body, recorded by migration `00023` as
+  `article_content.lead_image_sha` when the body's images are localized, and
+  backfilled for the archive that exists. An article whose images are not archived
+  yet has no thumbnail and gets one when the worker reaches it.
+
+  Nothing is loaded from the site the article came from — the whole point of
+  localizing images is that reading tells no publisher anything, and a list that
+  hotlinked would say so on every scroll. Thumbnails are lazy and served from the
+  content-addressed, `immutable`-cached `/assets/`, so each one is fetched once
+  ever, and a row without a picture uses the full width rather than leaving a
+  reserved column: two of every five articles have no image.
+
+  Derived once and stored rather than read out of the body at render time. On the
+  live archive, taking it from `content_html` with a regular expression cost 460ms
+  against the unread list's 114ms — `content_html` is stored out of line, so it
+  drags every body of the page off disk to read its first hundred bytes.
+  Reference: [Thumbnails](docs/reference/cli.md#thumbnails).
+
+### Fixed
+
+- **Coming back to `/mark-read` no longer lands on a 404.** Marking a list read
+  renders the result in place, which is what puts the count in front of the reader
+  who earned it — and leaves `/mark-read` in the address bar. A browser restoring
+  that session, or a reader reloading the next morning, asks for it again with no
+  list named, and that was a wall in front of somebody whose last action had
+  succeeded; installed as a web app, a wall with no back button. It now sends them
+  to Unread. A `POST` naming no list is still refused: "mark nothing read" has no
+  honest answer.
+
 ## [v1.2.2] — 2026-09-01
 
 **No migration and no extractor change**, so this is a tag change and an apply.
