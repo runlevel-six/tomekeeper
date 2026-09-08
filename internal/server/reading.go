@@ -340,7 +340,32 @@ func (s *Server) renderStream(w http.ResponseWriter, r *http.Request, spec strea
 // linkable, and answering "no" is navigating away — which is the cheapest possible
 // cancel.
 func (s *Server) handleMarkReadConfirm(w http.ResponseWriter, r *http.Request) {
-	spec, ok := s.markableSpec(w, r, r.URL.Query().Get("from"))
+	from := r.URL.Query().Get("from")
+
+	// A request that names no list at all is a reader arriving back at the address
+	// the mark was posted to, rather than at a question about anything.
+	//
+	// The POST renders its result in place — the count belongs to the request that
+	// earned it — so /mark-read is the address left in the bar afterwards, and it is
+	// the address a browser returns to when it restores a session or a reader
+	// reloads the next morning. As a GET with no list that was a 404, which is a
+	// wall in front of somebody whose last action succeeded. Installed as a web app
+	// it is a wall with no back button.
+	//
+	// The unread list, because there is nothing else it could honestly be: a bare
+	// GET carries no list, and no state here remembers one. See other, so the
+	// browser replaces this address rather than leaving it in the history to be
+	// found again.
+	if from == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	// A list that is named but unmarkable — an invented feed id, somebody else's
+	// feed, `from=search:x` typed by hand — stays a 404. That is a request for
+	// something that is not there, which is a different thing from a request for
+	// nothing at all.
+	spec, ok := s.markableSpec(w, r, from)
 	if !ok {
 		return
 	}

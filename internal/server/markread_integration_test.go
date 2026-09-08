@@ -235,10 +235,9 @@ func TestMarkAllReadRefusesAListItCannotScope(t *testing.T) {
 		})
 	}
 
-	// A missing token is refused too, rather than defaulting to some list.
-	if rec := rd.get("/mark-read"); rec.Code != http.StatusNotFound {
-		t.Errorf("GET /mark-read with no list = %d, want 404", rec.Code)
-	}
+	// A missing token on the write is refused, rather than defaulting to some list.
+	// The GET is not a refusal but a place to send somebody — see
+	// TestMarkReadWithNoListSendsTheReaderToTheUnreadList.
 	if rec := rd.do(http.MethodPost, "/mark-read", url.Values{}); rec.Code != http.StatusNotFound {
 		t.Errorf("POST /mark-read with no list = %d, want 404", rec.Code)
 	}
@@ -258,6 +257,44 @@ func TestMarkAllReadRefusesAListItCannotScope(t *testing.T) {
 		if body := rd.body(path); strings.Contains(body, "/mark-read") {
 			t.Errorf("%s offers a control it would refuse", path)
 		}
+	}
+}
+
+// Coming back to /mark-read later lands on the unread list rather than a 404.
+//
+// The POST renders in place, so /mark-read is the address left in the bar after a
+// mark — and a browser restoring that session, or a reader reloading the next
+// morning, asks for it as a GET with no list. That was a 404 on a page whose last
+// action had succeeded.
+//
+// The write is not softened along with it: a POST naming no list still refuses,
+// because "mark nothing read" has no sensible answer, and a redirect there would
+// answer a request to change the archive with a page.
+func TestMarkReadWithNoListSendsTheReaderToTheUnreadList(t *testing.T) {
+	rd, tr := readingFixture(t)
+
+	rec := rd.get("/mark-read")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("GET /mark-read with no list = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/" {
+		t.Errorf("Location = %q, want %q", got, "/")
+	}
+
+	// An empty parameter is the same request written differently, and a browser
+	// that keeps the key while dropping the value is a real way to arrive here.
+	if rec := rd.get("/mark-read?from="); rec.Code != http.StatusSeeOther {
+		t.Errorf("GET /mark-read?from= = %d, want 303", rec.Code)
+	}
+
+	// Sending somebody to a list is not the same as acting on one: nothing may be
+	// marked read on the way past.
+	view, err := tr.store.ArticleForUser(t.Context(), tr.alice, tr.aliceOnly)
+	if err != nil {
+		t.Fatalf("ArticleForUser() = %v", err)
+	}
+	if view.Read {
+		t.Error("a GET /mark-read with no list marked the archive read")
 	}
 }
 

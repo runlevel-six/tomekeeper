@@ -872,7 +872,7 @@ is there — the same reasoning that makes another reader's article not-found.
 | `POST /settings/delete-account` | Delete your own account. Requires your password; refuses the last administrator. |
 | `POST /sign-out-everywhere` | Ends every session for the signed-in reader, this one included. |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
-| `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list. |
+| `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list; with no list it redirects to Unread. |
 | `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |
 | `POST /mark-read/scrolled` | Marks named articles read after they were scrolled past. `ids=` is a comma-separated list. `409` when the preference is off. |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
@@ -1280,6 +1280,41 @@ would otherwise overrule somebody who filled the field in.
 
 **A group id in the Fever API is the category's row id.** It used to be a hash of the
 name, so renaming a category silently replaced a folder in every synced client.
+
+### Thumbnails
+
+Every list of articles — Unread, Everything, a feed, a tag, a category, Saved,
+Starred and the search results — shows the picture the article leads with, beside
+the headline rather than above it. A row is scanned down its left edge, and a
+full-width picture per entry turns fifty rows into fifty screenfuls.
+
+**The picture comes from this archive, never from the site it came from.** Every
+image in a stored body was fetched once and localized precisely so that reading
+tells no publisher anything; a list that hotlinked would report each reader's
+position on every scroll, to more sites at once than an article ever could. So an
+article whose images have not been archived yet has no thumbnail, and gets one when
+the worker reaches it. The badge on the same row already says which case that is.
+
+Which picture: **the first one the body shows**, recorded when its images are
+localized — see [`article_content.lead_image_sha`](data-model.md#thumbnails), which
+is also where the reasoning about deriving it once rather than on every render
+lives. A row with no picture simply uses the full width; there is no reserved
+column and no placeholder frame, because two of every five articles have no image
+and a third of a list as empty gutter is worse than a ragged edge.
+
+The image is served at the size it is stored — up to 1600px on its longest edge,
+about 43KB in the median — and drawn small by the stylesheet, so a thumbnail costs
+a full image. That is deliberate for now: they are `loading="lazy"`, so only the
+rows a reader actually scrolls past are fetched, and `/assets/` is
+content-addressed and cached `immutable`, so each one is fetched once ever. A
+separately stored thumbnail derivative would save bandwidth at the cost of a second
+copy of every picture and a re-encode of the whole archive; it is worth doing if
+the archive is ever read over a metered connection, and not before.
+
+The thumbnail is a second link to the same article, so that the obvious tap target
+works. It is `aria-hidden` with `tabindex="-1"` and carries an empty `alt`: the
+headline immediately beside it is the text, so a keyboard or a screen reader meets
+exactly one link per row.
 
 ### Text size
 
