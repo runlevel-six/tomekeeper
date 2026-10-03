@@ -61,7 +61,7 @@ patches:
 #   digest: sha256:...
 images:
   - name: ghcr.io/runlevel-six/tomekeeper
-    newTag: v1.3.0
+    newTag: v1.3.1
 
 # Who to contact about this fetcher.
 #

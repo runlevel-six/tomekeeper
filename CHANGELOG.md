@@ -34,6 +34,22 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [v1.3.1] — 2026-10-03
+
+A fix only: no migration and no extractor change, so upgrading is a tag change and
+an apply.
+
+### Fixed
+
+- **Marking a list read now goes straight to the unread list.** The confirmation
+  used to render its result in place, leaving `/mark-read` in the address bar, so
+  the next reload or restored session passed through a redirect before reaching a
+  list. A successful mark now redirects to `/` immediately, which also keeps the
+  POST out of the history where a reload would offer to resend it. The "Marked N
+  articles read" line went with it; the list you land on shows the result. A mark
+  that fails still says so in place rather than landing somewhere that looks like
+  success.
+
 ## [v1.3.0] — 2026-09-08
 
 **Adds migration 00023**, so this is a minor release: run the migration Job, then
@@ -1369,6 +1385,7 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
 [Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[v1.3.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.0...v1.3.1
 [v1.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.2...v1.3.0
 [v1.2.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.1...v1.2.2
 [v1.2.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.0...v1.2.1
