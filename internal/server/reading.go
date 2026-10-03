@@ -154,7 +154,8 @@ type markControl struct {
 	// second step an informed one.
 	Confirming bool
 
-	// Done reports a mark that has just happened, and is nil otherwise.
+	// Done reports a mark that has just failed, and is nil otherwise. A mark that
+	// worked redirects to the unread list instead of drawing a page.
 	Done *markOutcome
 
 	// From is the list's token, which is how the confirm and the POST name the list
@@ -163,9 +164,8 @@ type markControl struct {
 	Path string
 }
 
-// markOutcome is what a stream page says after a bulk mark.
+// markOutcome is what a stream page says after a bulk mark that failed.
 type markOutcome struct {
-	Count   int64
 	Problem string
 }
 
@@ -345,12 +345,11 @@ func (s *Server) handleMarkReadConfirm(w http.ResponseWriter, r *http.Request) {
 	// A request that names no list at all is a reader arriving back at the address
 	// the mark was posted to, rather than at a question about anything.
 	//
-	// The POST renders its result in place — the count belongs to the request that
-	// earned it — so /mark-read is the address left in the bar afterwards, and it is
-	// the address a browser returns to when it restores a session or a reader
-	// reloads the next morning. As a GET with no list that was a 404, which is a
-	// wall in front of somebody whose last action succeeded. Installed as a web app
-	// it is a wall with no back button.
+	// The POST used to render its result in place, which left /mark-read as the
+	// address in the bar — and history, bookmarks and installed web apps restoring
+	// their last page still carry it. As a GET with no list that was a 404, which
+	// is a wall in front of somebody whose last action succeeded. Installed as a
+	// web app it is a wall with no back button.
 	//
 	// The unread list, because there is nothing else it could honestly be: a bare
 	// GET carries no list, and no state here remembers one. See other, so the
@@ -375,9 +374,15 @@ func (s *Server) handleMarkReadConfirm(w http.ResponseWriter, r *http.Request) {
 
 // handleMarkRead marks everything unread in one list read.
 //
-// Rendered rather than redirected, like the import and the on-demand poll: the
-// count belongs to the request that earned it. Re-posting is harmless — the second
-// one finds nothing unread and says so.
+// Redirected to the unread list rather than rendered in place. A rendered result
+// left /mark-read in the address bar, so the reader's next look at the app — a
+// reload, a restored session, a web app brought back to the front — went through
+// the bare-GET redirect above before reaching a list. See other sends them there
+// now, and keeps the POST out of the history where a reload would offer to resend
+// it.
+//
+// A failure is still rendered in place: a redirect would put the reader on a list
+// that looks exactly as if the mark had worked.
 func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "that form could not be read", http.StatusBadRequest)
@@ -400,7 +405,7 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 
 	s.log.Info("marked a list read", "from", spec.Token, "count", n)
 
-	s.renderStream(w, r, spec, http.StatusOK, markControl{Done: &markOutcome{Count: n}})
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // markableSpec resolves the list a mark-read request names.

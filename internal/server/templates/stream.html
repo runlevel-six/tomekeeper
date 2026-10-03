@@ -26,17 +26,7 @@
   </div>
 
   {{with .Mark.Done}}
-    {{if .Problem}}
-      <p class="import-result bad">{{.Problem}}</p>
-    {{else}}
-      <p class="import-result ok">
-        {{if .Count}}
-          Marked {{plural .Count "article"}} read.
-        {{else}}
-          Nothing here was unread.
-        {{end}}
-      </p>
-    {{end}}
+    <p class="import-result bad">{{.Problem}}</p>
   {{end}}
 
   {{if .Mark.Confirming}}

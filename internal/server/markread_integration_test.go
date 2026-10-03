@@ -113,13 +113,14 @@ func TestMarkAllReadAsksBeforeItActs(t *testing.T) {
 		t.Fatal("merely asking to mark the list read marked it read")
 	}
 
+	// The answer sends the reader straight on to the unread list, so /mark-read is
+	// never the address left in the bar.
 	rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {markToken(t, confirm)}})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /mark-read = %d, want 200\n%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /mark-read = %d, want 303\n%s", rec.Code, rec.Body.String())
 	}
-	marked := rec.Body.String()
-	if !strings.Contains(marked, "Marked 1 article read.") {
-		t.Errorf("the page does not report what was marked:\n%s", marked)
+	if got := rec.Header().Get("Location"); got != "/" {
+		t.Errorf("Location = %q, want %q", got, "/")
 	}
 
 	view, err = tr.store.ArticleForUser(t.Context(), tr.alice, tr.aliceOnly)
@@ -130,24 +131,21 @@ func TestMarkAllReadAsksBeforeItActs(t *testing.T) {
 		t.Error("the article is still unread after the list was marked read")
 	}
 
-	// The list it leaves behind no longer offers the control, and no longer counts
-	// the article in the chrome — a badge that still says 1 over an empty list is a
-	// lie the reader cannot dismiss.
-	if strings.Contains(marked, "/mark-read?from=") {
+	// The list it lands on no longer offers the control, and no longer counts the
+	// article in the chrome — a badge that still says 1 over an empty list is a lie
+	// the reader cannot dismiss.
+	landed := rd.body("/")
+	if strings.Contains(landed, "/mark-read?from=") {
 		t.Error("the page still offers to mark a list with nothing unread in it")
 	}
-	if strings.Contains(marked, `data-unread="1"`) {
+	if strings.Contains(landed, `data-unread="1"`) {
 		t.Error("the unread count still counts the article that was just marked read")
 	}
 
-	// Posting again is harmless and says so, which is what makes rendering the
-	// result rather than redirecting safe.
+	// Posting again is harmless: it finds nothing unread and goes to the same place.
 	again := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {"unread"}})
-	if again.Code != http.StatusOK {
-		t.Fatalf("POST /mark-read twice = %d, want 200", again.Code)
-	}
-	if !strings.Contains(again.Body.String(), "Nothing here was unread.") {
-		t.Errorf("a repeated mark does not report itself honestly:\n%s", again.Body.String())
+	if again.Code != http.StatusSeeOther {
+		t.Fatalf("POST /mark-read twice = %d, want 303", again.Code)
 	}
 }
 
@@ -174,11 +172,8 @@ func TestMarkAllReadIsScopedToTheListOnScreen(t *testing.T) {
 	}
 
 	rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {markToken(t, confirm)}})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /mark-read = %d, want 200\n%s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "Marked 1 article read.") {
-		t.Errorf("the category mark reported nothing:\n%s", rec.Body.String())
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /mark-read = %d, want 303\n%s", rec.Code, rec.Body.String())
 	}
 
 	for _, want := range []struct {
@@ -262,10 +257,10 @@ func TestMarkAllReadRefusesAListItCannotScope(t *testing.T) {
 
 // Coming back to /mark-read later lands on the unread list rather than a 404.
 //
-// The POST renders in place, so /mark-read is the address left in the bar after a
-// mark — and a browser restoring that session, or a reader reloading the next
-// morning, asks for it as a GET with no list. That was a 404 on a page whose last
-// action had succeeded.
+// The POST used to render in place, leaving /mark-read in the bar after a mark — and
+// history, bookmarks and installed web apps restoring their last page still ask for
+// it as a GET with no list. That was a 404 on a page whose last action had
+// succeeded.
 //
 // The write is not softened along with it: a POST naming no list still refuses,
 // because "mark nothing read" has no sensible answer, and a redirect there would
@@ -298,33 +293,17 @@ func TestMarkReadWithNoListSendsTheReaderToTheUnreadList(t *testing.T) {
 	}
 }
 
-// The chrome's reload control survives a mark.
+// The chrome's reload control on the confirmation points at the list.
 //
-// pageData takes the reload link from the request's own path, and a mark is posted
-// to /mark-read — so without care the page rendered afterwards offers a reload
-// button pointing at a bare /mark-read, which is a 404. Installed as a web app
-// that button is the only reload there is.
+// pageData takes the reload link from the request's own path, and the confirmation
+// is served from /mark-read — so without care it offers a reload button pointing at
+// the question rather than the list. Installed as a web app that button is the only
+// reload there is.
 func TestMarkAllReadLeavesTheReloadControlPointingAtTheList(t *testing.T) {
 	rd, _ := readingFixture(t)
 
-	for _, page := range []struct {
-		name string
-		body func() string
-	}{
-		{"the confirmation", func() string { return rd.body("/mark-read?from=unread") }},
-		{"the page after marking", func() string {
-			rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {"unread"}})
-			if rec.Code != http.StatusOK {
-				t.Fatalf("POST /mark-read = %d, want 200", rec.Code)
-			}
-			return rec.Body.String()
-		}},
-	} {
-		t.Run(page.name, func(t *testing.T) {
-			body := page.body()
-			if !strings.Contains(body, `class="tool reload" href="/"`) {
-				t.Errorf("%s does not point the reload control at the unread list:\n%s", page.name, body)
-			}
-		})
+	body := rd.body("/mark-read?from=unread")
+	if !strings.Contains(body, `class="tool reload" href="/"`) {
+		t.Errorf("the confirmation does not point the reload control at the unread list:\n%s", body)
 	}
 }

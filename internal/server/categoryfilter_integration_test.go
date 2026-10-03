@@ -204,11 +204,8 @@ func TestMarkingTheNarrowedListReadLeavesTheRestUnread(t *testing.T) {
 	}
 
 	rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {token}})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /mark-read = %d, want 200\n%s", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "Marked 1 article read") {
-		t.Errorf("the mark did not report one article:\n%s", rec.Body.String())
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /mark-read = %d, want 303\n%s", rec.Code, rec.Body.String())
 	}
 
 	// The comics are read; everything else is untouched.

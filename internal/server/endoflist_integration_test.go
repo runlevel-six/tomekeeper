@@ -213,8 +213,8 @@ func TestAFullyReadListOffersNothingAtItsEnd(t *testing.T) {
 	rd, tr := readingFixture(t)
 	seedManyUnread(t, tr, 3)
 
-	if rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {"unread"}}); rec.Code != http.StatusOK {
-		t.Fatalf("POST /mark-read = %d, want 200", rec.Code)
+	if rec := rd.do(http.MethodPost, "/mark-read", url.Values{"from": {"unread"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /mark-read = %d, want 303", rec.Code)
 	}
 
 	body := rd.body("/all")

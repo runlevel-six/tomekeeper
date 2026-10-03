@@ -873,7 +873,7 @@ is there — the same reasoning that makes another reader's article not-found.
 | `POST /sign-out-everywhere` | Ends every session for the signed-in reader, this one included. |
 | `GET /domain-rules` | Extraction overrides. `?edit=<host>` loads that host's rule, or offers to create one. |
 | `GET /mark-read?from=` | Asks before marking a whole list read. `from=` names the list; with no list it redirects to Unread. |
-| `POST /mark-read` | Marks everything unread in one list read. Same `from=`. |
+| `POST /mark-read` | Marks everything unread in one list read, then redirects to Unread. Same `from=`. |
 | `POST /mark-read/scrolled` | Marks named articles read after they were scrolled past. `ids=` is a comma-separated list. `409` when the preference is off. |
 | `POST /articles/{id}/read` | Mark read or unread. `on=true` or `on=false`. |
 | `POST /articles/{id}/star` | Star or unstar. Same form field. |
@@ -1189,8 +1189,8 @@ query that drew that list: marking **Comics** read marks Comics, and marking
 **Unread** read marks what is unread.
 
 Two requests rather than one. The `GET` renders the list again with a confirmation
-that names the count and the list; the `POST` does the work and re-renders with what
-it marked. That is not ceremony — it is the one control here that is not its own
+that names the count and the list; the `POST` does the work and redirects to
+Unread (`303`), so `/mark-read` is never the address left in the bar. That is not ceremony — it is the one control here that is not its own
 inverse. Every other button on a row can be pressed again to undo it; this one can
 only be undone article by article, so the count goes in front of the reader first.
 A confirmation page rather than a scripted dialog, because the content security
@@ -1209,10 +1209,14 @@ Which lists may be marked, and why it is a short list:
 Anything else — an unknown token, a feed belonging to somebody else, a list that
 must not be marked — is `404`, the same nothing in every case.
 
-**A `GET` that names no list at all is different, and redirects to Unread.** The
-`POST` renders its result in place, so `/mark-read` is the address left in the bar
-after a mark, and it is the address a browser returns to when it restores a session
-or the reader reloads the next morning. That request carries no list and nothing
+A failed mark is the exception to the redirect: it re-renders the list in place
+with a `500` and says nothing was marked, because landing on Unread would look
+exactly like success.
+
+**A `GET` that names no list at all is different, and redirects to Unread.** Before
+the `POST` redirected it rendered in place, leaving `/mark-read` in the bar, and
+history, bookmarks and installed web apps restoring their last page still carry
+that address. That request carries no list and nothing
 here remembers one, so there is no question to ask and no page to render — but a
 `404` in front of somebody whose last action succeeded is a wall, and installed as a
 web app it is a wall with no back button. A `POST` naming no list is still a `404`:
