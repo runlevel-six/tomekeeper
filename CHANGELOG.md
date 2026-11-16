@@ -34,6 +34,41 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [v1.3.2] — 2026-11-16
+
+Fixes only: no migration, so upgrading is a tag change and an apply — but **the
+extractor version changed**, so run `tome reextract` once afterwards to reach the
+articles already in the archive.
+
+### Extraction version 8
+
+**What a reader never sees is removed from the page before any rung reads it.** Two
+real shapes stored the same words over and over:
+
+- An author-box plugin ships, inside an inline `display: none`, a list of every post
+  its author has written. The extractor kept the author's name from each entry, and
+  articles ended with the byline up to a thousand times.
+- A lightbox keeps a second copy of each figure's caption beside the image for its
+  zoomed view, hidden by the site's stylesheet, so every caption appeared twice.
+
+Elements hidden by an inline `display: none` or `visibility: hidden` now come out,
+and so does any element inside a `<figure>` that repeats its `<figcaption>` word for
+word. Both act on whole elements, so an image's alt and hover text survive whenever
+the image does, and an element holding an image is never taken as a caption's copy.
+The `hidden` *attribute* is deliberately left alone: streaming server rendering sends
+the finished article inside one and swaps it in from script.
+
+Measured over every re-extractable body in a real archive (9,185): **328 change**,
+and none loses an image or a caption.
+
+Run `tome reextract` once after upgrading.
+
+### Fixed
+
+- **A serve error that races shutdown is reported rather than discarded**, by both
+  the web server and the metrics listener. After a clean shutdown it is nil, as
+  before.
+
 ## [v1.3.1] — 2026-10-03
 
 A fix only: no migration and no extractor change, so upgrading is a tag change and
@@ -1384,7 +1419,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.2...HEAD
+[v1.3.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.1...v1.3.2
 [v1.3.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.0...v1.3.1
 [v1.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.2...v1.3.0
 [v1.2.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.1...v1.2.2
