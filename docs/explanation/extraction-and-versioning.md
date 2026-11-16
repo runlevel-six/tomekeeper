@@ -43,6 +43,34 @@ better precision on news and blog markup; readability handles some older,
 table-heavy layouts that trafilatura discards. Running both costs
 milliseconds against a page already in memory.
 
+### What a reader never sees is removed first
+
+Before any rung reads the page, two kinds of markup come out of it, because every
+rung measures text and text a site hides is still text:
+
+- **Elements hidden by an inline style** — `display: none` or `visibility: hidden`
+  written on the element itself. One author-box plugin ships, hidden this way, a list
+  of every post its author has written; the extractor kept the author's name from each
+  entry, and articles ended with the byline a thousand times.
+- **A figure's copy of its own caption.** Lightboxes keep a second copy of each caption
+  beside the image for the zoomed view, hidden by the site's stylesheet. Inside a
+  `<figure>`, an element whose text matches the `<figcaption>` word for word is
+  dropped, and the figcaption is kept. An element holding an image never is.
+
+Both act on whole elements, never on attributes, so an image's alt text and its hover
+text survive whenever the image does. The page's `<html>` and `<body>` are never
+removed, whatever their style: anti-flicker snippets hide the whole body and reveal it
+from script, which a stored page never runs.
+
+The `hidden` *attribute* is deliberately not treated as hidden. Streaming server
+rendering sends the finished article as `<div hidden id="S:0">` and swaps it into place
+from script, and treating the attribute as a browser does emptied every post on one
+such site. Content hidden by a stylesheet class is not caught either — resolving a
+stylesheet is a browser's job — and is what a domain rule's strip selectors are for.
+
+The same pass applies to the page's visible-text measurement, so the ratio check
+compares against what a reader sees rather than against a thousand hidden entries.
+
 Trafilatura's own internal fallback to a readability-style pass is turned
 **off**, even though it exists. If it were on, a readability result would be
 recorded as `extractor_name = "trafilatura"`, and the per-extractor statistics
@@ -228,7 +256,7 @@ Every body records the extractor that produced it and the version of the
 extraction *behavior*, a constant in the code:
 
 ```go
-const Version = "5"
+const Version = "8"
 ```
 
 **Bump it whenever extraction output could change** — a new rung, a changed
@@ -245,6 +273,9 @@ never reaches the archive it was written for.
 | `3` | A much richer feed body wins over a thin page extraction; a page images rung for webcomics (2026-08-18). |
 | `4` | Inline raster images survive sanitization, and text gets a boundary where the markup has one (2026-08-18). |
 | `5` | The page images rung reads titles as well as slugs, keeps the hover text, and a thin body loses to those images unless it already holds one of them (2026-08-19). |
+| `6` | A slug too short to match as a substring is matched against an image's whole file name instead (2026-08-21). |
+| `7` | A short slug is also matched against any whole path component of the image's URL, not only its file name (2026-08-21). |
+| `8` | Elements hidden by an inline style, and a figure's copy of its own caption, are removed before any rung reads the page (2026-11-16). |
 
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not

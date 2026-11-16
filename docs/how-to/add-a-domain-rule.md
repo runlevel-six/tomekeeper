@@ -145,6 +145,12 @@ some screen width is hiding it from that layout, not from the article, and strip
 all hidden elements would delete content that a "read more" control was going to
 reveal.
 
+Two cases need no rule. An element hidden by an inline `style="display: none"` is
+removed before extraction, and so is a copy of a figure's caption sitting beside its
+image inside the `<figure>`. See
+[What a reader never sees is removed first](../explanation/extraction-and-versioning.md#what-a-reader-never-sees-is-removed-first).
+A copy hidden by a *class* outside a figure still needs a strip selector.
+
 ## Write the rule
 
 ### In the browser

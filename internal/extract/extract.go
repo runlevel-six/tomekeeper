@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-shiori/dom"
 	readability "github.com/go-shiori/go-readability"
 	"github.com/markusmobius/go-trafilatura"
 	"golang.org/x/net/html"
@@ -66,7 +67,14 @@ import (
 // signal it missed was the folder, `/2020/err/171-err.png`. Measured over every
 // article in a real archive whose slug is under four characters, which is the only
 // set this branch can affect: 7 gained their strip, nothing else changed.
-const Version = "7"
+//
+// Version 8 (2026-11-16): what a reader never sees is removed from the page before any
+// rung reads it — elements hidden by an inline style, and a figure's copy of its own
+// caption. See pruneUnseen. Measured over every re-extractable body in a real archive
+// (9,185): 328 changed. 279 lost a hidden duplicate of each figure caption, 37 lost a
+// hidden list that repeated the author's name up to a thousand times, and the rest were
+// hidden menu items and one page that now extracts where it did not.
+const Version = "8"
 
 // Extractor names recorded on content rows.
 const (
@@ -505,6 +513,10 @@ func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {
 		return Result{}, false
 	}
 
+	for _, node := range doc.Nodes {
+		pruneUnseen(node)
+	}
+
 	for _, sel := range in.Rule.StripSelectors {
 		if strings.TrimSpace(sel) != "" {
 			doc.Find(sel).Remove()
@@ -555,7 +567,11 @@ func (e *Extractor) viaTrafilatura(in Input, pageURL *url.URL, visible int) (Res
 	// next rung. Letting trafilatura fall back internally would produce a
 	// readability result labeled "trafilatura", and the labels are what make
 	// extraction quality measurable per extractor.
-	result, err := trafilatura.Extract(bytes.NewReader(in.RawHTML), trafilatura.Options{
+	doc, err := parsePage(in.RawHTML)
+	if err != nil {
+		return Result{}, false
+	}
+	result, err := trafilatura.ExtractDocument(doc, trafilatura.Options{
 		OriginalURL:     pageURL,
 		IncludeImages:   true,
 		IncludeLinks:    true,
@@ -592,7 +608,11 @@ func (e *Extractor) viaTrafilatura(in Input, pageURL *url.URL, visible int) (Res
 }
 
 func (e *Extractor) viaReadability(in Input, pageURL *url.URL, visible int) (Result, bool) {
-	article, err := readability.FromReader(bytes.NewReader(in.RawHTML), pageURL)
+	doc, err := parsePage(in.RawHTML)
+	if err != nil {
+		return Result{}, false
+	}
+	article, err := readability.FromDocument(doc, pageURL)
 	if err != nil {
 		return Result{}, false
 	}
@@ -764,8 +784,32 @@ func acceptable(text string, visibleLen int) bool {
 
 // visibleTextLength measures the text a reader would see on the whole page,
 // which is the denominator of the ratio check.
+//
+// Hidden elements are left out, as they are from what the rungs see: a page carrying
+// a thousand hidden entries would otherwise demand a body large enough to match them.
 func visibleTextLength(raw []byte) int {
-	return len(strings.TrimSpace(textOf(raw)))
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(raw))
+	if err != nil {
+		return 0
+	}
+	for _, node := range doc.Nodes {
+		pruneUnseen(node)
+	}
+	return len(strings.TrimSpace(textOfDocument(doc)))
+}
+
+// parsePage parses a stored page the way the extractor libraries do — detecting its
+// character encoding first — and removes what a reader never sees.
+//
+// Both libraries copy the tree before changing it, so one parse could serve both; each
+// rung parses its own anyway, because most pages are settled by the first.
+func parsePage(raw []byte) (*html.Node, error) {
+	doc, err := dom.Parse(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	pruneUnseen(doc)
+	return doc, nil
 }
 
 // blockElements are the tags a reader sees a boundary at.
@@ -800,6 +844,11 @@ func textOf(raw []byte) string {
 	if err != nil {
 		return ""
 	}
+	return textOfDocument(doc)
+}
+
+// textOfDocument is textOf over a document already parsed.
+func textOfDocument(doc *goquery.Document) string {
 	// Script and style contents are text nodes in the parse tree but are not
 	// visible; counting them would inflate the denominator and reject good
 	// extractions from script-heavy pages.

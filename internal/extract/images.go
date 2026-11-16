@@ -67,6 +67,9 @@ func (e *Extractor) viaPageImages(in Input, pageURL *url.URL) (Result, bool) {
 	if err != nil {
 		return Result{}, false
 	}
+	for _, node := range doc.Nodes {
+		pruneUnseen(node)
+	}
 
 	meta := docMetadata(doc)
 
