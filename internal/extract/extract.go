@@ -74,7 +74,13 @@ import (
 // (9,185): 328 changed. 279 lost a hidden duplicate of each figure caption, 37 lost a
 // hidden list that repeated the author's name up to a thousand times, and the rest were
 // hidden menu items and one page that now extracts where it did not.
-const Version = "8"
+//
+// Version 9 (2026-11-16): the domain-rule rung stores an image's caption as a figcaption
+// when the page marked it only with a class or named it from the image's
+// aria-labelledby, so it reads as a caption rather than as body text. See markCaptions.
+// Measured over every re-extractable body in a real archive (9,197): 918 changed, all
+// on the one site whose rule this reaches, with no text changing anywhere.
+const Version = "9"
 
 // Extractor names recorded on content rows.
 const (
@@ -521,6 +527,18 @@ func (e *Extractor) viaDomainRule(in Input, pageURL *url.URL) (Result, bool) {
 		if strings.TrimSpace(sel) != "" {
 			doc.Find(sel).Remove()
 		}
+	}
+
+	// Captions become figcaptions here and only here. This rung stores the selected
+	// markup as written, so a caption the page marked with a class keeps looking like a
+	// caption. The extractor libraries rebuild the body from what they judge to be prose
+	// and discard figcaption text outright, so marking captions ahead of them deletes
+	// the captions rather than styling them — measured on a real archive, where it took
+	// captions out of 14 articles across three sites.
+	//
+	// After the strips, so a rule that strips a caption copy by its class still finds it.
+	for _, node := range doc.Nodes {
+		markCaptions(node)
 	}
 
 	selection := doc.Find(in.Rule.ContentSelector)

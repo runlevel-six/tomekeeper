@@ -24,3 +24,15 @@ func PruneForTest(raw string) string {
 	_ = html.Render(&b, doc)
 	return b.String()
 }
+
+// MarkCaptionsForTest runs caption marking over a page and returns what is left.
+func MarkCaptionsForTest(raw string) string {
+	doc, err := html.Parse(strings.NewReader(raw))
+	if err != nil {
+		return ""
+	}
+	markCaptions(doc)
+	var b strings.Builder
+	_ = html.Render(&b, doc)
+	return b.String()
+}

@@ -71,6 +71,21 @@ stylesheet is a browser's job — and is what a domain rule's strip selectors ar
 The same pass applies to the page's visible-text measurement, so the ratio check
 compares against what a reader sees rather than against a thousand hidden entries.
 
+### A domain rule keeps captions looking like captions
+
+The reader styles a `<figcaption>` as a caption: smaller, softer, centered. Many sites
+never use the element and mark a caption with a class instead, and the sanitizer drops
+every class, so the caption would be stored as a bare `<div>` and read as body text.
+The domain-rule rung therefore renames an element to `<figcaption>` when an image names
+it with `aria-labelledby` or `aria-describedby`, or when a class token is `caption` (or
+has it as a hyphen- or underscore-separated part, like `wp-caption-text`) and an image
+sits within a few levels. An element that holds a picture is never renamed, and neither
+is one inside a paragraph.
+
+Only that rung. Trafilatura and readability discard `<figcaption>` text when they
+rebuild a body, so marking captions ahead of them deleted the captions instead; on a
+real archive that took captions out of fourteen articles across three sites.
+
 Trafilatura's own internal fallback to a readability-style pass is turned
 **off**, even though it exists. If it were on, a readability result would be
 recorded as `extractor_name = "trafilatura"`, and the per-extractor statistics
@@ -256,7 +271,7 @@ Every body records the extractor that produced it and the version of the
 extraction *behavior*, a constant in the code:
 
 ```go
-const Version = "8"
+const Version = "9"
 ```
 
 **Bump it whenever extraction output could change** — a new rung, a changed
@@ -276,6 +291,7 @@ never reaches the archive it was written for.
 | `6` | A slug too short to match as a substring is matched against an image's whole file name instead (2026-08-21). |
 | `7` | A short slug is also matched against any whole path component of the image's URL, not only its file name (2026-08-21). |
 | `8` | Elements hidden by an inline style, and a figure's copy of its own caption, are removed before any rung reads the page (2026-11-16). |
+| `9` | The domain-rule rung stores a caption the page marked only by class, or by an image's `aria-labelledby`, as a `figcaption` (2026-11-16). |
 
 Note what the version does **not** cover: adding or editing a *domain rule*
 changes extraction output without changing this constant, so `reextract` will not
