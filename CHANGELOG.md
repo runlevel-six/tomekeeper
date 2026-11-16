@@ -34,6 +34,30 @@ An **extraction version bump** is called out under its own heading whenever it
 happens, because it is the one change that wants a follow-up command
 (`tome reextract`) to reach articles already in the archive.
 
+## [v1.3.3] — 2026-11-16
+
+A fix only: no migration, so upgrading is a tag change and an apply — but **the
+extractor version changed**, so run `tome reextract` once afterwards.
+
+### Extraction version 9
+
+**A caption a domain rule selects is stored as a caption.** The reader styles a
+`<figcaption>` smaller and set apart from the prose, but many sites mark a caption
+only with a class, and the sanitizer drops every class — so gallery and lead-image
+captions were stored as bare blocks and read at body size. The domain-rule rung now
+stores an element as a `figcaption` when an image names it with `aria-labelledby` or
+`aria-describedby`, or when a caption class (`wp-caption-text`, a lightbox's
+`pswp-caption-content`) sits beside an image. An element holding a picture is never
+renamed, and neither is one inside a paragraph.
+
+Only that rung: the extractor libraries discard `figcaption` text when they rebuild a
+body, so marking captions ahead of them deleted the captions instead.
+
+Measured over every re-extractable body in a real archive (9,197): **918 change, all
+on the one site whose rule this reaches, and no text changes anywhere.**
+
+Run `tome reextract` once after upgrading.
+
 ## [v1.3.2] — 2026-11-16
 
 Fixes only: no migration, so upgrading is a tag change and an apply — but **the
@@ -1419,7 +1443,8 @@ about 2,100 articles from 66 feeds (2,131 at the time of writing).
   [Back up and restore](docs/how-to/back-up-and-restore.md).
 - **JavaScript-rendered sites are not archived.** No headless browser, by choice.
 
-[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.3...HEAD
+[v1.3.3]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.2...v1.3.3
 [v1.3.2]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.1...v1.3.2
 [v1.3.1]: https://github.com/runlevel-six/tomekeeper/compare/v1.3.0...v1.3.1
 [v1.3.0]: https://github.com/runlevel-six/tomekeeper/compare/v1.2.2...v1.3.0
