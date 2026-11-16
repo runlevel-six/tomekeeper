@@ -145,6 +145,8 @@ func (r *Registry) Serve(ctx context.Context, addr string, log *slog.Logger) err
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
-	<-errCh
-	return nil
+
+	// Nil after a clean shutdown, since Serve's ErrServerClosed is filtered above; an
+	// error here is a real one that raced the shutdown, and is not ours to discard.
+	return <-errCh
 }

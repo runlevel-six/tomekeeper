@@ -353,7 +353,11 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	<-errCh
+	// Nil after a clean shutdown, since Serve's ErrServerClosed is filtered above; an
+	// error here is a real one that raced the shutdown, and is not ours to discard.
+	if err := <-errCh; err != nil {
+		return err
+	}
 	s.log.Info("shutdown complete")
 	return nil
 }
